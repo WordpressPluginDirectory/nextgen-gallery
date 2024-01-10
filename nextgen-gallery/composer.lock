@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "014ccdbc6a38f77f4cfcc66c7f01e693",
+    "content-hash": "799f4335053c8ba97842118664ecff77",
     "packages": [
         {
             "name": "ezyang/htmlpurifier",
@@ -69,16 +69,16 @@
         },
         {
             "name": "imagely/pope-framework",
-            "version": "v0.18",
+            "version": "v0.19",
             "source": {
                 "type": "git",
                 "url": "git@github.com:awesomemotive/pope-framework.git",
-                "reference": "83e5dc738c8eb5bb74cb5e7a9ac5f73c67bb45de"
+                "reference": "78e0b0c59b68c44b86e688f447a5a80e78e44b4f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/awesomemotive/pope-framework/zipball/83e5dc738c8eb5bb74cb5e7a9ac5f73c67bb45de",
-                "reference": "83e5dc738c8eb5bb74cb5e7a9ac5f73c67bb45de",
+                "url": "https://api.github.com/repos/awesomemotive/pope-framework/zipball/78e0b0c59b68c44b86e688f447a5a80e78e44b4f",
+                "reference": "78e0b0c59b68c44b86e688f447a5a80e78e44b4f",
                 "shasum": ""
             },
             "type": "library",
@@ -98,10 +98,10 @@
             ],
             "description": "A component framework inspired by Zope 3. Pope is \"PHP's Zope\".",
             "support": {
-                "source": "https://github.com/awesomemotive/pope-framework/tree/v0.18",
+                "source": "https://github.com/awesomemotive/pope-framework/tree/v0.19",
                 "issues": "https://github.com/awesomemotive/pope-framework/issues"
             },
-            "time": "2023-11-10T13:42:01+00:00"
+            "time": "2023-12-20T13:22:52+00:00"
         }
     ],
     "packages-dev": [
@@ -589,16 +589,16 @@
         },
         {
             "name": "phpstan/phpstan",
-            "version": "1.10.50",
+            "version": "1.10.55",
             "source": {
                 "type": "git",
                 "url": "https://github.com/phpstan/phpstan.git",
-                "reference": "06a98513ac72c03e8366b5a0cb00750b487032e4"
+                "reference": "9a88f9d18ddf4cf54c922fbeac16c4cb164c5949"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/06a98513ac72c03e8366b5a0cb00750b487032e4",
-                "reference": "06a98513ac72c03e8366b5a0cb00750b487032e4",
+                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/9a88f9d18ddf4cf54c922fbeac16c4cb164c5949",
+                "reference": "9a88f9d18ddf4cf54c922fbeac16c4cb164c5949",
                 "shasum": ""
             },
             "require": {
@@ -647,7 +647,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2023-12-13T10:59:42+00:00"
+            "time": "2024-01-08T12:32:40+00:00"
         },
         {
             "name": "squizlabs/php_codesniffer",

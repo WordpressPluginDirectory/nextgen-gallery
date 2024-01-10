@@ -1,6 +1,21 @@
 NextGEN Gallery
 by Imagely
 
+= V3.56  - 01.09.2023 =
+* Fixed:   "Open album children in Pro Lightbox" feature was only working with block based themes.
+* Fixed:   Adding more than one Pro display to one page caused galleries after the first to be unstyled.
+* Fixed:   Albums with very a large number of children may have broken gallery displays if it relies on the dynamic-css feature.
+* Fixed:   Continued fixing recently introduced incompatibilies with 3rd party extensions.
+* Fixed:   Creating a new gallery from the Manage Galleries page was just reloading the page.
+* Fixed:   Display Type settings could be forced back to their default settings when upgrading.
+* Fixed:   IIS servers may generate a fatal error searching for an absolute path to template files.
+* Fixed:   Inserting NextGEN singlepic from the Add Media popup was creating an <img> without a src attribute.
+* Fixed:   Possible PHP notices, warnings.
+* Fixed:   Restored the NGG_DISABLE_SHORTCODE_MANAGER constant.
+* Fixed:   Router->fix_page_parameter() generated a warning if the global $post is not an object.
+* Fixed:   The button 'Scan folder for new images' was re-importing existing images.
+* Fixed:   Updating tags via the Manage Tags page did not flush the displayed gallery rendering cache.
+
 = V3.55  - 12.13.2023 =
 * Changed: Changing SweetAlert library version to prevent the interference on .ru sites.
 

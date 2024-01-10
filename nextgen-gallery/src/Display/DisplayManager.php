@@ -110,6 +110,9 @@ class DisplayManager {
 			}
 
 			self::enqueue_frontend_resources_for_displayed_gallery( $displayed_gallery, $controller );
+
+			// Prevent $controller from persisting through this loop
+			unset( $controller );
 		}
 	}
 

@@ -130,18 +130,23 @@ class SourceManager {
 
 	/**
 	 * @param string $name_or_alias
-	 * @return null|\stdClass
+	 * @return \stdClass
 	 */
 	public function get( $name_or_alias ) {
 		if ( ! $this->registered_defaults ) {
 			$this->register_defaults();
 		}
 
-		$retval = null;
-
 		if ( isset( $this->sources[ $name_or_alias ] ) ) {
-			$retval = $this->sources[ $name_or_alias ];
+			return $this->sources[ $name_or_alias ];
 		}
+
+		// Something has gone wrong. Return a skeleton object to prevent warnings being generated.
+		$retval = new \stdClass();
+		$retval->name    = 'unknown';
+		$retval->title   = __( 'Unknown source', 'nggallery' );
+		$retval->aliases = [];
+		$retval->returns = [];
 
 		return $retval;
 	}

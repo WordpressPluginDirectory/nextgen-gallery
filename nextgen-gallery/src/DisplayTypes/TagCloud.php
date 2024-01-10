@@ -176,8 +176,9 @@ class TagCloud extends ParentController {
 					'nextgen_basic_tagcloud',
 					'photocrati-nextgen_basic_tagcloud',
 				],
-				'settings'       => $this->get_default_settings(),
-			]
+				'settings' => $this->get_default_settings(),
+			],
+			$reset
 		);
 	}
 }

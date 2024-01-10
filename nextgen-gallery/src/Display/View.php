@@ -261,13 +261,22 @@ class View {
 			list($legacy_template, $module) = $fs->parse_formatted_path( $legacy_template );
 		}
 
-		// Append the suffix.
-		$template        = $template . '.php';
-		$legacy_template = $legacy_template . '.php';
+		// Append the '.php' suffix if necessary.
+		if ( substr( $template, -strlen( '.php' ) ) !== '.php' ) {
+			$template = $template . '.php';
+		}
+		if ( substr( $legacy_template, -strlen( '.php' ) ) !== '.php' ) {
+			$legacy_template = $legacy_template . '.php';
+		}
 
 		// First check if the template is in the override dir.
 		if ( ! empty( $module ) ) {
 			$retval = $this->get_template_override_abspath( $module, $legacy_template );
+		}
+
+		// $template is an absolute path to an existing file.
+		if ( file_exists( $template ) ) {
+			return $template;
 		}
 
 		// Use static:: here so this class can be extended by other plugins.
@@ -276,11 +285,11 @@ class View {
 		}
 
 		// In case this class has been extended we should use NGG provided templates if they aren't overridden.
-		if ( ! @file_exists( $retval ) ) {
+		if ( ! file_exists( $retval ) ) {
 			$retval = path_join( self::$default_root_dir, 'templates' . DIRECTORY_SEPARATOR . $template );
 		}
 
-		if ( ! @file_exists( $retval ) ) {
+		if ( ! file_exists( $retval ) ) {
 			throw new \RuntimeException( "{$retval} is not a valid MVC template" );
 		}
 

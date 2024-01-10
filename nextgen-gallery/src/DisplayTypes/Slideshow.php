@@ -192,8 +192,9 @@ class Slideshow extends ParentController {
 					'nextgen_basic_slideshow',
 					'photocrati-nextgen_basic_slideshow',
 				],
-				'settings'       => $this->get_default_settings(),
-			]
+				'settings' => $this->get_default_settings(),
+			],
+			$reset
 		);
 	}
 }

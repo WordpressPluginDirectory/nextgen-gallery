@@ -29,9 +29,9 @@
             'dev_requirement' => false,
         ),
         'imagely/pope-framework' => array(
-            'pretty_version' => 'v0.18',
-            'version' => '0.18.0.0',
-            'reference' => '83e5dc738c8eb5bb74cb5e7a9ac5f73c67bb45de',
+            'pretty_version' => 'v0.19',
+            'version' => '0.19.0.0',
+            'reference' => '78e0b0c59b68c44b86e688f447a5a80e78e44b4f',
             'type' => 'library',
             'install_path' => __DIR__ . '/../imagely/pope-framework',
             'aliases' => array(),

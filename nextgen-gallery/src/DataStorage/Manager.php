@@ -1968,7 +1968,13 @@ class Manager {
 			&& 0 === $_FILES['file']['error']
 			&& isset( $_REQUEST['nonce'] )
 			&& Security::verify_nonce( sanitize_text_field( wp_unslash( $_REQUEST['nonce'] ) ), 'nextgen_upload_image' ) ) {
-			$filename = sanitize_text_field( wp_unslash( $_FILES['file']['tmp_name'] ) );
+			// Windows' use of backslash characters for file paths means wp_unslash() here is destructive.
+			if ( 0 === strncasecmp( PHP_OS, 'WIN', 3 ) ) {
+				// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash
+				$filename = sanitize_text_field( $_FILES['file']['tmp_name'] );
+			} else {
+				$filename = sanitize_text_field( wp_unslash( $_FILES['file']['tmp_name'] ) );
+			}
 		}
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
