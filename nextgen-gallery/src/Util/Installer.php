@@ -121,7 +121,9 @@ class Installer {
 
 			// Attempt to reset the opcache. NextGEN 3.50+ and Pro 3.30+ moved, renamed, and deleted several files
 			// and purging the opcache should help prevent fatal errors due to cached instructions.
-			\opcache_reset();
+			if( \function_exists( 'opcache_reset' ) ) {
+				\opcache_reset();
+			}
 
 			// Clear all of our transients.
 			\wp_cache_flush();

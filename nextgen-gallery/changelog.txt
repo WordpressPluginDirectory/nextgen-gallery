@@ -1,6 +1,11 @@
 NextGEN Gallery
 by Imagely
 
+= V3.57  - 01.10.2023 =
+* Fixed:   Albums were generating an incorrect URL to their child galleries.
+* Fixed:   Albums could generate a fatal error when viewing a sub-album.
+* Fixed:   Do not call opcache_reset() if it does not exist.
+
 = V3.56  - 01.09.2023 =
 * Fixed:   "Open album children in Pro Lightbox" feature was only working with block based themes.
 * Fixed:   Adding more than one Pro display to one page caused galleries after the first to be unstyled.

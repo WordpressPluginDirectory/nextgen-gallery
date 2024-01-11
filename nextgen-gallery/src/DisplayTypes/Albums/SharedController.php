@@ -154,7 +154,7 @@ class SharedController extends ParentController {
 		if ( ! empty( $breadcrumbs ) ) {
 			return $breadcrumbs . $html;
 		} else {
-			return '';
+			return $html;
 		}
 	}
 
@@ -172,7 +172,7 @@ class SharedController extends ParentController {
 		if ( ! empty( $description ) ) {
 			return $description . $html;
 		} else {
-			return '';
+			return $html;
 		}
 	}
 
@@ -272,11 +272,11 @@ class SharedController extends ParentController {
 				if ( empty( $this->breadcrumb_cache[ $order ] ) ) {
 					$album                            = $map->find( $album_id );
 					$this->breadcrumb_cache[ $order ] = $album;
-					if ( in_array( $gallery_id, $album->sortorder, true ) ) {
+					if ( in_array( $gallery_id, $album->sortorder ) ) {
 						$found[] = $album;
 						break;
 					} else {
-						$found = $this->find_gallery_parent( $gallery_id, $album->sortorder );
+						$found = $this->find_gallery_parent( (int) $gallery_id, $album->sortorder );
 						if ( $found ) {
 							$found[] = $album;
 							break;
@@ -312,7 +312,7 @@ class SharedController extends ParentController {
 		foreach ( $entities as $ndx => $entity ) {
 			$tmpid                            = ( isset( $entity->albumdesc ) ? 'a' : '' ) . $entity->{$entity->id_field};
 			$this->breadcrumb_cache[ $tmpid ] = $entity;
-			if ( isset( $entity->albumdesc ) && in_array( $gallery_id, $entity->sortorder, true ) ) {
+			if ( isset( $entity->albumdesc ) && in_array( $gallery_id, $entity->sortorder ) ) {
 				$found[] = $entity;
 				break;
 			}
@@ -322,7 +322,7 @@ class SharedController extends ParentController {
 			foreach ( $entities as $entity ) {
 
 				if ( ! empty( $entity->sortorder ) ) {
-					$found = $this->find_gallery_parent( $gallery_id, $entity->sortorder );
+					$found = $this->find_gallery_parent( (int) $gallery_id, $entity->sortorder );
 				}
 
 				if ( ! empty( $found ) ) {
@@ -582,7 +582,7 @@ class SharedController extends ParentController {
 		$retval = null;
 
 		foreach ( $this->albums as $album ) {
-			if ( in_array( $entity_id, $album->sortorder, true ) ) {
+			if ( in_array( $entity_id, $album->sortorder ) ) {
 				$retval = $album;
 				break;
 			}
@@ -781,11 +781,6 @@ class SharedController extends ParentController {
 	 * @return array
 	 */
 	public function prepare_display_settings( DisplayedGallery $displayed_gallery, array $params ): array {
-		// Don't run this more than once.
-		if ( isset( self::$display_settings[ $displayed_gallery->id() ] ) ) {
-			return self::$display_settings[ $displayed_gallery->id() ];
-		}
-
 		$image_gen    = ThumbnailsManager::get_instance();
 		$image_mapper = ImageMapper::get_instance();
 		$router       = Router::get_instance();
