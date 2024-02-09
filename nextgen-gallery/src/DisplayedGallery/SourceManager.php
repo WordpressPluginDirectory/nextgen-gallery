@@ -142,7 +142,7 @@ class SourceManager {
 		}
 
 		// Something has gone wrong. Return a skeleton object to prevent warnings being generated.
-		$retval = new \stdClass();
+		$retval          = new \stdClass();
 		$retval->name    = 'unknown';
 		$retval->title   = __( 'Unknown source', 'nggallery' );
 		$retval->aliases = [];
@@ -209,9 +209,11 @@ class SourceManager {
 	public function is_compatible( $source, $display_type ) {
 		$retval = false;
 
-		if ( ( $source = $this->get( $source->name ) ) ) {
+		if ( ( $source = $this->get( $source->name ) ) && is_object( $display_type ) ) {
+
 			// Get the real entity type names for the display type.
 			$display_type_entity_types = [];
+
 			foreach ( $display_type->entity_types as $type ) {
 				$result = $this->get_entity_type( $type );
 				if ( $result ) {

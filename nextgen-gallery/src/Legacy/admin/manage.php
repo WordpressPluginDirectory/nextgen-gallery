@@ -567,7 +567,6 @@ class nggManageGallery {
 		// bulk update in a single gallery.
 		if ( isset( $_POST['bulkaction'] ) && isset( $_POST['doaction'] ) ) {
 
-
 			switch ( $_POST['bulkaction'] ) {
 				case 'no_action';
 					// No action.

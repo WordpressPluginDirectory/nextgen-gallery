@@ -129,7 +129,7 @@ function nggShowAlbum( $albumID, $template = 'extend', $gallery_template = '' ) 
  * @depecated
  */
 class C_Lightbox_Library_Manager {
-	public static $instance = NULL;
+	public static $instance = null;
 
 	public static function get_instance() {
 		if ( ! isset( self::$instance ) ) {

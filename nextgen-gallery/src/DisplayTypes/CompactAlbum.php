@@ -63,7 +63,7 @@ class CompactAlbum extends SharedController {
 					'nextgen_basic_album',
 					'photocrati-nextgen_basic_compact_album',
 				],
-				'settings' => $this->get_default_settings(),
+				'settings'       => $this->get_default_settings(),
 			],
 			$reset
 		);

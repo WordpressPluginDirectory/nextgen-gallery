@@ -279,7 +279,7 @@ class A_Lightbox_Manager_Form extends Mixin
         }
         // Highslide and jQuery.Lightbox were removed in 2.0.73 due to licensing. If a user has selected
         // either of those options we silently make their selection fallback to Fancybox.
-        $selected = $this->get_model()->thumbEffect;
+        $selected = \Imagely\NGG\Display\LightboxManager::get_instance()->get_selected()->name;
         if (in_array($selected, ['highslide', 'lightbox'])) {
             $selected = 'fancybox';
         }

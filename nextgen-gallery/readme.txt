@@ -2,7 +2,7 @@
 Contributors: photocrati, imagely
 Tags: wordpress gallery plugin, gallery, nextgen, nextgen gallery, photo gallery, image gallery, photography, slideshow, images, photo, photo album, watermark
 Requires at least: 5.5.4
-Stable tag: 3.57
+Stable tag: 3.58
 Tested up to: 6.4.2
 License: GPLv3
 Requires PHP: 7.0
@@ -179,12 +179,20 @@ For more information, feel free to visit the official website for the NextGEN Ga
 
 == Changelog ==
 
-= V3.57  - 01.10.2023 =
+= V3.58  - 02.08.2024 =
+* Fixed:   A potential fatal DivisionByZeroError caused by image files being deleted outside of NextGEN.
+* Fixed:   A potential fatal error in the XML-RPC controller.
+* Fixed:   An issue with classic (non-block) themes could break Pro's "Open album children in the Pro Lightbox" feature.
+* Fixed:   Assorted potential PHP notices and warnings.
+* Fixed:   Manage Galleries' "Images per Page" feature was not working.
+* Fixed:   Passing 'gallery_width="auto"' to a Slideshow shortcode could result in a fatal error.
+
+= V3.57  - 01.10.2024 =
 * Fixed:   Albums were generating an incorrect URL to their child galleries.
 * Fixed:   Albums could generate a fatal error when viewing a sub-album.
 * Fixed:   Do not call opcache_reset() if it does not exist.
 
-= V3.56  - 01.09.2023 =
+= V3.56  - 01.09.2024 =
 * Fixed:   "Open album children in Pro Lightbox" feature was only working with block based themes.
 * Fixed:   Adding more than one Pro display to one page caused galleries after the first to be unstyled.
 * Fixed:   Albums with very a large number of children may have broken gallery displays if it relies on the dynamic-css feature.

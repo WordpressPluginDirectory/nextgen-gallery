@@ -17,7 +17,7 @@ class Image extends Model {
 	public $id_field = 'pid';
 	public $image_slug;
 	public $imagedate;
-	public $meta_data;
+	public $meta_data = [];
 	public $pid;
 	public $post_id;
 	public $sortorder;

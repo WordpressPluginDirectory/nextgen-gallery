@@ -54,7 +54,7 @@ class StaticPopeAssets extends StaticAssets {
 			$filename
 		);
 
-		if ( ! is_null ( $retval ) ) {
+		if ( ! is_null( $retval ) ) {
 			// Adjust for windows paths.
 			return \wp_normalize_path( $retval );
 		} else {

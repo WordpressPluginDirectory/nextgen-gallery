@@ -14,5 +14,4 @@ class Manager {
 		$atp = new AttachToPost();
 		$atp->register_routes();
 	}
-
 }

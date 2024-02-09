@@ -232,7 +232,7 @@ class SinglePicture extends ParentController {
 					'nextgen_basic_singlepic',
 					'photocrati-nextgen_basic_singlepic',
 				],
-				'settings' => $this->get_default_settings(),
+				'settings'        => $this->get_default_settings(),
 			],
 			$reset
 		);

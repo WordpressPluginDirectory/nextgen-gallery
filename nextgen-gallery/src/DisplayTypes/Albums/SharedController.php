@@ -272,7 +272,9 @@ class SharedController extends ParentController {
 				if ( empty( $this->breadcrumb_cache[ $order ] ) ) {
 					$album                            = $map->find( $album_id );
 					$this->breadcrumb_cache[ $order ] = $album;
-					if ( in_array( $gallery_id, $album->sortorder ) ) {
+					// Using strict comparison here breaks the breadcrumb generation.
+					//phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
+					if ( is_array( $album->sortorder ) && in_array( $gallery_id, $album->sortorder ) ) {
 						$found[] = $album;
 						break;
 					} else {
@@ -312,6 +314,8 @@ class SharedController extends ParentController {
 		foreach ( $entities as $ndx => $entity ) {
 			$tmpid                            = ( isset( $entity->albumdesc ) ? 'a' : '' ) . $entity->{$entity->id_field};
 			$this->breadcrumb_cache[ $tmpid ] = $entity;
+			// Using strict comparison here breaks the breadcrumb generation.
+			//phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
 			if ( isset( $entity->albumdesc ) && in_array( $gallery_id, $entity->sortorder ) ) {
 				$found[] = $entity;
 				break;
@@ -582,6 +586,8 @@ class SharedController extends ParentController {
 		$retval = null;
 
 		foreach ( $this->albums as $album ) {
+			// Using strict comparison here breaks the breadcrumb generation.
+			//phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
 			if ( in_array( $entity_id, $album->sortorder ) ) {
 				$retval = $album;
 				break;
@@ -746,27 +752,23 @@ class SharedController extends ParentController {
 		$gallery->displayed_gallery->is_album_gallery  = true;
 		$gallery->displayed_gallery->to_transient();
 
-		\add_action(
-			'ngg_display_type_controller_enqueue_frontend_resources',
-			function ( $displayed_gallery ) use ( $gallery ) {
-				$displayed_gallery = $gallery->displayed_gallery;
+		$displayed_gallery = $gallery->displayed_gallery;
 
-				DisplayManager::add_script_data(
-					'ngg_common',
-					'galleries.gallery_' . $displayed_gallery->id(),
-					(array) $displayed_gallery->get_entity(),
-					false
-				);
-				DisplayManager::add_script_data(
-					'ngg_common',
-					'galleries.gallery_' . $displayed_gallery->id() . '.wordpress_page_root',
-					get_permalink(),
-					false
-				);
-
-				do_action( 'ngg_albums_enqueue_child_entity_data', $displayed_gallery );
-			}
+		DisplayManager::add_script_data(
+			'ngg_common',
+			'galleries.gallery_' . $displayed_gallery->id(),
+			(array) $displayed_gallery->get_entity(),
+			false
 		);
+
+		DisplayManager::add_script_data(
+			'ngg_common',
+			'galleries.gallery_' . $displayed_gallery->id() . '.wordpress_page_root',
+			get_permalink(),
+			false
+		);
+
+		do_action( 'ngg_albums_enqueue_child_entity_data', $displayed_gallery );
 
 		return $gallery;
 	}

@@ -51,38 +51,42 @@ if ( ! empty( $image ) ) {
 	$this->start_element( 'nextgen_gallery.image_panel', 'item', $image );
 
 	?>
-    <div class="ngg-gallery-singlepic-image <?php echo $settings['float']; ?>" style="<?php echo esc_attr( $style ); ?>">
+	<div class="ngg-gallery-singlepic-image <?php echo $settings['float']; ?>" style="<?php echo esc_attr( $style ); ?>">
 		<?php $this->start_element( 'nextgen_gallery.image', 'item', $image ); ?>
-        <a href="<?php echo esc_url( $settings['link'] ); ?>"
-           title="<?php echo esc_attr( $image->description ); ?>"
-           data-src="<?php echo esc_attr( $storage->get_image_url( $image ) ); ?>"
-           data-thumbnail="<?php echo esc_attr( $storage->get_image_url( $image, 'thumb' ) ); ?>"
-           data-image-id="<?php echo esc_attr( $image->{$image->id_field} ); ?>"
-           data-title="<?php echo esc_attr( $image->alttext ); ?>"
-           data-description="<?php echo esc_attr( stripslashes( $image->description ) ); ?>"
-           target='<?php echo esc_attr( $target ); ?>'
+		<a href="<?php echo esc_url( $settings['link'] ); ?>"
+			title="<?php echo esc_attr( $image->description ); ?>"
+			data-src="<?php echo esc_attr( $storage->get_image_url( $image ) ); ?>"
+			data-thumbnail="<?php echo esc_attr( $storage->get_image_url( $image, 'thumb' ) ); ?>"
+			data-image-id="<?php echo esc_attr( $image->{$image->id_field} ); ?>"
+			data-title="<?php echo esc_attr( $image->alttext ); ?>"
+			data-description="<?php echo esc_attr( stripslashes( $image->description ) ); ?>"
+			target='<?php echo esc_attr( $target ); ?>'
 			<?php echo $effect_code; ?>>
-            <img class="ngg-singlepic"
-                 src="<?php echo esc_attr( $thumbnail_url ); ?>"
-                 alt="<?php echo esc_attr( $image->alttext ); ?>"
-                 title="<?php echo esc_attr( $image->alttext ); ?>"
+			<img class="ngg-singlepic"
+				src="<?php echo esc_attr( $thumbnail_url ); ?>"
+				alt="<?php echo esc_attr( $image->alttext ); ?>"
+				title="<?php echo esc_attr( $image->alttext ); ?>"
 				<?php
-				if ( $width ) { ?>
-                    width="<?php echo esc_attr( $width ); ?>" <?php } ?>
+				if ( $width ) {
+					?>
+					width="<?php echo esc_attr( $width ); ?>" <?php } ?>
 				<?php if ( $height ) { ?>
-                    height="<?php echo esc_attr( $height ); ?>"
+					height="<?php echo esc_attr( $height ); ?>"
 				<?php } ?>
-            />
-        </a>
+			/>
+		</a>
 		<?php $this->end_element(); ?>
-    </div>
+	</div>
 	<?php
-	if ( ! is_null( $inner_content ) ) { ?>
-        <span><?php echo $inner_content; ?></span><?php } ?>
+	if ( ! is_null( $inner_content ) ) {
+		?>
+		<span><?php echo $inner_content; ?></span><?php } ?>
 	<?php
 	$this->end_element();
 
 	$this->end_element();
-} else { ?>
-    <p>No image found</p>
-<?php }
+} else {
+	?>
+	<p>No image found</p>
+	<?php
+}

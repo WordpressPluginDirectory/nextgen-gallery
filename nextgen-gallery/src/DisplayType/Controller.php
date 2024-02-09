@@ -188,7 +188,7 @@ class Controller {
 			return apply_filters( 'ngg_effect_code', $lightbox->code, $displayed_gallery );
 		}
 
-		if ( $lightbox->is_supported( $displayed_gallery )  ) {
+		if ( $lightbox->is_supported( $displayed_gallery ) ) {
 			$retval = $lightbox->code;
 			$retval = str_replace( '%GALLERY_ID%', $displayed_gallery->id(), $retval );
 			$retval = str_replace( '%GALLERY_NAME%', $displayed_gallery->id(), $retval );
@@ -712,11 +712,11 @@ class Controller {
 
 		// Update the properties of the display type.
 		$properties['name'] = $name;
-		$changed = false;
+		$changed            = false;
 		foreach ( $properties as $key => $val ) {
-			if ( ! isset ( $display_type->$key ) || empty ( $display_type->$key ) || is_null ( $display_type->$key ) || $reset ) {
+			if ( ! isset( $display_type->$key ) || empty( $display_type->$key ) || is_null( $display_type->$key ) || $reset ) {
 				$display_type->$key = $val;
-				$changed = true;
+				$changed            = true;
 			}
 		}
 
@@ -753,5 +753,4 @@ class Controller {
 	public function get_default_settings() {
 		return [];
 	}
-
 }

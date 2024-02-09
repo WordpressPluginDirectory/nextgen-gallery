@@ -137,6 +137,10 @@ class nggManageAlbum {
 	 * @return Album
 	 */
 	public function _set_album_preview_pic( $album ) {
+		if ( ! isset( $album->sortorder ) || ! is_array( $album->sortorder ) ) {
+			return $album;
+		}
+
 		$sortorder = array_merge( $album->sortorder );
 
 		while ( ! $album->previewpic ) {
@@ -197,7 +201,11 @@ class nggManageAlbum {
 			parse_str( $_REQUEST['sortorder'], $sortorder );
 
 			// Set the new sortorder.
-			$album->sortorder = $sortorder['gid'];
+			if ( isset( $sortorder['gid'] ) ) {
+				$album->sortorder = $sortorder['gid'];
+			} else {
+				$album->sortorder = [];
+			}
 
 			// Ensure that a preview pic has been sent.
 			$this->_set_album_preview_pic( $album );

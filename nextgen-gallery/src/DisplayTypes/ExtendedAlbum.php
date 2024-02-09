@@ -62,7 +62,7 @@ class ExtendedAlbum extends SharedController {
 					'nextgen_basic_extended_album',
 					'photocrati-nextgen_basic_extended_album',
 				],
-				'settings' => $this->get_default_settings(),
+				'settings'       => $this->get_default_settings(),
 			],
 			$reset
 		);

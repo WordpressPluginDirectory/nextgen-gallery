@@ -459,7 +459,7 @@ class DisplayManager {
 		$dirs = [];
 
 		if ( ControllerFactory::has_controller( $display_type->name ) ) {
-			$controller = ControllerFactory::get_controller( $display_type->name );
+			$controller      = ControllerFactory::get_controller( $display_type->name );
 			$dirs['default'] = $controller->get_template_directory_abspath();
 		}
 

@@ -23,10 +23,10 @@ class View {
 		// Allow display types' global template / 'view' setting to be used in place of whatever is passed as
 		// $template from the display type controller.
 		if ( isset( $params['displayed_gallery'] )
-		     && isset( $params['displayed_gallery']->display_type )
-		     && isset( $params['display_type_rendering'] )
-		     && $params['display_type_rendering']
-		     && ControllerFactory::has_controller( $params['displayed_gallery']->display_type ) ) {
+			&& isset( $params['displayed_gallery']->display_type )
+			&& isset( $params['display_type_rendering'] )
+			&& $params['display_type_rendering']
+			&& ControllerFactory::has_controller( $params['displayed_gallery']->display_type ) ) {
 			$controller     = ControllerFactory::get_controller( $params['displayed_gallery']->display_type );
 			$this->template = $controller->get_display_type_view_abspath( $template, $params );
 		}
@@ -70,7 +70,7 @@ class View {
 		}
 
 		// Bitnami stores files in /opt/bitnami, but PHP's ReflectionClass->getFileName() can report /bitnami
-        // which causes this method to reject files for being outside the server document root.
+		// which causes this method to reject files for being outside the server document root.
 		if ( 0 === strpos( $filename, '/bitnami', 0 ) ) {
 			$filename = '/opt' . $filename;
 		}

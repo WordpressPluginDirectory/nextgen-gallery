@@ -241,9 +241,12 @@ class Shortcodes {
 
 		if ( $this->is_disabled() ) {
 			// Because render_shortcode() is a wrapper to several shortcodes it requires the $name parameter and can't be passed directly to add_shortcode()
-			add_shortcode( $name, function ( $params, $inner_content ) use ( $name ) {
-				return $this->render_shortcode( $name, $params, $inner_content );
-			} );
+			add_shortcode(
+				$name,
+				function ( $params, $inner_content ) use ( $name ) {
+					return $this->render_shortcode( $name, $params, $inner_content );
+				}
+			);
 		} else {
 			\add_shortcode( $name, [ $this, $name . '____wrapper' ] );
 		}

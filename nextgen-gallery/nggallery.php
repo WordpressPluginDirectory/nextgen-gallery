@@ -2,7 +2,7 @@
 /**
  * Plugin Name: NextGEN Gallery
  * Description: The most popular gallery plugin for WordPress and one of the most popular plugins of all time with over 30 million downloads.
- * Version: 3.57
+ * Version: 3.58
  * Author: Imagely
  * Plugin URI: https://www.imagely.com/wordpress-gallery-plugin/nextgen-gallery/
  * Author URI: https://www.imagely.com
@@ -337,6 +337,10 @@ class C_NextGEN_Bootstrap {
 		// POPE is not loaded; return the result from a manual mapping of id -> directory name.
 		$module_dir = null;
 
+		if ( $module_id === 'photocrati-nextgen_pagination' ) {
+			$module_dir = 'nextgen_pagination';
+		}
+
 		if ( $module_id === 'photocrati-attach_to_post' ) {
 			$module_dir = 'attach_to_post';
 		}
@@ -534,12 +538,12 @@ class C_NextGEN_Bootstrap {
 		// Nonce verification is not necessary here.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( ! $force
-		     && empty( $_REQUEST['photocrati_ajax'] )
-		     && ( self::get_pro_api_version() >= 4.0 && ! is_admin() )
-		     && ! defined( 'EWWW_IMAGE_OPTIMIZER_VERSION' ) // EWWW uses I_Gallery_Storage.
-		     && ! defined( 'WP_SMUSH_VERSION' ) // WP_SMUSH_VERSION uses I_Gallery_Storage.
-		     && ! defined( 'IMAGIFY_VERSION' ) // Imagify adds their own mixin to C_Gallery_Storage.
-		     || self::$pope_loaded ) {
+			&& empty( $_REQUEST['photocrati_ajax'] )
+			&& ( self::get_pro_api_version() >= 4.0 && ! is_admin() )
+			&& ! defined( 'EWWW_IMAGE_OPTIMIZER_VERSION' ) // EWWW uses I_Gallery_Storage.
+			&& ! defined( 'WP_SMUSH_VERSION' ) // WP_SMUSH_VERSION uses I_Gallery_Storage.
+			&& ! defined( 'IMAGIFY_VERSION' ) // Imagify adds their own mixin to C_Gallery_Storage.
+			|| self::$pope_loaded ) {
 			return;
 		}
 
@@ -928,7 +932,7 @@ class C_NextGEN_Bootstrap {
 		define( 'NGG_PRODUCT_DIR', implode( DIRECTORY_SEPARATOR, [ rtrim( NGG_PLUGIN_DIR, '/\\' ), 'products' ] ) );
 		define( 'NGG_MODULE_DIR', implode( DIRECTORY_SEPARATOR, [ rtrim( NGG_PRODUCT_DIR, '/\\' ), 'photocrati_nextgen', 'modules' ] ) );
 		define( 'NGG_PLUGIN_STARTED_AT', microtime() );
-		define( 'NGG_PLUGIN_VERSION', '3.57' );
+		define( 'NGG_PLUGIN_VERSION', '3.58' );
 
 		define( 'NGG_SCRIPT_VERSION', defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ? (string) mt_rand( 0, mt_getrandmax() ) : NGG_PLUGIN_VERSION );
 
