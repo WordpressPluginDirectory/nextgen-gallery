@@ -2,7 +2,7 @@
 /**
  * Plugin Name: NextGEN Gallery
  * Description: The most popular gallery plugin for WordPress and one of the most popular plugins of all time with over 30 million downloads.
- * Version: 3.58
+ * Version: 3.59
  * Author: Imagely
  * Plugin URI: https://www.imagely.com/wordpress-gallery-plugin/nextgen-gallery/
  * Author URI: https://www.imagely.com
@@ -748,7 +748,16 @@ class C_NextGEN_Bootstrap {
 		&& ! empty( $_REQUEST['action'] )
 		&& '1' === (string) ( $_REQUEST['photocrati_ajax'] )
 		&& in_array( $_REQUEST['action'], $lightroom_actions, true ) ) {
-			add_action( 'init', [ '\Imagely\NGG\Lightroom\Controller', 'run' ], 0 );
+			add_action(
+				'init',
+				function() {
+					$this->register_taxonomy();
+					(new \Imagely\NGG\Lightroom\Controller())->run();
+				},
+				0
+			);
+		} else {
+			add_action( 'init', [ $this, 'register_taxonomy' ], 9 );
 		}
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
@@ -790,6 +799,24 @@ class C_NextGEN_Bootstrap {
 		\Imagely\NGG\IGW\EventPublisher::get_instance()->register_hooks();
 		\Imagely\NGG\Util\Router::get_instance()->register_hooks();
 		\Imagely\NGG\Util\ThirdPartyCompatibility::get_instance()->register_hooks();
+	}
+
+	/**
+	 * Registers the NextGEN taxonomy.
+	 *
+	 * @return void
+	 */
+	public function register_taxonomy() {
+		// Register the NextGEN taxonomy.
+		$args = [
+			'label'    => __( 'Picture tag', 'nggallery' ),
+			'template' => __( 'Picture tag: %2$l.', 'nggallery' ),
+			'helps'    => __( 'Separate picture tags with commas.', 'nggallery' ),
+			'sort'     => true,
+			'args'     => [ 'orderby' => 'term_order' ],
+		];
+
+		register_taxonomy( 'ngg_tag', 'nggallery', $args );
 	}
 
 	public function handle_activation_redirect() {
@@ -932,7 +959,7 @@ class C_NextGEN_Bootstrap {
 		define( 'NGG_PRODUCT_DIR', implode( DIRECTORY_SEPARATOR, [ rtrim( NGG_PLUGIN_DIR, '/\\' ), 'products' ] ) );
 		define( 'NGG_MODULE_DIR', implode( DIRECTORY_SEPARATOR, [ rtrim( NGG_PRODUCT_DIR, '/\\' ), 'photocrati_nextgen', 'modules' ] ) );
 		define( 'NGG_PLUGIN_STARTED_AT', microtime() );
-		define( 'NGG_PLUGIN_VERSION', '3.58' );
+		define( 'NGG_PLUGIN_VERSION', '3.59' );
 
 		define( 'NGG_SCRIPT_VERSION', defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ? (string) mt_rand( 0, mt_getrandmax() ) : NGG_PLUGIN_VERSION );
 

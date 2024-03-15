@@ -2,7 +2,7 @@
 Contributors: photocrati, imagely
 Tags: wordpress gallery plugin, gallery, nextgen, nextgen gallery, photo gallery, image gallery, photography, slideshow, images, photo, photo album, watermark
 Requires at least: 5.5.4
-Stable tag: 3.58
+Stable tag: 3.59
 Tested up to: 6.4.2
 License: GPLv3
 Requires PHP: 7.0
@@ -178,6 +178,14 @@ For more information, feel free to visit the official website for the NextGEN Ga
 
 
 == Changelog ==
+= V3.59  - 03.14.2024 =
+* Fixed: URI too long prevents "Sort or exclude images" from loading images.
+* Fixed: Correcting Lightroom clients being unable to sync image .
+* Fixed: Prevent PHP warning / error when watermarking.
+* Fixed: Sorting images from a Classic Editor launched IGW.
+* Fixed: Shutter lightbox randomly failing to load the captions.
+* Fixed: PHP notices and warnings.
+* Fixed: Addressed a bug reported by Dmitrii Ignatyev of Cleantalk.
 
 = V3.58  - 02.08.2024 =
 * Fixed:   A potential fatal DivisionByZeroError caused by image files being deleted outside of NextGEN.

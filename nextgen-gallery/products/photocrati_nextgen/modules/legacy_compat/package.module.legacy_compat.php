@@ -1936,9 +1936,9 @@ class C_Gallery_Storage extends C_Component
                 // Always retrieve metadata from the backup when possible
                 $backup_path = $image_path . '_backup';
                 $exif_abspath = @file_exists($backup_path) ? $backup_path : $image_path;
-                $exif_iptc = @C_Exif_Writer::read_metadata($exif_abspath);
+                $exif_iptc = @\Imagely\NGG\DataStorage\EXIFWriter::read_metadata($exif_abspath);
                 $thumbnail->save($destpath, $quality);
-                @C_Exif_Writer::write_metadata($destpath, $exif_iptc);
+                @\Imagely\NGG\DataStorage\EXIFWriter::write_metadata($destpath, $exif_iptc);
             }
         }
         return $thumbnail;
@@ -4440,6 +4440,9 @@ class C_NggLegacy_Thumbnail
      */
     function watermarkCreateText($color, $wmFont, $wmSize = 10, $wmOpaque = 90)
     {
+        if (empty($this->watermarkText)) {
+            return;
+        }
         if (!$color) {
             $color = '000000';
         }

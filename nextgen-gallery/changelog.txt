@@ -1,6 +1,15 @@
 NextGEN Gallery
 by Imagely
 
+= V3.59  - 03.14.2024 =
+* Fixed: URI too long prevents "Sort or exclude images" from loading images.
+* Fixed: Correcting Lightroom clients being unable to sync image .
+* Fixed: Prevent PHP warning / error when watermarking.
+* Fixed: Sorting images from a Classic Editor launched IGW.
+* Fixed: Shutter lightbox randomly failing to load the captions.
+* Fixed: PHP notices and warnings.
+* Fixed: Addressed a bug reported by Dmitrii Ignatyev of Cleantalk.
+
 = V3.58  - 02.08.2024 =
 * Fixed:   A potential fatal DivisionByZeroError caused by image files being deleted outside of NextGEN.
 * Fixed:   A potential fatal error in the XML-RPC controller.

@@ -4,18 +4,22 @@ jQuery(function($){
     $('.ngg_page_content_menu a:first-of-type').addClass("ngg_page_content_menu_active");
 
     $('.ngg_page_content_menu a').on('click', function(e) {
-        
+
         /* Add color to only the active link */
         $('.ngg_page_content_menu a').removeClass("ngg_page_content_menu_active");
         $(this).addClass("ngg_page_content_menu_active");
 
         /* Show the associated div */
-        var id = $(this).attr('data-id');
+        let id = $(this).attr('data-id');
         $('.ngg_page_content_main > div').css("display", "none");
-        $('div[data-id="' + $(this).attr('data-id') + '"]').css("display", "block");
+        $('div[data-id="' + id + '"]').css("display", "block");
+				if(id === 'watermarks') {
+					$('#nextgen_settings_preview_refresh').click();
+				}
+
     });
 
-    /* Set up responsive menu for mobile devices. */   
+    /* Set up responsive menu for mobile devices. */
     $(".responsive-menu-icon").remove();
     $(".ngg_page_content_menu").addClass("responsive-menu").before('<div class="responsive-menu-icon"></div>');
 

@@ -114,11 +114,13 @@ class SharedController extends ParentController {
 			foreach ( $root_element->find( 'nextgen_gallery.gallery_container', true ) as $container ) {
 				// Determine where (to be compatible with breadcrumbs) in the container to insert.
 				$pos = 0;
-				foreach ( $container->_list as $ndx => $item ) {
-					if ( is_string( $item ) ) {
-						$pos = $ndx;
-					} else {
-						break;
+				if ( ! empty( $container->_list ) ) {
+					foreach ( $container->_list as $ndx => $item ) {
+						if ( is_string( $item ) ) {
+							$pos = $ndx;
+						} else {
+							break;
+						}
 					}
 				}
 
@@ -216,6 +218,10 @@ class SharedController extends ParentController {
 	 * @param DisplayedGallery $displayed_gallery DisplayedGallery object.
 	 */
 	public function enqueue_frontend_resources( $displayed_gallery ) {
+		// Necessary for breadcrumbs and URL routing.
+		$renderer = Renderer::get_instance( 'inner' );
+		$renderer->do_app_rewrites( $displayed_gallery );
+
 		// This MUST come before the parent::enqueue_frontend_resources() so that this method can register an action
 		// that will be triggered by the parent method.
 		$this->prepare_display_settings(
@@ -373,7 +379,7 @@ class SharedController extends ParentController {
 		if ( ! empty( $found ) ) {
 			$end = end( $found );
 			reset( $found );
-			foreach ( $found as $found_item ) {
+			foreach ( $found as $ndx => $found_item ) {
 				$type   = isset( $found_item->albumdesc ) ? 'album' : 'gallery';
 				$id     = ( 'album' === $type ? 'a' : '' ) . $found_item->{$found_item->id_field};
 				$entity = $this->breadcrumb_cache[ $id ];
@@ -387,7 +393,10 @@ class SharedController extends ParentController {
 					if ( empty( $link ) && $found_item !== $end ) {
 						$link = $app->get_routed_url();
 						$link = $app->strip_param_segments( $link );
-						$link = $app->set_parameter_value( 'album', $entity->slug, null, false, $link );
+						// Do not include the album in the URL when linking to the root element.
+						if ( 0 !== $ndx ) {
+							$link = $app->set_parameter_value( 'album', $entity->slug, null, false, $link );
+						}
 					}
 				} else {
 					$name = $entity->title;
@@ -652,12 +661,19 @@ class SharedController extends ParentController {
 				$album = $album_sub;
 			}
 
+			// Preserve the original album list before altering the DisplayedGallery.
+			$original_albums = $displayed_gallery->get_albums();
+
+			if ( in_array( $album, $displayed_gallery->container_ids, false ) ) {
+				$viewing_original_album = true;
+			}
+
 			$displayed_gallery->entity_ids    = [];
 			$displayed_gallery->sortorder     = [];
 			$displayed_gallery->container_ids = ( '0' === $album || 'all' === $album ) ? [] : [ $album ];
 
 			$displayed_gallery->display_settings['original_album_id']       = 'a' . $album_sub;
-			$displayed_gallery->display_settings['original_album_entities'] = $displayed_gallery->get_albums();
+			$displayed_gallery->display_settings['original_album_entities'] = array_merge( $original_albums, $displayed_gallery->get_albums() );
 		}
 
 		// Get the albums
@@ -689,7 +705,7 @@ class SharedController extends ParentController {
 					$retval = $description . $retval;
 				}
 
-				if ( ! empty( $breadcrumbs ) ) {
+				if ( ! isset( $viewing_original_album ) && ! empty( $breadcrumbs ) ) {
 					$retval = $breadcrumbs . $retval;
 				}
 
@@ -702,8 +718,10 @@ class SharedController extends ParentController {
 
 				// Rather than messing with filters and return values, this method just directly calls add_breadcrumbs_and_descriptions().
 				$view_element = $view->render_object();
-				$view_element = $this->add_breadcrumbs_and_descriptions( $view_element, $displayed_gallery );
-				$content      = $view->rasterize_object( $view_element );
+				if ( ! isset( $viewing_original_album ) ) {
+					$view_element = $this->add_breadcrumbs_and_descriptions( $view_element, $displayed_gallery );
+				}
+				$content = $view->rasterize_object( $view_element );
 
 				if ( ! $return ) {
 					// We cannot truly escape this content as it may come from user-supplied or 3rd party templates.
@@ -754,6 +772,15 @@ class SharedController extends ParentController {
 
 		$displayed_gallery = $gallery->displayed_gallery;
 
+		// Add "galleries = {};".
+		DisplayManager::add_script_data(
+			'ngg_common',
+			'galleries',
+			new \stdClass(),
+			true,
+			false
+		);
+
 		DisplayManager::add_script_data(
 			'ngg_common',
 			'galleries.gallery_' . $displayed_gallery->id(),
@@ -763,6 +790,7 @@ class SharedController extends ParentController {
 
 		DisplayManager::add_script_data(
 			'ngg_common',
+
 			'galleries.gallery_' . $displayed_gallery->id() . '.wordpress_page_root',
 			get_permalink(),
 			false
@@ -886,6 +914,7 @@ class SharedController extends ParentController {
 						$pagelink = $app->set_parameter( 'album', 'all', null, false, $pagelink );
 					} else {
 						$pagelink = $app->remove_parameter( 'nggpage', null, $pagelink );
+						$pagelink = $app->remove_parameter( 'album', null, $pagelink );
 						$pagelink = $app->set_parameter( 'album', 'album', null, false, $pagelink );
 					}
 					$gallery->pagelink = $app->set_parameter(
