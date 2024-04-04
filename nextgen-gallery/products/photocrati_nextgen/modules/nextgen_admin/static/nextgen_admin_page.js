@@ -42,6 +42,7 @@ jQuery(function($){
 
     // When a submit button is clicked...
     $('input[type="submit"], button[type="submit"]').on('click', function(e){
+
         var $button = $(this);
         var message = false;
 
@@ -75,6 +76,13 @@ jQuery(function($){
                 $button.parents('form').append($field);
             }
         }
+		// If watermark url or watermark text is empty, open watermarks tab.
+		if( $('#ngg_errors_in_tab').val() !== '' ){
+			$('.ngg_page_content_menu a').removeClass("ngg_page_content_menu_active");
+			$('.ngg_page_content_menu a[data-id="watermarks"]').addClass("ngg_page_content_menu_active");
+			$('.ngg_page_content_main > div').css("display", "none");
+			$('div[data-id="watermarks"]').css("display", "block");
+		}
     });
 
 

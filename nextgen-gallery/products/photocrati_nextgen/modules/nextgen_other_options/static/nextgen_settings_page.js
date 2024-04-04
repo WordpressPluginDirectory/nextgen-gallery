@@ -8,6 +8,7 @@ jQuery(function($) {
 	let watermark_image_url = $('#watermark_image_url');
 	let watermark_customization = $('#watermark_customization');
 	let refresh_button = $('#nextgen_settings_preview_refresh');
+	let ngg_errors_in_tab = $('#ngg_errors_in_tab');
 
 	let checkWatermarkText = function() {
 		if (watermark_source.val() === 'text') {
@@ -19,6 +20,7 @@ jQuery(function($) {
 					'border-color': '',
 					'border-width': ''
 				});
+				ngg_errors_in_tab.val('');
 				refresh_button.prop('disabled', false).html('Refresh preview image');
 			} else {
 				watermark_text.css({
@@ -26,6 +28,7 @@ jQuery(function($) {
 					'border-width': '1px'
 				});
 				refresh_button.prop('disabled', true).html('Enter watermark text...');
+				ngg_errors_in_tab.val('Watermark text is a required field.');
 			}
 		}
 	}
@@ -42,12 +45,14 @@ jQuery(function($) {
 					'border-color': '',
 					'border-width': ''
 				});
+				ngg_errors_in_tab.val('');
 			} else {
 				refresh_button.prop('disabled', true).html('Enter watermark image URL...');
 				watermark_image_url.css({
 					'border-color': 'red',
 					'border-width': '1px'
 				});
+				ngg_errors_in_tab.val('Watermark URL is a required field.');
 			}
 		}
 	}

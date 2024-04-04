@@ -178,7 +178,7 @@ class Slideshow extends \WP_Widget {
 		}
 
 		$instance              = $old_instance;
-		$instance['title']     = \wp_kses_post( $new_instance['title'] );
+		$instance['title']     = esc_attr( $new_instance['title'] );
 		$instance['galleryid'] = (int) $new_instance['galleryid'];
 		$instance['height']    = (int) $new_instance['height'];
 		$instance['width']     = (int) $new_instance['width'];

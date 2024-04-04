@@ -1,6 +1,8 @@
 NextGEN Gallery
 by Imagely
 
+* Fixed: Updated permission check
+
 = V3.59  - 03.14.2024 =
 * Fixed: URI too long prevents "Sort or exclude images" from loading images.
 * Fixed: Correcting Lightroom clients being unable to sync image .
