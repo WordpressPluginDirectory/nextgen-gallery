@@ -33,6 +33,7 @@ class Gallery extends Model {
 	public $bulkaction;
 	public $images = [];
 	public $updatepictures;
+	public $attach_to_post;
 
 	public function get_primary_key_column() {
 		return 'gid';

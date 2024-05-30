@@ -27,8 +27,9 @@ class Image extends Model {
 	// TODO: remove this when get_pro_compat_level() >= 1.
 	public $items = [];
 	public $pricelist_id;
+	public $title;
 
-	public function get_primary_key_column() {
+    public function get_primary_key_column() {
 		return 'pid';
 	}
 

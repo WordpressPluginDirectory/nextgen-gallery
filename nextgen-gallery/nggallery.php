@@ -2,7 +2,7 @@
 /**
  * Plugin Name: NextGEN Gallery
  * Description: The most popular gallery plugin for WordPress and one of the most popular plugins of all time with over 30 million downloads.
- * Version: 3.59.2
+ * Version: 3.59.3
  * Author: Imagely
  * Plugin URI: https://www.imagely.com/wordpress-gallery-plugin/nextgen-gallery/
  * Author URI: https://www.imagely.com
@@ -947,6 +947,12 @@ class C_NextGEN_Bootstrap {
 	public function activate() {
 		\Imagely\NGG\Util\Installer::set_role_caps();
 		set_transient( 'ngg-activated', time(), 30 );
+
+		$over_time = get_option( 'nextgen_over_time', [] );
+		if ( empty( $over_time['installed_lite'] ) ) {
+			$over_time['installed_lite'] = wp_date( 'U' );
+			update_option( 'nextgen_over_time', $over_time );
+		}
 	}
 
 	public function define_constants() {
@@ -959,7 +965,7 @@ class C_NextGEN_Bootstrap {
 		define( 'NGG_PRODUCT_DIR', implode( DIRECTORY_SEPARATOR, [ rtrim( NGG_PLUGIN_DIR, '/\\' ), 'products' ] ) );
 		define( 'NGG_MODULE_DIR', implode( DIRECTORY_SEPARATOR, [ rtrim( NGG_PRODUCT_DIR, '/\\' ), 'photocrati_nextgen', 'modules' ] ) );
 		define( 'NGG_PLUGIN_STARTED_AT', microtime() );
-		define( 'NGG_PLUGIN_VERSION', '3.59.2' );
+		define( 'NGG_PLUGIN_VERSION', '3.59.3' );
 
 		define( 'NGG_SCRIPT_VERSION', defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ? (string) mt_rand( 0, mt_getrandmax() ) : NGG_PLUGIN_VERSION );
 

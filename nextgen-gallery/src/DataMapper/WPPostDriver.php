@@ -545,7 +545,7 @@ class WPPostDriver extends DriverBase {
 		}
 
 		// TODO: unsilence this. WordPress 3.9-beta2 is generating an error that should be corrected before its final release.
-		if ( ( $post_id = @wp_insert_post( $post ) ) ) {
+		if ( ( $post_id = wp_insert_post( (array) $post ) ) ) {
 			$new_entity = $this->find( $post_id, true );
 			if ( $new_entity ) {
 				foreach ( get_object_vars( $new_entity ) as $key => $value ) {

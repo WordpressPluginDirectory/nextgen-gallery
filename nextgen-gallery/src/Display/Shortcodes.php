@@ -188,6 +188,11 @@ class Shortcodes {
 		$regex = \str_replace( '%d', '(\d+)', $this->_placeholder_text );
 
 		if ( $this->is_rest_request() ) {
+			// Return early if we're in the REST API and shortcodes are disabled.
+			// Allows other plugins to disable shortcodes in the REST API.
+			if ( \apply_filters( 'ngg_disable_shortcodes_in_request_api', true ) ) {
+				return $content;
+			}
 			\ob_start();
 		}
 
