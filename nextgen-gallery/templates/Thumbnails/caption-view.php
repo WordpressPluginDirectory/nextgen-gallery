@@ -1,6 +1,9 @@
-<?php $this->start_element( 'nextgen_gallery.gallery_container', 'container', $displayed_gallery ); ?>
+<?php
+use Imagely\NGG\Display\I18N;
 
-<div class="ngg-galleryoverview caption-view 
+$this->start_element( 'nextgen_gallery.gallery_container', 'container', $displayed_gallery ); ?>
+
+<div class="ngg-galleryoverview caption-view
 <?php
 if ( ! intval( $ajax_pagination ) ) {
 	echo ' ngg-ajax-pagination-none';}
@@ -25,12 +28,12 @@ if ( ! intval( $ajax_pagination ) ) {
 
 				$this->start_element( 'nextgen_gallery.image_panel', 'item', $image );
 				?>
-					<div id="<?php echo esc_attr( 'ngg-image-' . $i ); ?>" class="ngg-gallery-thumbnail-box 
+					<div id="<?php echo esc_attr( 'ngg-image-' . $i ); ?>" class="ngg-gallery-thumbnail-box
 										<?php
 										if ( $number_of_columns > 0 && empty( $show_all_in_lightbox ) ) {
 											echo $column_class; }
 										?>
-					" 
+					"
 					<?php
 					if ( $style ) {
 										echo $style;}
@@ -56,7 +59,8 @@ if ( ! intval( $ajax_pagination ) ) {
 								</a>
 								<?php if ( ! isset( $image->hidden ) || ! $image->hidden ) { ?>
 									<span style="max-width: <?php print esc_attr( $thumb_size['width'] ); ?>px">
-										<?php print $image->description; ?>
+ 										<?php
+									  print wp_kses( html_entity_decode( stripslashes( $image->description ) ), I18N::get_kses_allowed_html() ); ?>
 									</span>
 								<?php } ?>
 							</div>

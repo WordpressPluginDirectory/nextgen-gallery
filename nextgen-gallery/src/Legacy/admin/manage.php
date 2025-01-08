@@ -220,6 +220,7 @@ class nggManageGallery {
 		$image_url     = Router::esc_url( $picture->imageURL );
 		$filename      = esc_attr( $picture->filename );
 		$caption       = esc_html( ( empty( $picture->alttext ) ? $picture->filename : $picture->alttext ) );
+		$caption       = \Imagely\NGG\Display\I18N::ngg_allowed_html_tags_for_images( $caption );
 		$date          = mysql2date( get_option( 'date_format' ), $picture->imagedate );
 		$width         = $picture->meta_data['width'];
 		$height        = $picture->meta_data['height'];
@@ -316,6 +317,7 @@ class nggManageGallery {
 		$image_url = Router::esc_url( $picture->imageURL );
 		$label     = esc_html__( 'View', 'nggallery' );
 		$alt_text  = empty( $picture->alttext ) ? $picture->filename : $picture->alttext;
+		$alt_text  = \Imagely\NGG\Display\I18N::ngg_allowed_html_tags_for_images( $alt_text );
 		$title     = esc_attr( __( 'View', 'nggallery' ) . " \"{$alt_text}\"" );
 
 		return "<a href='{$image_url}' class='thickbox' title='{$title}'>{$label}</a>";
@@ -358,6 +360,7 @@ class nggManageGallery {
 		$alttext = empty( $picture->alttext ) ? $picture->filename : $picture->alttext;
 		$alttext = Sanitizer::strip_html( html_entity_decode( $alttext ), true );
 		$alttext = htmlentities( $alttext, ENT_QUOTES | ENT_HTML401 );
+		$alttext = \Imagely\NGG\Display\I18N::ngg_allowed_html_tags_for_images( $alttext );
 
 		// Event handler is found in nextgen_admin_page.js.
 		return "<a href='{$url}'
@@ -376,6 +379,7 @@ class nggManageGallery {
 		$alttext = empty( $picture->alttext ) ? $picture->filename : $picture->alttext;
 		$alttext = Sanitizer::strip_html( html_entity_decode( $alttext ), true );
 		$alttext = htmlentities( $alttext, ENT_QUOTES | ENT_HTML401 );
+		$alttext = \Imagely\NGG\Display\I18N::ngg_allowed_html_tags_for_images( $alttext );
 
 		// Event handler is found in nextgen_admin_page.js.
 		return "<a href='{$url}'

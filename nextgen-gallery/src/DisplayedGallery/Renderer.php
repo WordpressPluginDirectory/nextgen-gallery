@@ -363,6 +363,10 @@ class Renderer {
 				$retval = $controller->cache_action( $displayed_gallery );
 			}
 
+			if ( method_exists( $controller, 'index_action' ) ) {
+				$controller->index_action( $displayed_gallery, true );
+			}
+
 			// Output debug message.
 			$retval .= $this->debug_msg( 'Lookup!' );
 

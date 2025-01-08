@@ -328,7 +328,9 @@ class I18N {
 			],
 			'br'     => [],
 			'em'     => [],
+			'i' 		=> [],
 			'strong' => [],
+			'b'      => [],
 			'u'      => [],
 			'p'      => [ 'class' => [] ],
 			'div'    => [
@@ -338,7 +340,7 @@ class I18N {
 			'span'   => [
 				'class' => [],
 				'id'    => [],
-			],
+			]
 		];
 
 		return \array_merge_recursive( $allowedtags, $our_keys );
@@ -354,38 +356,22 @@ class I18N {
 		// Decode HTML entities to ensure we work with raw HTML.
 		$content = html_entity_decode( $content, ENT_QUOTES | ENT_HTML5 );
 
-		// Allowed HTML tags.
-		$allowed_tags = [
-				'a'      => [
-						'href'   => [],
-						'title'  => [],
-						'target' => [],
-				],
-				'b'      => [],
-				'i'      => [],
-				'u'      => [],
-				'em'     => [],
-				'strong' => [],
-				'p'      => [],
-				'br'     => [],
-				'ul'     => [],
-				'ol'     => [],
-				'li'     => [],
-		];
+		// Strip backslashes that may have been added by wp_kses or other functions.
+		$content = stripslashes( $content );
 
-		// First, sanitize using wp_kses to allow only the permitted HTML tags.
+		// Remove specific dangerous attributes and scripts.
+		$content = preg_replace('/<script\b[^>]*>(.*?)<\/script>/is', '', $content); // Remove <script> tags.
+		$content = preg_replace('/\bon\w+\s*=\s*["\'].*?["\']/i', '', $content); // Remove event handlers.
+		$content = preg_replace('/\b(alert|prompt|confirm)\b\s*(\(.+?\))/i', '', $content); // Remove JS alerts.
+
+		$allowed_tags = self::get_kses_allowed_html();
+
+		// Sanitize using wp_kses to allow only the permitted HTML tags.
 		$sanitized_input = wp_kses( $content, $allowed_tags );
 
-		// Strip backslashes that may have been added by wp_kses or other functions.
-		$sanitized_input = stripslashes( $sanitized_input );
+		// Encode special characters to ensure safe HTML attribute inclusion.
+		$sanitized_input = htmlspecialchars( $sanitized_input, ENT_QUOTES, 'UTF-8' );
 
-		// Enhanced regex to remove any event handler attributes, including malformed or encoded ones.
-		// It handles cases like: onload="alert(1)", onload='alert(1)', onload = 'alert(1)'
-		$sanitized_input = preg_replace( '/\s*on\w+\s*=\s*(["\'].*?["\']|[^ >]+)/i', '', $sanitized_input );
-
-		// Remove JavaScript expressions in attributes, like: href="javascript:alert(1)"
-		$sanitized_input = preg_replace( '/\s*(href|src)\s*=\s*(["\'])\s*javascript:[^"\']*/i', '', $sanitized_input );
-
-		return $sanitized_input;
+		return html_entity_decode( stripslashes( $sanitized_input ) );
 	}
 }
