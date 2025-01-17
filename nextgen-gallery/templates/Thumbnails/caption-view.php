@@ -50,8 +50,8 @@ if ( ! intval( $ajax_pagination ) ) {
 									data-description="<?php echo esc_attr( stripslashes( $image->description ) ); ?>"
 									data-image-slug="<?php echo esc_attr( $image->image_slug ); ?>"
 									<?php echo $effect_code; ?>>
-									<img title="<?php echo esc_attr( $image->alttext ); ?>"
-										alt="<?php echo esc_attr( $image->alttext ); ?>"
+									<img title="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->alttext ) ); ?>"
+										alt="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->alttext ) ); ?>"
 										src="<?php echo esc_attr( $storage->get_image_url( $image, $thumbnail_size_name ) ); ?>"
 										width="<?php echo esc_attr( $thumb_size['width'] ); ?>"
 										height="<?php echo esc_attr( $thumb_size['height'] ); ?>"
@@ -59,8 +59,7 @@ if ( ! intval( $ajax_pagination ) ) {
 								</a>
 								<?php if ( ! isset( $image->hidden ) || ! $image->hidden ) { ?>
 									<span style="max-width: <?php print esc_attr( $thumb_size['width'] ); ?>px">
- 										<?php
-									  print wp_kses( html_entity_decode( stripslashes( $image->description ) ), I18N::get_kses_allowed_html() ); ?>
+										<?php print \Imagely\NGG\Display\I18N::ngg_decode_sanitized_html_content( $image->description ); // phpcs:ignore ?>
 									</span>
 								<?php } ?>
 							</div>
