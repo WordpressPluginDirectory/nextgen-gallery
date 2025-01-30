@@ -364,7 +364,10 @@ class Renderer {
 			}
 
 			if ( method_exists( $controller, 'index_action' ) ) {
-				$controller->index_action( $displayed_gallery, true );
+				if ( ( isset( $displayed_gallery->source ) && 'albums' === $displayed_gallery->source ) &&
+				( isset( $displayed_gallery->display_type ) && 'imagely-pro-search' !== $displayed_gallery->display_type ) ) {
+					$controller->index_action( $displayed_gallery, true );
+				}
 			}
 
 			// Output debug message.
