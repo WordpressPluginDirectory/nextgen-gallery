@@ -60,7 +60,7 @@ class Installer {
 				'imgAutoResize'                     => true, // Resize after upload.
 
 			// Gallery Settings.
-				'galImages'                         => '24',  // Number of images per page.
+				'galImages'                         => 24,  // Number of images per page.
 				'galPagedGalleries'                 => 0,     // Number of galleries per page (in a album).
 				'galColumns'                        => 0,     // Number of columns for the gallery.
 				'galShowSlide'                      => false, // Show slideshow.
@@ -90,7 +90,7 @@ class Installer {
 				'wmSize'                            => 30,                      // Font Size.
 				'wmText'                            => \get_option( 'blogname' ), // Text.
 				'wmColor'                           => 'ffffff',                // Font Color.
-				'wmOpaque'                          => '33',                    // Font Opaque.
+				'wmOpaque'                          => 33,                    // Font Opaque.
 
 			// Image Rotator settings.
 				'slideFX'                           => 'fade',
@@ -131,8 +131,15 @@ class Installer {
 				'mvc_static_dirname'                => '/static',
 				'mvc_static_dir'                    => '/static',
 				'jquery_ui_theme'                   => 'jquery-ui-nextgen',
-				'jquery_ui_theme_version'           => '1.8',
-			]
+				'jquery_ui_theme_version'           => 1.8,
+
+			// Legacy options (disabled by default for new installations).
+			'ngg_show_old_settings'             => false,  // Do not show legacy admin pages by default.
+			'ngg_installation_type'             => 'fresh', // Default to fresh installation (new blocks).
+
+			// Admin table pagination.
+			'admin_table_per_page'              => 20, // Default number of items per page in admin tables (albums, galleries, tags, orders, etc.).
+		]
 		);
 
 		if ( \is_multisite() ) {

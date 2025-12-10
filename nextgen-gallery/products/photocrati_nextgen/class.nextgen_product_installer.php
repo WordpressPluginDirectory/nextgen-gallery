@@ -18,6 +18,10 @@ class C_NextGen_Product_Installer {
 		$modules = [];
 
 		$obj = C_Component_Registry::get_instance()->get_product( $product_id );
+		if ( ! $obj ) {
+			return $modules;
+		}
+
 		try {
 			$klass = new ReflectionClass( $obj );
 			if ( $klass->hasMethod( 'get_modules_to_load' ) ) {
@@ -44,13 +48,26 @@ class C_NextGen_Product_Installer {
 		$registry          = C_Component_Registry::get_instance();
 		$nextgen_product   = $registry->get_product( 'photocrati-nextgen' );
 		$pope_modules_list = get_option( 'pope_module_list', [] );
-		$pope_modules_list = $this->_filter_modules( $pope_modules_list, $nextgen_product->get_modules_to_load() );
 
-		// run each modules respective uninstall routines.
-		foreach ( $nextgen_product->get_modules_to_load() as $module_name ) {
-			if ( ( $handler = \Imagely\NGG\Util\Installer::get_handler_instance( $module_name ) ) ) {
-				if ( method_exists( $handler, 'uninstall' ) ) {
-					$handler->uninstall( $hard );
+		// Get modules list - try direct method first, fallback to helper method if product is null
+		$modules_to_load = [];
+		if ( $nextgen_product && method_exists( $nextgen_product, 'get_modules_to_load' ) ) {
+			$modules_to_load = $nextgen_product->get_modules_to_load();
+		} else {
+			// Fallback: try to get modules using helper method (handles null gracefully)
+			$modules_to_load = $this->get_modules_to_load_for( 'photocrati-nextgen' );
+		}
+
+		// Filter modules from pope_module_list if we have a modules list
+		if ( ! empty( $modules_to_load ) ) {
+			$pope_modules_list = $this->_filter_modules( $pope_modules_list, $modules_to_load );
+
+			// run each modules respective uninstall routines.
+			foreach ( $modules_to_load as $module_name ) {
+				if ( ( $handler = \Imagely\NGG\Util\Installer::get_handler_instance( $module_name ) ) ) {
+					if ( method_exists( $handler, 'uninstall' ) ) {
+						$handler->uninstall( $hard );
+					}
 				}
 			}
 		}

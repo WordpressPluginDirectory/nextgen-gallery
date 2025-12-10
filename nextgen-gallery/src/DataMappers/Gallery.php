@@ -1,4 +1,4 @@
-<?php
+<?php // phpcs:disable Squiz.Commenting,Generic.Commenting
 
 namespace Imagely\NGG\DataMappers;
 
@@ -34,9 +34,23 @@ class Gallery extends TableDriver {
 		$this->define_column( 'slug', 'VARCHAR(255)' );
 		$this->define_column( 'title', 'TEXT' );
 
+		// Add date columns
+		$this->define_column( 'date_created', 'DATETIME' );
+		$this->define_column( 'date_modified', 'DATETIME' );
+
+		// Add display type related columns
+		$this->define_column( 'display_type', 'VARCHAR(255)', 'photocrati-nextgen_basic_thumbnails' );
+		$this->define_column( 'display_type_settings', 'MEDIUMTEXT' );
+		$this->define_column( 'is_private', 'TINYINT', 0 );
+
+		$this->define_column( 'is_ecommerce_enabled', 'TINYINT', 0 );
+
 		if ( \C_NextGEN_Bootstrap::get_pro_api_version() < 4.0 ) {
 			$this->define_column( 'pricelist_id', 'BIGINT', 0, true );
 		}
+
+		// Add serialized column for display type settings
+		$this->add_serialized_column( 'display_type_settings' );
 
 		apply_filters( 'ngg_gallery_mapper_columns', $this );
 
@@ -61,6 +75,11 @@ class Gallery extends TableDriver {
 	public function find( $entity ) {
 		/** @var GalleryType $result */
 		$result = parent::find( $entity );
+
+		if ( $result ) {
+			$this->initialize_display_type_settings( $result );
+		}
+
 		return $result;
 	}
 
@@ -100,7 +119,7 @@ class Gallery extends TableDriver {
 		}
 
 		if ( $gallery && $image ) {
-			if ( ( $only_if_empty && ! $gallery->previewpic ) or ! $only_if_empty ) {
+			if ( ( $only_if_empty && ! $gallery->previewpic ) || ! $only_if_empty ) {
 				$gallery->previewpic = $image;
 				$retval              = $this->save( $gallery );
 			}
@@ -119,8 +138,75 @@ class Gallery extends TableDriver {
 		return $entity->title;
 	}
 
+	/**
+	 * Gets all available display types and their default settings
+	 *
+	 * @return array Array of display types and their default settings
+	 */
+	private function get_all_display_type_defaults() {
+		$display_mapper = \Imagely\NGG\DataMappers\DisplayType::get_instance();
+		$display_types  = $display_mapper->find_all();
+		$defaults       = [];
+
+		foreach ( $display_types as $display_type ) {
+			if ( ! empty( $display_type->hidden_from_ui ) ) {
+				continue;
+			}
+			$defaults[ $display_type->name ] = $display_type->settings;
+		}
+
+		return $defaults;
+	}
+
+	/**
+	 * Ensures display type settings are properly initialized with defaults, this will also guaratee that new fields are not added to the display type settings.
+	 *
+	 * @param object $entity The gallery entity
+	 * @return void
+	 */
+	private function initialize_display_type_settings( $entity ) {
+		// Initialize display type settings if not set
+		if ( ! is_array( $entity->display_type_settings ) ) {
+			$entity->display_type_settings = [];
+		}
+
+		// Get defaults for all display types
+		$all_defaults = $this->get_all_display_type_defaults();
+
+		// Ensure all display types have settings
+		foreach ( $all_defaults as $type_name => $defaults ) {
+			if ( ! isset( $entity->display_type_settings[ $type_name ] ) ) {
+				$sanitized_defaults = array_map(
+					function ( $value ) {
+						return is_bool( $value ) ? (int) $value : $value;
+					},
+					$defaults
+				);
+
+				// Not removed from actual display type settings, because of old admin UI.
+				unset( $sanitized_defaults['is_ecommerce_enabled'] );
+
+				$entity->display_type_settings[ $type_name ] = $sanitized_defaults;
+			}
+		}
+	}
+
 	public function save_entity( $entity ) {
 		$storage = StorageManager::get_instance();
+
+		// Set dates using WordPress functions.
+		$current_time = current_time( 'mysql', true );
+
+		// Only set date_created for new galleries.
+		if ( empty( $entity->{$entity->id_field} ) ) {
+			$entity->date_created = $current_time;
+		}
+
+		// Always update modified date.
+		$entity->date_modified = $current_time;
+
+		// Initialize display type settings before saving.
+		$this->initialize_display_type_settings( $entity );
 
 		// A bug in NGG 2.1.24 allowed galleries to be created with spaces in the directory name, unreplaced by dashes
 		// This causes a few problems everywhere, so we here allow users a way to fix those galleries by just re-saving.
@@ -146,7 +232,7 @@ class Gallery extends TableDriver {
 				$entity->path = $entity->path . '-' . $count;
 			}
 
-			if( ! class_exists( 'WP_Filesystem_Direct' ) ) {
+			if ( ! class_exists( 'WP_Filesystem_Direct' ) ) {
 				require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-base.php';
 				require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-direct.php';
 			}
@@ -194,6 +280,7 @@ class Gallery extends TableDriver {
 
 				// Delete the image files from the filesystem.
 				$settings = Settings::get_instance();
+				// phpcs:disable WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
 				if ( $settings->deleteImg ) {
 					$storage = StorageManager::get_instance();
 					$storage->delete_gallery( $entity );

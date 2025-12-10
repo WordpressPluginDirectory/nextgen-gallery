@@ -584,19 +584,43 @@ class Manager {
 			// that our image could become to what it currently is. '3' is important here as JPEG uses 3 bytes per pixel.
 			//
 			// First we attempt to use ImageMagick if we can; it has a more robust method of calculation.
+			// Note: Some hosting environments have ImageMagick installed but without JPEG support,
+			// which causes "NoDecodeDelegateForThisImageFormat" errors. This code handles that gracefully.
 			if ( ! empty( $dimensions['mime'] ) && $dimensions['mime'] == 'image/jpeg' ) {
 				$possible_quality = null;
 				$try_image_magick = true;
 
 				if ( ( defined( 'NGG_DISABLE_IMAGICK' ) && NGG_DISABLE_IMAGICK )
-				|| ( function_exists( 'is_wpe' ) && ( $dimensions[0] >= 8000 || $dimensions[1] >= 8000 ) ) ) {
+				|| ( function_exists( 'is_wpe' ) && ( $dimensions[0] >= 8000 || $dimensions[1] >= 8000 ) )
+				|| ! apply_filters( 'ngg_use_imagick_for_quality', true ) ) {
 					$try_image_magick = false;
 				}
 
 				if ( $try_image_magick && extension_loaded( 'imagick' ) && class_exists( 'Imagick' ) ) {
-					$img = new \Imagick( $image_path );
-					if ( method_exists( $img, 'getImageCompressionQuality' ) ) {
-						$possible_quality = $img->getImageCompressionQuality();
+					// Check if ImageMagick supports JPEG before attempting to use it
+					if ( $this->imagick_supports_jpeg() ) {
+						try {
+							$img = new \Imagick( $image_path );
+							if ( method_exists( $img, 'getImageCompressionQuality' ) ) {
+								$possible_quality = $img->getImageCompressionQuality();
+							}
+							// Clean up the Imagick object
+							if ( isset( $img ) ) {
+								$img->clear();
+								$img->destroy();
+							}
+						} catch ( \ImagickException $e ) {
+							// ImageMagick doesn't support this image format, fall back to GD calculation
+							error_log( 'NextGEN Gallery: ImageMagick JPEG support not available, falling back to GD: ' . $e->getMessage() );
+							$try_image_magick = false;
+						} catch ( \Exception $e ) {
+							// Any other ImageMagick error, fall back to GD calculation
+							error_log( 'NextGEN Gallery: ImageMagick error, falling back to GD: ' . $e->getMessage() );
+							$try_image_magick = false;
+						}
+					} else {
+						// ImageMagick doesn't support JPEG, skip to GD calculation
+						$try_image_magick = false;
 					}
 				}
 
@@ -1242,7 +1266,7 @@ class Manager {
 
 		// Get the image abspath.
 		$image_abspath = $this->get_image_abspath( $image, $size );
-		if ( $dynthumbs->is_size_dynamic( $size ) && ! file_exists( $image_abspath ) ) {
+		if ( $dynthumbs->is_size_dynamic( $size ) && $image_abspath && ! file_exists( $image_abspath ) ) {
 			if ( defined( 'NGG_DISABLE_DYNAMIC_IMG_URLS' ) && constant( 'NGG_DISABLE_DYNAMIC_IMG_URLS' ) ) {
 				$params = [
 					'watermark'  => false,
@@ -1965,9 +1989,8 @@ class Manager {
 		if ( ! $filename
 			&& isset( $_FILES['file']['error'] )
 			&& isset( $_FILES['file']['tmp_name'] )
-			&& 0 === $_FILES['file']['error']
-			&& isset( $_REQUEST['nonce'] )
-			&& Security::verify_nonce( sanitize_text_field( wp_unslash( $_REQUEST['nonce'] ) ), 'nextgen_upload_image' ) ) {
+			&& 0 === $_FILES['file']['error'] ) {
+
 			// Windows' use of backslash characters for file paths means wp_unslash() here is destructive.
 			if ( 0 === strncasecmp( PHP_OS, 'WIN', 3 ) ) {
 				// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash
@@ -1996,17 +2019,20 @@ class Manager {
 		return $retval;
 	}
 
-	public function is_zip(): bool {
+	public function is_zip( bool $skip_nonce_check = false ): bool {
 		$retval = false;
 
-		// Security::verify_nonce() is a wrapper to wp_verify_nonce().
-		//
 		// phpcs:disable WordPress.Security.NonceVerification.Missing
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended
-		if ( isset( $_FILES['file']['error'] )
-			&& 0 === $_FILES['file']['error']
-			&& isset( $_REQUEST['nonce'] )
-			&& Security::verify_nonce( sanitize_text_field( wp_unslash( $_REQUEST['nonce'] ) ), 'nextgen_upload_image' ) ) {
+		if ( isset( $_FILES['file']['error'] ) && 0 === $_FILES['file']['error'] ) {
+			// Check nonce only if not skipping (for non-REST calls)
+			if ( ! $skip_nonce_check ) {
+				if ( ! isset( $_REQUEST['nonce'] )
+					|| ! Security::verify_nonce( sanitize_text_field( wp_unslash( $_REQUEST['nonce'] ) ), 'nextgen_upload_image' ) ) {
+					return false;
+				}
+			}
+
 			$file_info = $_FILES['file'];
 
 			if ( isset( $file_info['type'] ) ) {
@@ -2246,7 +2272,7 @@ class Manager {
 			// Get the image filename.
 			$filename = $this->get_image_abspath( $image, 'full' );
 
-			if ( ! @file_exists( $filename ) ) {
+			if ( ! $filename || ! @file_exists( $filename ) ) {
 				return false; // bail out if the file doesn't exist.
 			}
 
@@ -2264,7 +2290,24 @@ class Manager {
 			$existing_image_abpath = $this->get_image_abspath( $image, $size );
 			$existing_image_dir    = dirname( $existing_image_abpath );
 
-			\wp_mkdir_p( $existing_image_dir );
+			// Ensure directory exists with proper error handling
+			if ( ! \wp_mkdir_p( $existing_image_dir ) ) {
+				// Fallback: try to create directory with different permissions
+				if ( ! @mkdir( $existing_image_dir, 0755, true ) ) {
+					error_log( 'NextGEN Gallery: Failed to create thumbnail directory: ' . $existing_image_dir );
+					return false;
+				}
+			}
+
+			// Verify directory is writable
+			if ( ! is_writable( $existing_image_dir ) ) {
+				// Try to fix permissions
+				@chmod( $existing_image_dir, 0755 );
+				if ( ! is_writable( $existing_image_dir ) ) {
+					error_log( 'NextGEN Gallery: Thumbnail directory not writable: ' . $existing_image_dir );
+					return false;
+				}
+			}
 
 			$clone_path = $existing_image_abpath;
 			$thumbnail  = $this->generate_image_clone( $filename, $clone_path, $params );
@@ -2325,6 +2368,18 @@ class Manager {
 	 * @return bool
 	 */
 	public function generate_thumbnail( $image, $params = null, $skip_defaults = false ) {
+		static $generating = [];
+
+		// Get image ID for recursion tracking
+		$image_id = is_numeric( $image ) ? $image : ( isset( $image->pid ) ? $image->pid : 0 );
+
+		// Prevent infinite recursion
+		if ( isset( $generating[ $image_id ] ) ) {
+			return false;
+		}
+
+		$generating[ $image_id ] = true;
+
 		$sized_image = $this->generate_image_size( $image, 'thumbnail', $params, $skip_defaults );
 		$retval      = false;
 
@@ -2356,6 +2411,8 @@ class Manager {
 				]
 			);
 		}
+
+		unset( $generating[ $image_id ] );
 
 		return $retval;
 	}
@@ -2436,6 +2493,21 @@ class Manager {
 			}
 		}
 
+		// Fallback: If thumbnail URL is still null and we're requesting a thumbnail,
+		// try to generate it on-the-fly (useful for fresh installations)
+		if ( ! $retval && ( $size === 'thumbnail' || $size === 'thumb' ) ) {
+			// Attempt to generate the thumbnail
+			if ( $this->generate_thumbnail( $image ) ) {
+				// Clear the cache and try again
+				unset( self::$image_url_cache[ $key ] );
+				$url = $this->get_computed_image_url( $image, $size );
+				if ( $url ) {
+					self::$image_url_cache[ $key ] = $url;
+					$retval = $url;
+				}
+			}
+		}
+
 		return apply_filters( 'ngg_get_image_url', $retval, $image, $size );
 	}
 
@@ -2448,6 +2520,37 @@ class Manager {
 
 		unset( self::$image_abspath_cache[ $key ] );
 		unset( self::$image_url_cache[ $key ] );
+	}
+
+	/**
+	 * Check if ImageMagick supports JPEG format
+	 *
+	 * @return bool
+	 */
+	private function imagick_supports_jpeg() {
+		static $supports_jpeg = null;
+
+		if ( $supports_jpeg !== null ) {
+			return $supports_jpeg;
+		}
+
+		$supports_jpeg = false;
+
+		if ( extension_loaded( 'imagick' ) && class_exists( 'Imagick' ) ) {
+			try {
+				$imagick = new \Imagick();
+				$formats = $imagick->queryFormats( 'JPEG' );
+				$supports_jpeg = ! empty( $formats );
+				$imagick->clear();
+				$imagick->destroy();
+			} catch ( \Exception $e ) {
+				// ImageMagick error, assume no JPEG support
+				error_log( 'NextGEN Gallery: ImageMagick JPEG support check failed: ' . $e->getMessage() );
+				$supports_jpeg = false;
+			}
+		}
+
+		return $supports_jpeg;
 	}
 
 	/**
@@ -2692,9 +2795,7 @@ class Manager {
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended
 		if ( isset( $_FILES['file'] )
 			&& 0 === $_FILES['file']['error']
-			&& isset( $_FILES['file']['tmp_name'] )
-			&& isset( $_REQUEST['nonce'] )
-			&& Security::verify_nonce( sanitize_text_field( wp_unslash( $_REQUEST['nonce'] ) ), 'nextgen_upload_image' ) ) {
+			&& isset( $_FILES['file']['tmp_name'] ) ) {
 			$file = $_FILES['file'];
 
 			if ( $this->is_zip() ) {
@@ -2756,23 +2857,28 @@ class Manager {
 
 	/**
 	 * @param int $gallery_id
+	 * @param bool $skip_nonce_check Whether to skip nonce verification (true for REST API calls)
 	 * @return array|bool
 	 */
-	public function upload_zip( $gallery_id ) {
-		if ( ! $this->is_zip() ) {
+	public function upload_zip( $gallery_id, $skip_nonce_check = false ) {
+		if ( ! $this->is_zip( $skip_nonce_check ) ) {
 			return false;
 		}
 
-		// Security::verify_nonce() is a wrapper to wp_verify_nonce().
-		//
-		// phpcs:disable WordPress.Security.NonceVerification.Missing
-		// phpcs:disable WordPress.Security.NonceVerification.Recommended
-		if ( ! isset( $_REQUEST['nonce'] )
-			|| ! Security::verify_nonce( sanitize_text_field( wp_unslash( $_REQUEST['nonce'] ) ), 'nextgen_upload_image' ) ) {
-			return false;
+		// Skip nonce check for REST API calls (they have their own authentication via permission callbacks)
+		// For traditional form posts, verify the nonce
+		if ( ! $skip_nonce_check ) {
+			// Security::verify_nonce() is a wrapper to wp_verify_nonce().
+			//
+			// phpcs:disable WordPress.Security.NonceVerification.Missing
+			// phpcs:disable WordPress.Security.NonceVerification.Recommended
+			if ( ! isset( $_REQUEST['nonce'] )
+				|| ! Security::verify_nonce( sanitize_text_field( wp_unslash( $_REQUEST['nonce'] ) ), 'nextgen_upload_image' ) ) {
+				return false;
+			}
+			// phpcs:enable WordPress.Security.NonceVerification.Missing
+			// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		}
-		// phpcs:enable WordPress.Security.NonceVerification.Missing
-		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 		$retval = false;
 

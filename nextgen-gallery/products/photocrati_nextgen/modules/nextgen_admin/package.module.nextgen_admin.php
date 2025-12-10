@@ -737,7 +737,11 @@ class C_NextGen_First_Run_Notification_Wizard
      */
     public function is_renderable()
     {
-        return true;
+        // Don't show the wizard if user already has galleries.
+        $gallery_mapper = \Imagely\NGG\DataMappers\Gallery::get_instance();
+        $gallery_count = $gallery_mapper->count();
+        // Only show if there are no galleries.
+        return $gallery_count === 0;
     }
     /**
      * @return string
@@ -760,7 +764,7 @@ class C_NextGen_First_Run_Notification_Wizard
                     allowfullscreen></iframe>
         </div>
 EOT;
-        return __('Thanks for installing NextGEN Gallery! Want help creating your first gallery?', 'nggallery') . ' <a href="' . esc_url(admin_url('index.php?page=nextgen-gallery-setup-wizard')) . '" >' . __('Launch the Gallery Wizard', 'nggallery') . '</a>. ' . __('If you close this message, you can also launch the Gallery Wizard at any time from the', 'nggallery') . ' <a href="' . esc_url(admin_url('admin.php?page=nextgen-gallery')) . '">' . __('NextGEN Overview page', 'nggallery') . '</a>.' . $block;
+        return __('Thanks for installing Imagely! Want help creating your first gallery?', 'nggallery') . ' <a href="' . esc_url(admin_url('index.php?page=nextgen-gallery-setup-wizard')) . '" >' . __('Launch the Gallery Wizard', 'nggallery') . '</a>. ' . __('If you close this message, you can also launch the Gallery Wizard at any time from the', 'nggallery') . ' <a href="' . esc_url(admin_url('admin.php?page=imagely&tab=general')) . '">' . __('NextGEN Overview page', 'nggallery') . '</a>.' . $block;
     }
     public function get_css_class()
     {

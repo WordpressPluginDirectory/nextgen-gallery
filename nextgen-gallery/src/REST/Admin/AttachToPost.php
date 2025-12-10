@@ -67,9 +67,28 @@ class AttachToPost extends \WP_REST_Controller {
 	}
 
 	public function get_galleries( $request ) {
+		$galleries      = GalleryMapper::get_instance()->find_all();
+		$storage        = StorageManager::get_instance();
+		$image_mapper   = ImageMapper::get_instance();
+
+		// Enhance each gallery with preview image URL and image count
+		foreach ( $galleries as &$gallery ) {
+			// Add image count - use ImageMapper's find_all_for_gallery method
+			$images = $image_mapper->find_all_for_gallery( $gallery->gid, false );
+			$gallery->image_count = is_array( $images ) ? count( $images ) : 0;
+
+			// Add preview image URL if preview pic exists
+			if ( $gallery->previewpic && $gallery->previewpic > 0 ) {
+				$preview_image = $image_mapper->find( $gallery->previewpic );
+				if ( $preview_image ) {
+					$gallery->previewpic_image_url = $storage->get_image_url( $preview_image, 'thumb', true );
+				}
+			}
+		}
+
 		return new \WP_REST_Response(
 			[
-				'items' => GalleryMapper::get_instance()->find_all(),
+				'items' => $galleries,
 			]
 		);
 	}

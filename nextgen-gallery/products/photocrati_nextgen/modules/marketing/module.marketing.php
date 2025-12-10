@@ -412,7 +412,7 @@ class M_Marketing extends C_Base_Module {
 		if ( is_nextgen_admin_page() ) {
 			$url = 'https://wordpress.org/plugins/nextgen-gallery/reviews/?filter=5#new-post';
 			/* translators: %s: url */
-			$text = sprintf( __( 'Please rate <strong>NextGEN Gallery by Imagely</strong> <a href="%1$s" target="_blank">&#9733;&#9733;&#9733;&#9733;&#9733;</a> on <a href="%2$s" target="_blank">WordPress.org</a> to help us spread the word. Thank you from the NextGEN Gallery team!', 'nggallery' ), $url, $url );
+			$text = sprintf( __( 'Please rate <strong>Imagely</strong> <a href="%1$s" target="_blank">&#9733;&#9733;&#9733;&#9733;&#9733;</a> on <a href="%2$s" target="_blank">WordPress.org</a> to help us spread the word. Thank you from the Imagely team!', 'nggallery' ), $url, $url );
 		}
 		return $text;
 	}

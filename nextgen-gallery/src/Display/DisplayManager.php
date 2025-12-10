@@ -9,6 +9,8 @@ use Imagely\NGG\DisplayType\{Controller, ControllerFactory};
 use Imagely\NGG\DisplayedGallery\Renderer;
 use Imagely\NGG\Settings\Settings;
 use Imagely\NGG\Util\Router;
+use Imagely\NGG\DataMappers\Gallery as GalleryMapper;
+use Imagely\NGG\DataMappers\Album as AlbumMapper;
 
 class DisplayManager {
 
@@ -19,6 +21,7 @@ class DisplayManager {
 
 		Shortcodes::add( 'ngg', [ $self, 'display_images' ] );
 		Shortcodes::add( 'ngg_images', [ $self, 'display_images' ] );
+		Shortcodes::add( 'imagely', [ $self, 'display_imagely_shortcode' ] );
 
 		add_filter( 'the_content', [ $self, '_render_related_images' ] );
 
@@ -80,6 +83,14 @@ class DisplayManager {
 				unset( $params[0] );
 			}
 
+			// Special handling for the imagely shortcode
+			if ( 'imagely' === $this_shortcode_name ) {
+				$params = self::convert_imagely_params_for_enqueuing( $params );
+				if ( ! $params ) {
+					continue; // Skip if gallery not found or no ID provided
+				}
+			}
+
 			// And do the enqueueing process.
 			$renderer = Renderer::get_instance();
 
@@ -114,6 +125,97 @@ class DisplayManager {
 			// Prevent $controller from persisting through this loop
 			unset( $controller );
 		}
+	}
+
+	/**
+	 * Converts imagely shortcode parameters to standard NGG parameters for resource enqueuing
+	 *
+	 * @param array $params The imagely shortcode parameters
+	 * @return array|false The converted parameters or false if gallery/album not found
+	 */
+	private static function convert_imagely_params_for_enqueuing( $params ) {
+		// Check if this is a gallery or album shortcode
+		$gallery_id = isset( $params['id'] ) ? intval( $params['id'] ) : 0;
+		$album_id   = isset( $params['album'] ) ? intval( $params['album'] ) : 0;
+
+		if ( ! $gallery_id && ! $album_id ) {
+			return false;
+		}
+
+		$display_params = [];
+
+		if ( $gallery_id ) {
+			// Handle gallery shortcode
+			$gallery_mapper = GalleryMapper::get_instance();
+			$gallery        = $gallery_mapper->find( $gallery_id );
+
+			if ( ! $gallery ) {
+				return false;
+			}
+
+			// Set the display type
+			if ( ! empty( $gallery->display_type ) ) {
+				$display_params['display_type'] = $gallery->display_type;
+			}
+
+			// Merge in the display type settings
+			if ( ! empty( $gallery->display_type_settings ) && is_array( $gallery->display_type_settings ) ) {
+				// Get settings for the current display type
+				$current_display_type = ! empty( $gallery->display_type ) ? $gallery->display_type : 'photocrati-nextgen_basic_thumbnails';
+				if ( isset( $gallery->display_type_settings[ $current_display_type ] ) ) {
+					$display_params = array_merge( $display_params, $gallery->display_type_settings[ $current_display_type ] );
+				}
+			}
+
+			// Ensure ecommerce is enabled when set on the gallery record
+			if ( ! empty( $gallery->is_ecommerce_enabled ) ) {
+				$display_params['is_ecommerce_enabled'] = 1;
+			}
+
+			// Set the gallery source
+			$display_params['source']        = 'galleries';
+			$display_params['container_ids'] = $gallery_id;
+
+			// Remove the 'id' parameter as it's not needed for rendering
+			unset( $params['id'] );
+		} elseif ( $album_id ) {
+			// Handle album shortcode
+			$album_mapper = AlbumMapper::get_instance();
+			$album        = $album_mapper->find( $album_id );
+
+			if ( ! $album ) {
+				return false;
+			}
+
+			// Set the display type - provide backward compatibility with default
+			if ( ! empty( $album->display_type ) ) {
+				$display_params['display_type'] = $album->display_type;
+			} else {
+				// Default display type for backward compatibility with old albums
+				$display_params['display_type'] = 'photocrati-nextgen_basic_compact_album';
+			}
+
+			// Merge in the display type settings if they exist
+			if ( ! empty( $album->display_type_settings ) && is_array( $album->display_type_settings ) ) {
+				// Get settings for the current display type
+				$current_display_type = $display_params['display_type'];
+				if ( isset( $album->display_type_settings[ $current_display_type ] ) ) {
+					$display_params = array_merge( $display_params, $album->display_type_settings[ $current_display_type ] );
+				}
+			}
+
+			// Set the album source
+			$display_params['source']        = 'albums';
+			$display_params['container_ids'] = $album_id;
+
+			// Remove the 'album' parameter as it's not needed for rendering
+			unset( $params['album'] );
+		}
+
+		// Allow shortcode parameters to override gallery/album settings
+		$display_params = array_merge( $display_params, $params );
+
+		return $display_params;
 	}
 
 	/**
@@ -532,5 +634,154 @@ class DisplayManager {
 		}
 
 		return $retval;
+	}
+
+	/**
+	 * Provides the [ngg_gallery] shortcode that loads display settings from the gallery
+	 *
+	 * @param array  $params Shortcode parameters, expects 'id' parameter
+	 * @param string $inner_content Inner content of the shortcode
+	 * @return string Rendered gallery output
+	 */
+	public function display_gallery_by_id( $params, $inner_content = null ) {
+		// Default parameters
+		$params = shortcode_atts(
+			[
+				'id' => 0,
+			],
+			$params
+		);
+
+		$gallery_id = intval( $params['id'] );
+
+		if ( ! $gallery_id ) {
+			return '<!-- NGG Gallery Error: No gallery ID provided -->';
+		}
+
+		// Load the gallery from the database
+		$gallery_mapper = GalleryMapper::get_instance();
+		$gallery        = $gallery_mapper->find( $gallery_id );
+
+		if ( ! $gallery ) {
+			return '<!-- NGG Gallery Error: Gallery not found -->';
+		}
+
+		// Start with the gallery's display type settings
+		$display_params = [];
+
+		// Set the display type
+		if ( ! empty( $gallery->display_type ) ) {
+			$display_params['display_type'] = $gallery->display_type;
+		}
+
+		// Merge in the display type settings
+		if ( ! empty( $gallery->display_type_settings ) && is_array( $gallery->display_type_settings ) ) {
+			// Get settings for the current display type
+			$current_display_type = ! empty( $gallery->display_type ) ? $gallery->display_type : 'photocrati-nextgen_basic_thumbnails';
+			if ( isset( $gallery->display_type_settings[ $current_display_type ] ) ) {
+				$display_params = array_merge( $display_params, $gallery->display_type_settings[ $current_display_type ] );
+			}
+		}
+
+		// Ensure ecommerce is enabled when set on the gallery record
+		if ( ! empty( $gallery->is_ecommerce_enabled ) ) {
+			$display_params['is_ecommerce_enabled'] = 1;
+		}
+
+		// Set the gallery source
+		$display_params['source']        = 'galleries';
+		$display_params['container_ids'] = $gallery_id;
+
+		// Allow shortcode parameters to override gallery settings
+		$display_params = array_merge( $display_params, $params );
+
+		// Remove the 'id' parameter as it's not needed for rendering
+		unset( $display_params['id'] );
+
+		// Use the standard renderer to display the gallery
+		$renderer = Renderer::get_instance();
+		return $renderer->display_images( $display_params, $inner_content );
+	}
+
+	/**
+	 * Handles the imagely shortcode for both galleries and albums
+	 *
+	 * @param array  $params        Shortcode parameters
+	 * @param string $inner_content Inner content (unused)
+	 * @return string Rendered output
+	 */
+	public function display_imagely_shortcode( $params, $inner_content = null ) {
+		// Check if this is a gallery or album shortcode
+		if ( isset( $params['album'] ) ) {
+			return $this->display_album_by_id( $params, $inner_content );
+		} else {
+			return $this->display_gallery_by_id( $params, $inner_content );
+		}
+	}
+
+	/**
+	 * Displays an album using the imagely shortcode
+	 *
+	 * @param array  $params        Shortcode parameters
+	 * @param string $inner_content Inner content (unused)
+	 * @return string Rendered album output
+	 */
+	public function display_album_by_id( $params, $inner_content = null ) {
+		// Default parameters
+		$params = shortcode_atts(
+			[
+				'album' => 0,
+			],
+			$params
+		);
+
+		$album_id = intval( $params['album'] );
+
+		if ( ! $album_id ) {
+			return '<!-- NGG Album Error: No album ID provided -->';
+		}
+
+		// Load the album from the database
+		$album_mapper = AlbumMapper::get_instance();
+		$album        = $album_mapper->find( $album_id );
+
+		if ( ! $album ) {
+			return '<!-- NGG Album Error: Album not found -->';
+		}
+
+		// Start with the album's display type settings
+		$display_params = [];
+
+		// Set the display type - provide backward compatibility with default
+		if ( ! empty( $album->display_type ) ) {
+			$display_params['display_type'] = $album->display_type;
+		} else {
+			// Default display type for backward compatibility with old albums
+			// Use the same default as defined in the Album data mapper
+			$display_params['display_type'] = 'photocrati-nextgen_basic_thumbnails';
+		}
+
+		// Merge in the display type settings if they exist
+		if ( ! empty( $album->display_type_settings ) && is_array( $album->display_type_settings ) ) {
+			// Get settings for the current display type
+			$current_display_type = $display_params['display_type'];
+			if ( isset( $album->display_type_settings[ $current_display_type ] ) ) {
+				$display_params = array_merge( $display_params, $album->display_type_settings[ $current_display_type ] );
+			}
+		}
+
+		// Set the album source
+		$display_params['source']        = 'albums';
+		$display_params['container_ids'] = $album_id;
+
+		// Allow shortcode parameters to override album settings
+		$display_params = array_merge( $display_params, $params );
+
+		// Remove the 'album' parameter as it's not needed for rendering
+		unset( $display_params['album'] );
+
+		// Use the standard renderer to display the album
+		$renderer = Renderer::get_instance();
+		return $renderer->display_images( $display_params, $inner_content );
 	}
 }

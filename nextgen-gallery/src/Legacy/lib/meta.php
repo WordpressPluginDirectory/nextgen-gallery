@@ -521,6 +521,7 @@ class nggMeta {
 			'last_modfied'      => __( 'Last modified', 'nggallery' ),
 			'location'          => __( 'Location', 'nggallery' ),
 			'make'              => __( 'Make', 'nggallery' ),
+			'Orientation'       => __( 'Orientation', 'nggallery' ),
 			'position'          => __( 'Author Position', 'nggallery' ),
 			'shutter_speed'     => __( 'Shutter speed', 'nggallery' ),
 			'source'            => __( 'Source', 'nggallery' ),
@@ -588,6 +589,7 @@ class nggMeta {
 			'flash' => 0,
 			'title' => '',
 			'keywords' => '',
+			'Orientation' => 0,
 		);
 
 		$meta = apply_filters( 'ngg_read_image_metadata', $meta );

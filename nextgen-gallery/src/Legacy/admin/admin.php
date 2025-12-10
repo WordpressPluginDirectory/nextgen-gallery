@@ -20,7 +20,9 @@ class nggAdminPanel {
 
 		// Add the admin menu.
 		add_action( 'admin_menu', [ $this, 'add_menu' ] );
-		add_action( 'admin_bar_menu', [ $this, 'admin_bar_menu' ], 99 );
+		if ( self::show_legacy_settings() ) {
+			add_action( 'admin_bar_menu', [ $this, 'admin_bar_menu' ], 99 );
+		}
 		add_action( 'network_admin_menu', [ $this, 'add_network_admin_menu' ] );
 
 		// Add the script and style files.
@@ -95,19 +97,31 @@ class nggAdminPanel {
 			$nav_append_count = "<span class='ngg-menu-notification-indicator update-plugins'>" . absint( $notifications->get_count() ) . "</span>";
 		}
 
-		add_menu_page(
-			__( 'NextGEN Gallery', 'nggallery' ),
-			_n( 'NextGEN Gallery', 'NextGen Galleries', 1, 'nggallery' ) . $nav_append_count,
-			'NextGEN Gallery overview',
-			NGGFOLDER,
-			[ $this, 'show_menu' ],
-			path_join( NGGALLERY_URLPATH, 'admin/images/imagely_icon.png' ),
-			11
-		);
-		add_submenu_page( NGGFOLDER, __( 'Overview', 'nggallery' ), __( 'Overview', 'nggallery' ), 'NextGEN Gallery overview', NGGFOLDER, [ &$this, 'show_menu' ] );
-		add_submenu_page( NGGFOLDER, __( 'Manage Galleries', 'nggallery' ), __( 'Manage Galleries', 'nggallery' ), 'NextGEN Manage gallery', 'nggallery-manage-gallery', [ &$this, 'show_menu' ] );
-		add_submenu_page( NGGFOLDER, _n( 'Manage Albums', 'Albums', 1, 'nggallery' ), _n( 'Manage Albums', 'Manage Albums', 1, 'nggallery' ), 'NextGEN Edit album', 'nggallery-manage-album', [ &$this, 'show_menu' ] );
-		add_submenu_page( NGGFOLDER, __( 'Manage Tags', 'nggallery' ), __( 'Manage Tags', 'nggallery' ), 'NextGEN Manage tags', 'nggallery-tags', [ &$this, 'show_menu' ] );
+		$show_old_settings = self::show_legacy_settings() ;
+		$name = $show_old_settings ? NGGFOLDER : '';
+
+		if ( $show_old_settings ){
+			add_menu_page(
+				__( 'NextGEN Gallery', 'nggallery' ),
+				_n( 'NextGEN Gallery', 'NextGen Galleries', 1, 'nggallery' ) . $nav_append_count,
+				'NextGEN Gallery overview',
+				NGGFOLDER,
+				[ $this, 'show_menu' ],
+				path_join( NGGALLERY_URLPATH, 'admin/images/imagely_icon.png' ),
+				11
+			);
+		}
+
+
+		// Legacy pages - hidden from menu but accessible via direct URL.
+		// Using empty string '' as parent creates hidden pages without PHP 8.1+ deprecation warnings.
+		add_submenu_page( $name, __( 'NextGEN Gallery Overview', 'nggallery' ), __( 'Overview', 'nggallery' ), 'NextGEN Gallery overview', NGGFOLDER, [ $this, 'show_menu' ] );
+		add_submenu_page( $name, __( 'Manage Galleries', 'nggallery' ), __( 'Manage Galleries', 'nggallery' ), 'NextGEN Manage gallery', 'nggallery-manage-gallery', [ $this, 'show_menu' ] );
+		add_submenu_page( $name, _n( 'Manage Albums', 'Albums', 1, 'nggallery' ), _n( 'Manage Albums', 'Manage Albums', 1, 'nggallery' ), 'NextGEN Edit album', 'nggallery-manage-album', [ $this, 'show_menu' ] );
+		add_submenu_page( $name, __( 'Manage Tags', 'nggallery' ), __( 'Manage Tags', 'nggallery' ), 'NextGEN Manage tags', 'nggallery-tags', [ $this, 'show_menu' ] );
+
+		// Set page title for hidden pages to avoid strip_tags() deprecation warning.
+		add_action( 'admin_head', [ $this, 'set_legacy_page_titles' ] );
 
 		// register the column fields.
 		$this->register_columns();
@@ -420,5 +434,41 @@ class nggAdminPanel {
 		include_once __DIR__ . '/manage-galleries.php';
 
 		$wp_list_table = new _NGG_Galleries_List_Table( 'nggallery-manage-gallery' );
+	}
+
+	/**
+	 * Set page titles for legacy hidden pages to avoid deprecation warnings.
+	 *
+	 * @since 3.0.0
+	 * @return void
+	 */
+	public function set_legacy_page_titles() {
+		global $title;
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! isset( $_GET['page'] ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$page = sanitize_text_field( wp_unslash( $_GET['page'] ) );
+
+		// Set title based on page.
+		$page_titles = [
+			NGGFOLDER                   => __( 'NextGEN Gallery Overview', 'nggallery' ),
+			'nggallery-manage-gallery'  => __( 'Manage Galleries', 'nggallery' ),
+			'nggallery-manage-album'    => _n( 'Manage Albums', 'Manage Albums', 1, 'nggallery' ),
+			'nggallery-tags'            => __( 'Manage Tags', 'nggallery' ),
+		];
+
+		if ( isset( $page_titles[ $page ] ) ) {
+			$title = $page_titles[ $page ];
+		}
+	}
+
+	public static function show_legacy_settings() {
+		// Get from main settings array instead of separate option
+		$settings = \Imagely\NGG\Settings\Settings::get_instance();
+		return filter_var( $settings->get( 'ngg_show_old_settings', false ), FILTER_VALIDATE_BOOLEAN );
 	}
 }

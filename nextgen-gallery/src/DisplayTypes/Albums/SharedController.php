@@ -318,6 +318,10 @@ class SharedController extends ParentController {
 		}
 
 		foreach ( $entities as $ndx => $entity ) {
+			// Skip null entities
+			if ( ! $entity || ! isset( $entity->id_field ) ) {
+				continue;
+			}
 			$tmpid                            = ( isset( $entity->albumdesc ) ? 'a' : '' ) . $entity->{$entity->id_field};
 			$this->breadcrumb_cache[ $tmpid ] = $entity;
 			// Using strict comparison here breaks the breadcrumb generation.
@@ -380,14 +384,23 @@ class SharedController extends ParentController {
 			$end = end( $found );
 			reset( $found );
 			foreach ( $found as $ndx => $found_item ) {
+				// Skip null or invalid items
+				if ( ! $found_item || ! isset( $found_item->id_field ) || empty( $found_item->id_field ) ) {
+					continue;
+				}
 				$type   = isset( $found_item->albumdesc ) ? 'album' : 'gallery';
 				$id     = ( 'album' === $type ? 'a' : '' ) . $found_item->{$found_item->id_field};
+
+				// Skip if entity not found in cache
+				if ( ! isset( $this->breadcrumb_cache[ $id ] ) ) {
+					continue;
+				}
 				$entity = $this->breadcrumb_cache[ $id ];
 				$link   = null;
 
 				if ( 'album' === $type ) {
-					$name = $entity->name;
-					if ( $entity->pageid > 0 ) {
+					$name = isset( $entity->name ) ? $entity->name : '';
+					if ( isset( $entity->pageid ) && $entity->pageid > 0 ) {
 						$link = get_page_link( $entity->pageid );
 					}
 					if ( empty( $link ) && $found_item !== $end ) {
@@ -399,7 +412,7 @@ class SharedController extends ParentController {
 						}
 					}
 				} else {
-					$name = $entity->title;
+					$name = isset( $entity->title ) ? $entity->title : '';
 				}
 
 				$crumbs[] = [
@@ -557,6 +570,74 @@ class SharedController extends ParentController {
 		$offset       = $displayed_gallery->display_settings['galleries_per_page'] * ( $current_page - 1 );
 
 		return $displayed_gallery->get_included_entities( $displayed_gallery->display_settings['galleries_per_page'], $offset );
+	}
+
+	/**
+	 * Get the first available image ID from an album's children (galleries or nested albums).
+	 *
+	 * @param object $album The album object with sortorder property.
+	 * @param object $image_mapper The image mapper instance.
+	 *
+	 * @return int|null The first image ID found, or null if none available.
+	 */
+	protected function get_first_image_from_album( $album, $image_mapper ) {
+		if ( empty( $album->sortorder ) ) {
+			return null;
+		}
+
+		$gallery_mapper = GalleryMapper::get_instance();
+		$album_mapper   = AlbumMapper::get_instance();
+
+		// Iterate through sortorder to find the first available image.
+		foreach ( $album->sortorder as $entity_id ) {
+			// Check if this is a nested album (prefixed with 'a').
+			if ( is_string( $entity_id ) && substr( $entity_id, 0, 1 ) === 'a' ) {
+				$nested_album_id = intval( substr( $entity_id, 1 ) );
+				$nested_album    = $album_mapper->find( $nested_album_id );
+
+				if ( $nested_album ) {
+					// If nested album has a preview pic, use it.
+					if ( ! empty( $nested_album->previewpic ) && $nested_album->previewpic > 0 ) {
+						return $nested_album->previewpic;
+					}
+
+					// Recursively check nested album's children.
+					if ( ! empty( $nested_album->sortorder ) ) {
+						$nested_preview = $this->get_first_image_from_album( $nested_album, $image_mapper );
+						if ( $nested_preview ) {
+							return $nested_preview;
+						}
+					}
+				}
+			} else {
+				// This is a gallery ID.
+				$gallery_id = intval( $entity_id );
+				$gallery    = $gallery_mapper->find( $gallery_id );
+
+				if ( $gallery ) {
+					if ( ! empty( $gallery->previewpic ) && $gallery->previewpic > 0 ) {
+						return $gallery->previewpic;
+					}
+
+					// If gallery has no preview pic, try to get its first image.
+					$image_mapper_instance = ImageMapper::get_instance();
+					$images                = $image_mapper_instance->find_all(
+						[
+							'galleryid' => $gallery_id,
+							'exclude'   => 0,
+							'limit'     => 1,
+							'order'     => 'ASC',
+						]
+					);
+
+					if ( ! empty( $images ) ) {
+						return $images[0]->pid;
+					}
+				}
+			}
+		}
+
+		return null;
 	}
 
 	/**
@@ -860,8 +941,15 @@ class SharedController extends ParentController {
 
 			// Get the preview image url.
 			$gallery->previewurl = '';
-			if ( $gallery->previewpic && $gallery->previewpic > 0 ) {
-				$image = $image_mapper->find( intval( $gallery->previewpic ) );
+			$preview_image_id    = $gallery->previewpic;
+
+			// If no preview is set for an album, try to get the first image from its children.
+			if ( ( ! $preview_image_id || $preview_image_id <= 0 ) && $gallery->is_album && ! empty( $gallery->sortorder ) ) {
+				$preview_image_id = $this->get_first_image_from_album( $gallery, $image_mapper );
+			}
+
+			if ( $preview_image_id && $preview_image_id > 0 ) {
+				$image = $image_mapper->find( intval( $preview_image_id ) );
 				if ( $image ) {
 					$gallery->previewpic_image         = $image;
 					$gallery->previewpic_fullsized_url = $storage->get_image_url( $image );

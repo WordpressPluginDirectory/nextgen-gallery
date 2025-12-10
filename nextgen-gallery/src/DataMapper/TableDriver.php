@@ -518,13 +518,22 @@ class TableDriver extends DriverBase {
 			return false;
 		}
 
-		/** @noinspection SqlResolve */
-		$sql = "ALTER TABLE `{$this->get_table_name()}` ADD COLUMN `{$column_name}` {$datatype}";
+		$table_name = $this->get_table_name();
+
 		if ( $default_value ) {
 			if ( is_string( $default_value ) ) {
-				$default_value = str_replace( "'", "\\'", $default_value );
+				$sql = $this->_wpdb()->prepare(
+					"ALTER TABLE `{$table_name}` ADD COLUMN `{$column_name}` {$datatype} NOT NULL DEFAULT %s",
+					str_replace( "'", "\\'", $default_value )
+				);
+			} else {
+				$sql = $this->_wpdb()->prepare(
+					"ALTER TABLE `{$table_name}` ADD COLUMN `{$column_name}` {$datatype} NOT NULL DEFAULT %d",
+					$default_value
+				);
 			}
-			$sql .= ' NOT NULL DEFAULT ' . ( is_string( $default_value ) ? "'{$default_value}" : "{$default_value}" );
+		} else {
+			$sql = "ALTER TABLE `{$table_name}` ADD COLUMN `{$column_name}` {$datatype}";
 		}
 
 		$return = (bool) $this->_wpdb()->query( $sql );

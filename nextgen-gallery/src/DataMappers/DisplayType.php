@@ -107,10 +107,6 @@ class DisplayType extends WPPostDriver {
 		$this->set_default_value( $entity, 'settings', 'use_lightbox_effect', true );
 		$this->set_default_value( $entity, 'view_order', NGG_DISPLAY_PRIORITY_BASE );
 
-		if ( \C_NextGEN_Bootstrap::get_pro_api_version() < 4.0 ) {
-			$this->set_default_value( $entity, 'settings', 'is_ecommerce_enabled', false );
-		}
-
 		// Ensure that no display settings are ever missing if the controller provides defaults.
 		if ( ControllerFactory::has_controller( $entity->name ) ) {
 			$controller = ControllerFactory::get_controller( $entity->name );

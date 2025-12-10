@@ -186,7 +186,7 @@ class A_NextGen_AddGallery_Ajax extends Mixin
         }
         return $retval;
     }
-    public function get_import_root_abspath()
+    private function get_import_root_abspath()
     {
         if (is_multisite()) {
             $root = \Imagely\NGG\DataStorage\Manager::get_instance()->get_upload_abspath();

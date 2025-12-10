@@ -18,6 +18,12 @@ class Album extends Model {
 	public $previewpic;
 	public $slug;
 	public $sortorder = [];
+	public $date_created;
+	public $date_modified;
+
+	// Display type related properties
+	public $display_type = 'photocrati-nextgen_basic_thumbnails';
+	public $display_type_settings = [];
 
 	public function get_primary_key_column() {
 		return 'id';

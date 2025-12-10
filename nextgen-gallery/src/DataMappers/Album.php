@@ -23,11 +23,20 @@ class Album extends TableDriver {
 		$this->define_column( 'name', 'VARCHAR(255)' );
 		$this->define_column( 'pageid', 'BIGINT', 0 );
 		$this->define_column( 'previewpic', 'BIGINT', 0 );
-		$this->define_column( 'slug', 'VARCHAR(255' );
+		$this->define_column( 'slug', 'VARCHAR(255)' );
 		$this->define_column( 'sortorder', 'TEXT' );
 		$this->define_column( 'extras_post_id', 'BIGINT', 0 );
 
+		// Add date columns
+		$this->define_column( 'date_created', 'DATETIME' );
+		$this->define_column( 'date_modified', 'DATETIME' );
+
+		// Add display type related columns
+		$this->define_column( 'display_type', 'VARCHAR(255)', 'photocrati-nextgen_basic_thumbnails' );
+		$this->define_column( 'display_type_settings', 'MEDIUMTEXT' );
+
 		$this->add_serialized_column( 'sortorder' );
+		$this->add_serialized_column( 'display_type_settings' );
 
 		parent::__construct( 'ngg_album' );
 	}
@@ -52,6 +61,16 @@ class Album extends TableDriver {
 	}
 
 	public function save_entity( $entity ) {
+		// Set dates for new or existing entities
+		$current_time = current_time( 'mysql', true );
+		if ( empty( $entity->{$entity->id_field} ) ) {
+			$entity->date_created = $current_time;
+		}
+		$entity->date_modified = $current_time;
+
+		// Initialize display type settings before saving
+		$this->initialize_display_type_settings( $entity );
+
 		$retval = parent::save_entity( $entity );
 
 		if ( $retval ) {
@@ -60,6 +79,60 @@ class Album extends TableDriver {
 		}
 
 		return $retval;
+	}
+
+	/**
+	 * Gets all available display types and their default settings
+	 *
+	 * @return array Array of display types and their default settings
+	 */
+	private function get_all_display_type_defaults() {
+		$display_mapper = \Imagely\NGG\DataMappers\DisplayType::get_instance();
+		$display_types  = $display_mapper->find_by_entity_type( 'album' );
+		$defaults       = [];
+
+		if ( ! $display_types ) {
+			return $defaults;
+		}
+
+		foreach ( $display_types as $display_type ) {
+			if ( ! empty( $display_type->hidden_from_ui ) ) {
+				continue;
+			}
+			$defaults[ $display_type->name ] = $display_type->settings;
+		}
+
+		return $defaults;
+	}
+
+	/**
+	 * Ensures display type settings are properly initialized with defaults
+	 *
+	 * @param object $entity The album entity
+	 * @return void
+	 */
+	private function initialize_display_type_settings( $entity ) {
+		// Initialize display type settings if not set
+		if ( ! is_array( $entity->display_type_settings ) ) {
+			$entity->display_type_settings = [];
+		}
+
+		// Get defaults for all display types
+		$all_defaults = $this->get_all_display_type_defaults();
+
+		// Ensure all display types have settings
+		foreach ( $all_defaults as $type_name => $defaults ) {
+			if ( ! isset( $entity->display_type_settings[ $type_name ] ) ) {
+				$sanitized_defaults = array_map(
+					function ( $value ) {
+						return is_bool( $value ) ? (int) $value : $value;
+					},
+					$defaults
+				);
+
+				$entity->display_type_settings[ $type_name ] = $sanitized_defaults;
+			}
+		}
 	}
 
 	/**
@@ -72,7 +145,19 @@ class Album extends TableDriver {
 		$this->set_default_value( $entity, 'previewpic', 0 );
 		$this->set_default_value( $entity, 'exclude', 0 );
 
-		if ( isset( $entity->name ) && ! isset( $entity->slug ) ) {
+		// Normalize sortorder to ensure all gallery IDs are integers and album IDs have 'a' prefix
+		if ( ! empty( $entity->sortorder ) && is_array( $entity->sortorder ) ) {
+			$entity->sortorder = array_map( function( $item ) {
+				// If it starts with 'a', it's an album - keep the prefix and sanitize the ID
+				if ( is_string( $item ) && strpos( $item, 'a' ) === 0 ) {
+					return 'a' . absint( substr( $item, 1 ) );
+				}
+				// Otherwise it's a gallery ID - convert to integer
+				return absint( $item );
+			}, $entity->sortorder );
+		}
+
+		if ( isset( $entity->name ) && empty( $entity->slug ) ) {
 			$entity->slug = \nggdb::get_unique_slug( sanitize_title( $entity->name ), 'album' );
 		}
 

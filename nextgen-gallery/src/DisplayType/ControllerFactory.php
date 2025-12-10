@@ -10,6 +10,8 @@ class ControllerFactory {
 
 	protected static $mapping = [];
 
+	private static $registered_modules = [];
+
 	/**
 	 * @param string $id
 	 * @param string $class_name
@@ -27,10 +29,16 @@ class ControllerFactory {
 		}
 
 		\Imagely\NGG\Util\Installer::add_handler( $id, $class_name );
+
+		self::$registered_modules[$id] = $class_name;
 	}
 
 	public static function get_registered() {
 		return self::$registration;
+	}
+
+	public static function get_registered_modules() {
+		return self::$registered_modules;
 	}
 
 	/**

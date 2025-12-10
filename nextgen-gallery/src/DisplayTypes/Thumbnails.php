@@ -63,42 +63,57 @@ class Thumbnails extends ParentController {
 		$display_settings = $displayed_gallery->display_settings;
 		$gallery_id       = $displayed_gallery->id();
 
+		// Sanitize numeric fields to prevent fatal ops when blank strings are present
+		$images_per_page = 0;
+		if ( isset( $display_settings['images_per_page'] ) && $display_settings['images_per_page'] !== '' ) {
+			$images_per_page = (int) $display_settings['images_per_page'];
+		}
+		$display_settings['images_per_page'] = $images_per_page;
+
+		$number_of_columns = 0;
+		if ( isset( $display_settings['number_of_columns'] ) && $display_settings['number_of_columns'] !== '' ) {
+			$number_of_columns = (int) $display_settings['number_of_columns'];
+		}
+		$display_settings['number_of_columns'] = $number_of_columns;
+
 		if ( ! $display_settings['disable_pagination'] ) {
 			$current_page = (int) $router->get_parameter( 'nggpage', $gallery_id, 1 );
 		} else {
 			$current_page = 1;
 		}
 
-		$offset = $display_settings['images_per_page'] * ( $current_page - 1 );
+		$offset = $images_per_page * ( $current_page - 1 );
 		$total  = $displayed_gallery->get_entity_count();
 
 		// Get the images to be displayed.
-		if ( $display_settings['images_per_page'] > 0 && $display_settings['show_all_in_lightbox'] ) {
+		if ( $images_per_page > 0 && $display_settings['show_all_in_lightbox'] ) {
 			// the "Add Hidden Images" feature works by loading ALL images and then marking the ones not on this page
 			// as hidden (style="display: none").
 			$images = $displayed_gallery->get_included_entities();
 			$i      = 0;
 			foreach ( $images as &$image ) {
-				if ( $i < $display_settings['images_per_page'] * ( $current_page - 1 ) ) {
+				if ( $i < $images_per_page * ( $current_page - 1 ) ) {
 					$image->hidden = true;
-				} elseif ( $i >= $display_settings['images_per_page'] * ( $current_page ) ) {
+				} elseif ( $i >= $images_per_page * ( $current_page ) ) {
 					$image->hidden = true;
 				}
 				++$i;
 			}
 		} else {
 			// just display the images for this page, as normal.
-			$images = $displayed_gallery->get_included_entities( $display_settings['images_per_page'], $offset );
+			$images = $displayed_gallery->get_included_entities( $images_per_page, $offset );
 		}
 
 		// Are there images to display?.
 		if ( $images ) {
+			// Check and regenerate missing thumbnails for fresh installations
+			$this->ensure_thumbnails_exist( $images, $storage );
 			// Create pagination.
-			if ( $display_settings['images_per_page'] && ! $display_settings['disable_pagination'] ) {
+			if ( $images_per_page > 0 && ! $display_settings['disable_pagination'] ) {
 				$pagination_result = $this->create_pagination(
 					$current_page,
 					$total,
-					$display_settings['images_per_page'],
+					$images_per_page,
 					urldecode( $router->get_parameter( 'ajax_pagination_referrer' ) ?: '' )
 				);
 				$app               = $router->get_routed_app();
@@ -343,5 +358,33 @@ class Thumbnails extends ParentController {
 			],
 			$reset
 		);
+	}
+
+	/**
+	 * Ensures thumbnails exist for images, regenerating them if necessary
+	 * This is particularly useful for fresh installations where thumbnails might not have been generated
+	 *
+	 * @param array $images Array of image objects
+	 * @param StorageManager $storage Storage manager instance
+	 */
+	private function ensure_thumbnails_exist( $images, $storage ) {
+		// Only run this check on fresh installations or when thumbnails are missing
+		// Limit to first 10 images to avoid performance issues
+		$images_to_check = array_slice( $images, 0, 10 );
+
+		foreach ( $images_to_check as $image ) {
+			// Skip if image is hidden
+			if ( isset( $image->hidden ) && $image->hidden ) {
+				continue;
+			}
+
+			// Check if thumbnail exists
+			$thumbnail_path = $storage->get_image_abspath( $image, 'thumbnail', true );
+
+			// If thumbnail doesn't exist, try to generate it
+			if ( ! $thumbnail_path ) {
+				$storage->generate_thumbnail( $image );
+			}
+		}
 	}
 }

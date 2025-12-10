@@ -20,7 +20,7 @@ $checked    = 'checked';
 				<div class="name small-margin">
 				</div>
 				<div class="nextgen-gallery-onboarding-description">
-					<?php esc_html_e( 'We\'ve preselected recommended features tailored to your site category, you have the option to further customise your site using the following features.', 'nextgen-gallery' ); ?>
+					<?php esc_html_e( 'We\'ve preselected recommended features tailored to your site category, but you can further customize your site using the following features.', 'nextgen-gallery' ); ?>
 				</div>
 			</div>
 		</div>
@@ -36,7 +36,7 @@ $checked    = 'checked';
 						<div class="name small-margin">
 							<label for="wpforms-lite"><?php esc_html_e( 'Form Builder', 'nextgen-gallery' ); ?></label>
 						</div>
-						<div class="nextgen-gallery-description-text"><?php esc_html_e( 'Build forms for your photography business using the fastest form builder ever WPForms', 'nextgen-gallery' ); ?></div>
+						<div class="nextgen-gallery-description-text"><?php esc_html_e( 'Build forms for your photography business using the fastest form builder ever, WPForms.', 'nextgen-gallery' ); ?></div>
 						<div class="nextgen-desc" id="wpforms-lite-desc"><?php echo esc_html( $installs_text ); ?></div>
 
 					</div>
@@ -75,7 +75,7 @@ $checked    = 'checked';
 						<div class="name small-margin">
 							<label for="google-analytics-for-wordpress"><?php esc_html_e( 'Website Analytics', 'nextgen-gallery' ); ?></label>
 						</div>
-						<div class="nextgen-gallery-description-text"><?php esc_html_e( 'Understand your customer’s interactions across your Galleries with MonsterInsight.', 'nextgen-gallery' ); ?></div>
+						<div class="nextgen-gallery-description-text"><?php esc_html_e( 'Understand customer interactions across your galleries with MonsterInsights.', 'nextgen-gallery' ); ?></div>
 						<div class="nextgen-desc" id="google-analytics-for-wordpress-desc"><?php echo esc_html( $installs_text ); ?></div>
 
 					</div>
@@ -114,7 +114,7 @@ $checked    = 'checked';
 						<div class="name small-margin">
 							<label for="duplicator"><?php esc_html_e( 'Website Backups', 'nextgen-gallery' ); ?></label>
 						</div>
-						<div class="nextgen-gallery-description-text"><?php esc_html_e( 'Backup, Migrate, Secure your gallery images from getting lost with Duplicator.', 'nextgen-gallery' ); ?></div>
+						<div class="nextgen-gallery-description-text"><?php esc_html_e( 'Backup, migrate, and secure your website and gallery images with Duplicator.', 'nextgen-gallery' ); ?></div>
 						<div class="nextgen-desc" id="duplicator-desc"><?php echo esc_html( $installs_text ); ?></div>
 
 					</div>
@@ -153,7 +153,7 @@ $checked    = 'checked';
 						<div class="name small-margin">
 							<label for="all-in-one-seo-pack"><?php esc_html_e( 'SEO Toolkit', 'nextgen-gallery' ); ?></label>
 						</div>
-						<div class="nextgen-gallery-description-text"><?php esc_html_e( 'Improve your website search rankings for your gallery with AIOSEO', 'nextgen-gallery' ); ?></div>
+						<div class="nextgen-gallery-description-text"><?php esc_html_e( 'Improve search rankings for your website and galleries with AIOSEO.', 'nextgen-gallery' ); ?></div>
 						<div class="nextgen-desc" id="all-in-one-seo-pack-desc"><?php echo esc_html( $installs_text ); ?></div>
 
 					</div>
@@ -192,7 +192,7 @@ $checked    = 'checked';
 						<div class="name small-margin">
 							<label for="wp-mail-smtp"><?php esc_html_e( 'Email Deliverability', 'nextgen-gallery' ); ?></label>
 						</div>
-						<div class="nextgen-gallery-description-text"><?php esc_html_e( 'Set up your WordPress to use a trusted email provider with WP Mail SMTP', 'nextgen-gallery' ); ?></div>
+						<div class="nextgen-gallery-description-text"><?php esc_html_e( 'Set up your WordPress site to use a trusted email provider with WP Mail SMTP', 'nextgen-gallery' ); ?></div>
 						<div class="nextgen-desc" id="wp-mail-smtp-desc"><?php echo esc_html( $installs_text ); ?></div>
 
 					</div>

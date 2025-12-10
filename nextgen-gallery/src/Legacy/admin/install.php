@@ -41,6 +41,8 @@ function nggallery_install( $installer ) {
         previewpic BIGINT(20) DEFAULT '0' NOT NULL ,
         author BIGINT(20) DEFAULT '0' NOT NULL  ,
         extras_post_id BIGINT(20) DEFAULT '0' NOT NULL,
+        date_created DATETIME NULL,
+        date_modified DATETIME NULL,
         PRIMARY KEY  (gid),
         KEY extras_post_id_key (extras_post_id)
 	)";
@@ -56,6 +58,8 @@ function nggallery_install( $installer ) {
         sortorder LONGTEXT NOT NULL,
         pageid BIGINT(20) DEFAULT '0' NOT NULL,
         extras_post_id BIGINT(20) DEFAULT '0' NOT NULL,
+        date_created DATETIME NULL,
+        date_modified DATETIME NULL,
         PRIMARY KEY  (id),
         KEY extras_post_id_key (extras_post_id)
 	)";

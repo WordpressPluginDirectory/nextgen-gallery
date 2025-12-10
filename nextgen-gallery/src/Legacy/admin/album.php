@@ -227,33 +227,33 @@ class nggManageAlbum {
 			} else {
 				$this->currentID = $_REQUEST['act_album'] = 0;
 			}
-		} elseif ( isset( $_POST['update'] ) && isset( $_REQUEST['act_album'] ) && $this->currentID = intval( $_REQUEST['act_album'] ) ) {
+	} elseif ( isset( $_POST['update'] ) && isset( $_REQUEST['act_album'] ) && $this->currentID = intval( $_REQUEST['act_album'] ) ) {
 
-			$sortorder = [];
+		$sortorder = [];
 
-			// Get the current album being updated.
-			$album = $this->_get_album( $this->currentID );
+		// Get the current album being updated.
+		$album = $this->_get_album( $this->currentID );
 
-			// Get the list of galleries/sub-albums to be added to this album.
-			parse_str( $_REQUEST['sortorder'], $sortorder );
+		// Get the list of galleries/sub-albums to be added to this album.
+		parse_str( $_REQUEST['sortorder'], $sortorder );
 
-			// Set the new sortorder.
-			if ( isset( $sortorder['gid'] ) ) {
-				$album->sortorder = $sortorder['gid'];
-			} else {
-				$album->sortorder = [];
-			}
+		// Set the new sortorder.
+		if ( isset( $sortorder['gid'] ) ) {
+			$album->sortorder = $sortorder['gid'];
+		} else {
+			$album->sortorder = [];
+		}
 
-			// Ensure that a preview pic has been sent.
-			$this->_set_album_preview_pic( $album );
+		// Ensure that a preview pic has been sent.
+		$this->_set_album_preview_pic( $album );
 
-			// Save the changes.
-			AlbumMapper::get_instance()->save( $album );
+		// Save the changes.
+		AlbumMapper::get_instance()->save( $album );
 
-			// hook for other plugins.
-			do_action( 'ngg_update_album_sortorder', $this->currentID );
+		// hook for other plugins.
+		do_action( 'ngg_update_album_sortorder', $this->currentID );
 
-			nggGallery::show_message( __( 'Updated Successfully', 'nggallery' ) );
+		nggGallery::show_message( __( 'Updated Successfully', 'nggallery' ) );
 
 		}
 
@@ -647,8 +647,21 @@ function ngg_confirm_delete_album(form) {
 				<div id="albumContainer" class="widget-holder">
 					<?php
 					if ( is_array( $this->albums ) ) {
+						// get the array of albums in the current album's sortorder.
+						$sort_array = $album ? $album->sortorder : [];
 						foreach ( $this->albums as $a ) {
-							$this->get_container( 'a' . $a->id );
+							// Don't show the current album in the selection
+							if ( $album && $a->id == $album->id ) {
+								continue;
+							}
+							// Check if this album is already in the current album's sortorder
+							if ( ! in_array( 'a' . $a->id, $sort_array ) ) {
+								if ( in_array( 'a' . $a->id, $used_list ) ) {
+									$this->get_container( 'a' . $a->id, true );
+								} else {
+									$this->get_container( 'a' . $a->id, false );
+								}
+							}
 						}
 					}
 					?>
@@ -847,9 +860,9 @@ function ngg_confirm_delete_album(form) {
 	}
 
 	/**
-	 * get all used galleries from all albums
+	 * get all used galleries and albums from all albums
 	 *
-	 * @return array $used_galleries_ids
+	 * @return array $used_galleries_and_albums_ids
 	 */
 	public function get_used_galleries() {
 
@@ -860,9 +873,10 @@ function ngg_confirm_delete_album(form) {
 				if ( ! is_array( $album->sortorder ) ) {
 					continue;
 				}
-				foreach ( $album->sortorder as $galleryid ) {
-					if ( ! in_array( $galleryid, $used ) ) {
-						$used[] = $galleryid;
+				foreach ( $album->sortorder as $item_id ) {
+					// Add both galleries (numeric) and albums (prefixed with 'a') to the used list
+					if ( ! in_array( $item_id, $used ) ) {
+						$used[] = $item_id;
 					}
 				}
 			}

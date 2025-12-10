@@ -368,10 +368,11 @@ class M_NextGen_Admin extends C_Base_Module {
 			'
             #adminmenu li.toplevel_page_nextgen-gallery img,
             #adminmenu li[class*=toplevel_page_nextgen-gallery] img,
+            #adminmenu li[class*=toplevel_page_imagely] img,
             #adminmenu li[class*=toplevel_page_ngg] img {
                 opacity: 1;
-                max-width: 18px;
-                padding-top: 7px;
+                max-width: 20px;
+                padding-top: 8px;
             }
         '
 		);

@@ -150,8 +150,27 @@ class LegacyTemplateLocator {
 				}
 			}
 		} elseif ( ! preg_match( '#\.\.[/\\\]#', $custom_template ) ) {
-			// An absolute path was already given.
-			$template_abspath = $custom_template;
+			/*
+			 * An absolute path was already given.
+			 *
+			 * Historically, NextGEN Gallery allowed absolute paths here so that templates could be loaded from
+			 * arbitrary locations on disk. This created a local file inclusion vulnerability via the `template`
+			 * parameter on shortcodes.
+			 *
+			 * For security reasons we no longer load templates using arbitrary absolute paths. Site owners should
+			 * instead move custom templates into their theme or child theme `nggallery` directory and reference them
+			 * by file name (without a full path).
+			 */
+			_doing_it_wrong(
+				__METHOD__,
+				sprintf(
+					// Translators: %s is the absolute path that was provided.
+					'Using an absolute path for a NextGEN Gallery legacy template (%s) is deprecated and no longer supported for security reasons. Please move this template file into your active theme or child theme "nggallery" directory and reference it by file name instead.',
+					$custom_template
+				),
+				'3.59.13'
+			);
+			// Intentionally do not set $template_abspath for absolute paths.
 		}
 
 		return $template_abspath;

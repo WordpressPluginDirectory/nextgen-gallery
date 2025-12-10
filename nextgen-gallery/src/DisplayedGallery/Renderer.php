@@ -107,6 +107,12 @@ class Renderer {
 				unset( $args['albums_ids'] );
 			}
 
+			// Modern album format: src="albums" (before ids conversion)
+			elseif ( 'albums' === $args['src'] || 'albums' === $args['source'] ) {
+				$args['source'] = 'albums';
+				// container_ids will be set by ids conversion later
+			}
+
 			// Tags ?
 			elseif ( $args['tag_ids'] ) {
 				$args['source']        = 'tags';

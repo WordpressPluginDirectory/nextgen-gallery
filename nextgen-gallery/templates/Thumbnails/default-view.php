@@ -21,6 +21,15 @@ $this->start_element( 'nextgen_gallery.gallery_container', 'container', $display
 	for ( $i = 0; $i < count( $images ); $i++ ) :
 		$image        = $images[ $i ];
 		$thumb_size   = $storage->get_image_dimensions( $image, $thumbnail_size_name );
+
+		// Ensure thumb_size has valid dimensions (prevent null array access)
+		if ( ! is_array( $thumb_size ) || ! isset( $thumb_size['width'], $thumb_size['height'] ) ) {
+			$thumb_size = array(
+				'width'  => 150, // Default thumbnail width
+				'height' => 150, // Default thumbnail height
+			);
+		}
+
 		$style        = isset( $image->style ) ? $image->style : null;
 		$column_class = 'ngg-' . $number_of_columns . '-columns';
 

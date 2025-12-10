@@ -10,6 +10,9 @@ use Imagely\NGG\DataMapper\Model;
 use Imagely\NGG\DataStorage\Sanitizer;
 use Imagely\NGG\Util\Filesystem;
 
+/**
+ * Gallery data type class.
+ */
 class Gallery extends Model {
 
 	public $author;
@@ -23,6 +26,15 @@ class Gallery extends Model {
 	public $previewpic;
 	public $slug;
 	public $title;
+	public $date_created;
+	public $date_modified;
+
+	// Display type related properties
+	public $display_type = 'photocrati-nextgen_basic_thumbnails';
+	public $display_type_settings = [];
+	public $is_private = false;
+
+	public $is_ecommerce_enabled = false;
 
 	// TODO: remove this when get_pro_compat_level() >= 1.
 	public $pricelist_id;
@@ -34,6 +46,8 @@ class Gallery extends Model {
 	public $images = [];
 	public $updatepictures;
 	public $attach_to_post;
+	public $counter;
+
 
 	public function get_primary_key_column() {
 		return 'gid';
