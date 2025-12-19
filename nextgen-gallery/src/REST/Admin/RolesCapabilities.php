@@ -35,14 +35,32 @@ class RolesCapabilities extends \WP_REST_Controller {
 	 * Check if user can view roles and capabilities
 	 */
 	public function get_items_permissions_check( $request ) {
-		return current_user_can( 'NextGEN Change options' );
+		if ( ! is_super_admin() ) {
+			return false;
+		}
+
+		if ( ! is_multisite() ) {
+			return true;
+		}
+
+		$settings = \Imagely\NGG\Settings\Settings::get_instance();
+		return (bool) $settings->get( 'wpmuRoles' );
 	}
 
 	/**
 	 * Check if user can update roles and capabilities
 	 */
 	public function update_items_permissions_check( $request ) {
-		return current_user_can( 'NextGEN Change options' );
+		if ( ! is_super_admin() ) {
+			return false;
+		}
+
+		if ( ! is_multisite() ) {
+			return true;
+		}
+
+		$settings = \Imagely\NGG\Settings\Settings::get_instance();
+		return (bool) $settings->get( 'wpmuRoles' );
 	}
 
 	/**

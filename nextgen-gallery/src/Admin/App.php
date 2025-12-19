@@ -11,6 +11,7 @@
 namespace Imagely\NGG\Admin;
 
 use Imagely\NGG\Admin\AMNotifications as Notifications;
+use Imagely\NGG\DisplayType\LegacyTemplateLocator;
 
 class App {
 	private $hook_suffixes = [];
@@ -37,40 +38,42 @@ class App {
 
 		$menu = 'imagely';
 
+		// Use NextGEN Gallery overview capability for main menu, matching legacy admin behavior
 		$this->hook_suffixes[] = add_menu_page(
 			__( 'Imagely', 'nggallery' ),
 			__( 'Imagely', 'nggallery' ) . $nav_append_count,
-			'manage_options', // TODO add custom capability.
+			'NextGEN Gallery overview',
 			$menu,
 			[ $this, 'render_settings_page' ],
 			plugins_url( 'assets/images/logo-icon.png', NGG_PLUGIN_FILE ),
 			10
 		);
 
+		// Use proper NextGEN capabilities for each menu item, matching legacy admin behavior
 		$sub_menus = [
 			[
 				'name'       => __( 'Galleries', 'nggallery' ),
-				'capability' => 'manage_options',
+				'capability' => 'NextGEN Manage gallery',
 				'menu_slug'  => $menu,
 			],
 			[
 				'name'       => __( 'Add New Gallery', 'nggallery' ),
-				'capability' => 'manage_options',
+				'capability' => 'NextGEN Upload images',
 				'menu_slug'  => "$menu&create_gallery=1",
 			],
 			[
 				'name'       => __( 'Edit Gallery', 'nggallery' ),
-				'capability' => 'manage_options',
+				'capability' => 'NextGEN Manage gallery',
 				'menu_slug'  => "$menu-add-new",
 			],
 			[
 				'name'       => __( 'Albums', 'nggallery' ),
-				'capability' => 'manage_options',
+				'capability' => 'NextGEN Edit album',
 				'menu_slug'  => "$menu-albums",
 			],
 			[
 				'name'       => __( 'Tags', 'nggallery' ),
-				'capability' => 'manage_options',
+				'capability' => 'NextGEN Manage tags',
 				'menu_slug'  => "$menu-tags",
 			],
 		];
@@ -80,24 +83,24 @@ class App {
 		if ( 'pro' === $pro_type ) {
 			$sub_menus[] = [
 				'name'       => __( 'eCommerce', 'nggallery' ),
-				'capability' => 'manage_options',
+				'capability' => 'NextGEN Change options',
 				'menu_slug'  => "$menu-ecommerce",
 			];
 		}
 
 		$sub_menus[] = [
 			'name'       => __( 'Settings', 'nggallery' ),
-			'capability' => 'manage_options',
+			'capability' => 'NextGEN Change options',
 			'menu_slug'  => "$menu-settings",
 		];
 		$sub_menus[] = [
 			'name'       => __( 'Layout Settings', 'nggallery' ),
-			'capability' => 'manage_options',
+			'capability' => 'NextGEN Change style',
 			'menu_slug'  => "$menu-layout-settings",
 		];
 		$sub_menus[] = [
 			'name'       => __( 'About Us', 'nggallery' ),
-			'capability' => 'manage_options',
+			'capability' => 'NextGEN Gallery overview',
 			'menu_slug'  => "$menu-about-us",
 		];
 
@@ -225,20 +228,54 @@ HTML;
 	 */
 	public static function get_imagely_app_data() {
 		return [
-			'nonce'            => wp_create_nonce( 'imagely-admin' ),
-			'nonce_preview'    => wp_create_nonce( 'ngg_preview_shortcode' ),
-			'restURL'          => esc_url_raw( rest_url() ),
-			'assetsURL'        => plugins_url( 'assets', NGG_PLUGIN_FILE ),
-			'home_url'         => esc_url_raw( get_home_url() ),
-			'adminUrl'         => esc_url_raw( admin_url() ),
-			'pluginPath'       => NGG_PLUGIN_DIR,
-			'plugin_url'       => esc_url_raw( trailingslashit( plugins_url( '', NGG_PLUGIN_FILE ) ) ),
-			'debug'            => self::is_debug(),
-			'proTypeInstalled' => self::get_pro_type_installed(),
-			'licenseData'      => self::get_license_data(),
-			'systemInfo'       => self::get_system_info(),
-			'enviraCdnConfig'  => self::get_cdn_config(),
+			'nonce'                    => wp_create_nonce( 'imagely-admin' ),
+			'nonce_preview'            => wp_create_nonce( 'ngg_preview_shortcode' ),
+			'restURL'                  => esc_url_raw( rest_url() ),
+			'assetsURL'                => plugins_url( 'assets', NGG_PLUGIN_FILE ),
+			'home_url'                 => esc_url_raw( get_home_url() ),
+			'adminUrl'                 => esc_url_raw( admin_url() ),
+			'pluginPath'               => NGG_PLUGIN_DIR,
+			'plugin_url'               => esc_url_raw( trailingslashit( plugins_url( '', NGG_PLUGIN_FILE ) ) ),
+			'debug'                    => self::is_debug(),
+			'proTypeInstalled'         => self::get_pro_type_installed(),
+			'licenseData'              => self::get_license_data(),
+			'systemInfo'               => self::get_system_info(),
+			'enviraCdnConfig'          => self::get_cdn_config(),
+			'canAccessRolesSettings'   => self::can_access_roles_settings(),
+			'canAccessLicenseSettings' => self::can_access_license_settings(),
+			'legacyTemplates'          => self::get_legacy_templates(),
 		];
+	}
+
+	/**
+	 * Get available legacy templates organized by display type prefix.
+	 *
+	 * @return array Legacy templates grouped by prefix (gallery, imagebrowser, album, singlepic)
+	 */
+	public static function get_legacy_templates() {
+		$locator  = LegacyTemplateLocator::get_instance();
+		$prefixes = [ 'gallery', 'imagebrowser', 'album', 'singlepic' ];
+
+		$templates = [];
+
+		foreach ( $prefixes as $prefix ) {
+			$templates[ $prefix ] = [];
+
+			// Add default option first.
+			$templates[ $prefix ]['default'] = __( 'Default', 'nggallery' );
+
+			// Get templates for this prefix.
+			$found = $locator->find_all( $prefix );
+
+			foreach ( $found as $label => $files ) {
+				foreach ( $files as $file ) {
+					$filename                        = basename( $file );
+					$templates[ $prefix ][ $file ] = "{$label}: {$filename}";
+				}
+			}
+		}
+
+		return $templates;
 	}
 
 	/**
@@ -409,6 +446,37 @@ HTML;
 	}
 
 	/**
+	 * Check if current user can access roles and capabilities settings.
+	 *
+	 * @return bool
+	 */
+	public static function can_access_roles_settings() {
+		if ( ! is_super_admin() ) {
+			return false;
+		}
+
+		if ( ! is_multisite() ) {
+			return true;
+		}
+
+		$settings = \Imagely\NGG\Settings\Settings::get_instance();
+		return (bool) $settings->get( 'wpmuRoles' );
+	}
+
+	/**
+	 * Check if current user can access license settings.
+	 *
+	 * @return bool
+	 */
+	public static function can_access_license_settings() {
+		if ( ! is_multisite() ) {
+			return current_user_can( 'manage_options' );
+		}
+
+		return is_super_admin();
+	}
+
+	/**
 	 * Add lite-specific upgrade to pro menu item.
 	 *
 	 * @since 3.6.0
@@ -417,21 +485,22 @@ HTML;
 	public function add_upgrade_menu_item() {
 		global $submenu;
 
-		// Only add upgrade menu item if not Pro (show for lite, plus, and starter)
+		// Only add upgrade menu item for lite version (hide for pro, plus, and starter)
 		$pro_type = $this->get_pro_type_installed();
-		if ( 'pro' === $pro_type ) {
+		if ( 'lite' !== $pro_type ) {
 			return;
 		}
 
+		// Use same capability as main menu
 		add_submenu_page(
 			'imagely',
 			esc_html__( 'Upgrade to Pro', 'nggallery' ),
 			esc_html__( 'Upgrade to Pro', 'nggallery' ),
-			'manage_options',
+			'NextGEN Gallery overview',
 			esc_url( $this->get_utm_link( 'https://www.imagely.com/lite/', 'adminsidebar', 'unlockprosidebar' ) )
 		);
 
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( 'NextGEN Gallery overview' ) ) {
 			return;
 		}
 
@@ -470,7 +539,7 @@ HTML;
 	 */
 	public function admin_inline_styles() {
 		$pro_type = $this->get_pro_type_installed();
-		if ( 'pro' === $pro_type ) {
+		if ( 'lite' !== $pro_type ) {
 			return;
 		}
 
@@ -492,7 +561,7 @@ HTML;
 	 */
 	public function admin_sidebar_target() {
 		$pro_type = $this->get_pro_type_installed();
-		if ( 'pro' === $pro_type ) {
+		if ( 'lite' !== $pro_type ) {
 			return;
 		}
 

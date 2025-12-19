@@ -1078,7 +1078,14 @@ class C_CustomTable_DataMapper_Driver_Mixin extends Mixin
     }
     public function _add_column($column_name, $datatype, $default_value = null)
     {
-        $sql = "ALTER TABLE `{$this->get_table_name()}` ADD COLUMN `{$column_name}` {$datatype}";
+        $table_name = esc_sql($this->get_table_name());
+        // Direct database check to avoid duplicate column error if transient cache is stale.
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        $exists = $this->object->_wpdb()->get_results($this->object->_wpdb()->prepare("SHOW COLUMNS FROM `{$table_name}` LIKE %s", $column_name));
+        if (!empty($exists)) {
+            return false;
+        }
+        $sql = "ALTER TABLE `{$table_name}` ADD COLUMN `{$column_name}` {$datatype}";
         if ($default_value) {
             if (is_string($default_value)) {
                 $default_value = str_replace("'", "\\'", $default_value);

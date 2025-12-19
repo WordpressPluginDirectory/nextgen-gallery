@@ -518,7 +518,14 @@ class TableDriver extends DriverBase {
 			return false;
 		}
 
-		$table_name = $this->get_table_name();
+		$table_name = esc_sql( $this->get_table_name() );
+
+		// Direct database check to avoid duplicate column error if transient cache is stale.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$exists = $this->_wpdb()->get_results( $this->_wpdb()->prepare( "SHOW COLUMNS FROM `{$table_name}` LIKE %s", $column_name ) );
+		if ( ! empty( $exists ) ) {
+			return false;
+		}
 
 		if ( $default_value ) {
 			if ( is_string( $default_value ) ) {

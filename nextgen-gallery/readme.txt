@@ -2,7 +2,7 @@
 Contributors: photocrati, imagely
 Tags: gallery, wordpress gallery plugin, photo gallery, image gallery, slideshow
 Requires at least: 5.5.4
-Stable tag: 4.0.0
+Stable tag: 4.0.3
 Tested up to: 6.9
 License: GPLv3
 Requires PHP: 7.0
@@ -196,6 +196,28 @@ For more information, feel free to visit the official website for the NextGEN Ga
 
 
 == Changelog ==
+
+= v4.0.3 - 12.18.2025 =
+• Added: REST endpoint to scan a gallery folder and import newly added images, and a client hook to trigger it.
+• Added: legacy template selector and exposed available legacy templates to the admin app.
+• Added: shared Pagination component and applied it across admin list screens (galleries, albums, tags, orders).
+• Added: Image ID field to the image metadata modal.
+• Added: Digital Downloads section in order details with a direct download link.
+• Fixed: 403 rate-limiting issues by debouncing display/settings saves (longer debounce) in gallery/album customize flows.
+• Fixed: legacy template loading security by blocking traversal attempts and only allowing templates from approved directories
+• Fixed: Upgrade menu item and related admin styles/targeting to show only for Lite installs.
+• Fixed: duplicate-column errors when adding DB columns by checking column existence directly
+• Fixed: order resubmission-to-lab flow (improved success/error handling) and improved order item file details display.
+• Fixed: missing UTM parameters in upgrade links.
+
+= V4.0.2 - 12.15.2025 =
+* Fixed: Missing thumbnails on the gallery edit page for some users
+* Fixed: Creating galleries from server subfolders
+* Fixed: User and capabilities page showing for all users
+
+= V4.0.1 - 12.10.2025 =
+* Fixed: Edit gallery user permissions
+
 = V4.0.0 - 12.09.2025 =
 * Improved: Admin area user interface
 

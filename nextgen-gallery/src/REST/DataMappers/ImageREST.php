@@ -962,6 +962,11 @@ class ImageREST {
 			}
 		}
 
+		// Get properly formatted image URLs using the storage manager
+		$storage   = \Imagely\NGG\DataStorage\Manager::get_instance();
+		$thumb_url = $storage->get_image_url( $image, 'thumb' );
+		$image_url = $storage->get_image_url( $image, 'full' );
+
 		return [
 			'pid'            => $image->pid,
 			'filename'       => $image->filename,
@@ -978,6 +983,8 @@ class ImageREST {
 			'updated_at'     => $image->updated_at,
 			'extras_post_id' => $image->extras_post_id,
 			'pricelist_id'   => isset( $image->pricelist_id ) ? (int) $image->pricelist_id : 0,
+			'thumb_url'      => $thumb_url ?? '',
+			'image_url'      => $image_url ?? '',
 		];
 	}
 

@@ -48,7 +48,8 @@ class Shortcode_Preview {
 		}
 
 		// Check if user is logged in and has required capability.
-		if ( ! current_user_can( 'manage_options' ) ) {
+		// Allow users who can manage galleries or upload images to preview.
+		if ( ! current_user_can( 'NextGEN Manage gallery' ) && ! current_user_can( 'NextGEN Upload images' ) ) {
 			wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'nggallery' ) );
 		}
 

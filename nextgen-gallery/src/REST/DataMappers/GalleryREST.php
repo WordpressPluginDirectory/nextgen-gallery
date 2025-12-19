@@ -223,6 +223,24 @@ class GalleryREST {
 				],
 			]
 		);
+
+		// Scan folder for new images.
+		register_rest_route(
+			'imagely/v1',
+			'/galleries/(?P<id>\d+)/scan-folder',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ self::class, 'scan_folder' ],
+				'permission_callback' => [ self::class, 'check_edit_permission' ],
+				'args'                => [
+					'id' => [
+						'required'          => true,
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
+					],
+				],
+			]
+		);
 	}
 
 	/**
@@ -418,6 +436,19 @@ class GalleryREST {
 			);
 		}
 
+		// Check if user can view this gallery.
+		// Users can only view galleries they own unless they have "nextgen_edit_gallery_unowned" capability.
+		$current_user_id = get_current_user_id();
+		$can_manage      = ( (int) $current_user_id === (int) $gallery->author ) || Security::is_allowed( 'nextgen_edit_gallery_unowned' );
+
+		if ( ! $can_manage ) {
+			return new WP_Error(
+				'gallery_forbidden',
+				__( 'Sorry, you do not have permission to view this gallery', 'nggallery' ),
+				[ 'status' => 403 ]
+			);
+		}
+
 		return new WP_REST_Response( self::prepare_gallery_for_response( $gallery ), 200 );
 	}
 
@@ -579,6 +610,187 @@ class GalleryREST {
 	}
 
 	/**
+	 * Scan gallery folder for new images that were added to the filesystem.
+	 *
+	 * This imports any images that exist in the gallery's folder but are not
+	 * yet in the database (e.g., images added via FTP).
+	 *
+	 * @param WP_REST_Request $request The REST request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function scan_folder( WP_REST_Request $request ) {
+		global $wpdb;
+
+		$id      = $request->get_param( 'id' );
+		$mapper  = GalleryMapper::get_instance();
+		$gallery = $mapper->find( $id );
+
+		if ( ! $gallery ) {
+			return new WP_Error(
+				'gallery_not_found',
+				// translators: %d is the numeric ID of the gallery.
+				sprintf( __( 'Gallery with ID %d not found', 'nggallery' ), $id ),
+				[ 'status' => 404 ]
+			);
+		}
+
+		// Get the gallery path from the storage manager.
+		$storage      = \Imagely\NGG\DataStorage\Manager::get_instance();
+		$gallery_path = $storage->get_gallery_abspath( $id );
+
+		if ( ! is_dir( $gallery_path ) ) {
+			return new WP_Error(
+				'folder_not_found',
+				// translators: %s is the gallery folder path.
+				sprintf( __( 'Gallery folder not found: %s', 'nggallery' ), $gallery_path ),
+				[ 'status' => 404 ]
+			);
+		}
+
+		// Scan folder for image files.
+		$new_images_list = \nggAdmin::scandir( $gallery_path );
+
+		if ( empty( $new_images_list ) ) {
+			return new WP_REST_Response(
+				[
+					'success'        => true,
+					'message'        => __( 'No images found in the gallery folder.', 'nggallery' ),
+					'images_added'   => 0,
+					'images_skipped' => 0,
+				],
+				200
+			);
+		}
+
+		// Get existing images in the database for this gallery.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$old_images_list = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT `filename` FROM {$wpdb->nggpictures} WHERE `galleryid` = %d",
+				$id
+			)
+		);
+
+		if ( null === $old_images_list ) {
+			$old_images_list = [];
+		}
+
+		// Find new images (exist in folder but not in database).
+		$new_images = array_diff( $new_images_list, $old_images_list );
+
+		if ( empty( $new_images ) ) {
+			return new WP_REST_Response(
+				[
+					'success'        => true,
+					'message'        => __( 'No new images found. All images in the folder are already in the gallery.', 'nggallery' ),
+					'images_added'   => 0,
+					'images_skipped' => count( $old_images_list ),
+				],
+				200
+			);
+		}
+
+		// Import the new images.
+		$image_mapper = \Imagely\NGG\DataMappers\Image::get_instance();
+		$added_count  = 0;
+		$errors       = [];
+
+		foreach ( $new_images as $filename ) {
+			// Apply filter for renaming/modifying image before import.
+			$filename = apply_filters( 'ngg_pre_add_new_image', $filename, $id );
+
+			// Verify the file exists and is readable.
+			$filepath = trailingslashit( $gallery_path ) . $filename;
+			if ( ! file_exists( $filepath ) || ! is_readable( $filepath ) ) {
+				$errors[] = sprintf(
+					// translators: %s is the filename.
+					__( 'File not readable: %s', 'nggallery' ),
+					$filename
+				);
+				continue;
+			}
+
+			try {
+				// Create a new image entity.
+				$image             = new \Imagely\NGG\DataTypes\Image();
+				$image->filename   = $filename;
+				$image->galleryid  = $id;
+				$image->alttext    = \Imagely\NGG\Display\I18N::mb_basename( $filename );
+				$image->image_slug = sanitize_title( $image->alttext );
+				$image->exclude    = 0;
+
+				// Save the image to the database.
+				$result = $image_mapper->save( $image );
+
+				if ( $result ) {
+					// Generate thumbnail for the newly imported image.
+					\nggAdmin::create_thumbnail( $image );
+
+					// Import metadata from the image file.
+					\nggAdmin::import_MetaData( $image->pid );
+
+					++$added_count;
+				} else {
+					$errors[] = sprintf(
+						// translators: %s is the filename.
+						__( 'Failed to save image: %s', 'nggallery' ),
+						$filename
+					);
+				}
+			} catch ( \Exception $e ) {
+				$errors[] = sprintf(
+					// translators: %1$s is the filename, %2$s is the error message.
+					__( 'Error importing %1$s: %2$s', 'nggallery' ),
+					$filename,
+					$e->getMessage()
+				);
+			}
+		}
+
+		// Set gallery preview image if none is set and we added images.
+		if ( $added_count > 0 && empty( $gallery->previewpic ) ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			$first_image = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT `pid` FROM {$wpdb->nggpictures} WHERE `galleryid` = %d ORDER BY `sortorder` ASC LIMIT 1",
+					$id
+				)
+			);
+			if ( $first_image ) {
+				$gallery->previewpic = (int) $first_image;
+				$mapper->save( $gallery );
+			}
+		}
+
+		// Build response message.
+		if ( $added_count > 0 ) {
+			$message = sprintf(
+				// translators: %d is the number of images imported.
+				_n(
+					'Successfully imported %d new image.',
+					'Successfully imported %d new images.',
+					$added_count,
+					'nggallery'
+				),
+				$added_count
+			);
+		} else {
+			$message = __( 'No new images were imported.', 'nggallery' );
+		}
+
+		return new WP_REST_Response(
+			[
+				'success'        => true,
+				'message'        => $message,
+				'images_added'   => $added_count,
+				'images_skipped' => count( $old_images_list ),
+				'errors'         => $errors,
+			],
+			200
+		);
+	}
+
+	/**
 	 * Prepare gallery list item for API response.
 	 *
 	 * @param Gallery $gallery The gallery object.
@@ -614,6 +826,11 @@ class GalleryREST {
 			$thumbnail = $storage->get_image_url( $gallery->previewpic, 'thumb' );
 		}
 
+		// Check if current user can manage this gallery
+		// User can manage if they own it OR have "NextGEN Manage others gallery" capability
+		$current_user_id = get_current_user_id();
+		$can_manage      = ( (int) $current_user_id === (int) $gallery->author ) || Security::is_allowed( 'nextgen_edit_gallery_unowned' );
+
 		return [
 			'id'           => $gallery->gid,
 			'galleryTitle' => $gallery->title,
@@ -625,6 +842,8 @@ class GalleryREST {
 			'created'      => $gallery->date_created,
 			'modified'     => $gallery->date_modified,
 			'displayType'  => $gallery->display_type,
+			'canManage'    => $can_manage,
+			'author'       => $gallery->author,
 		];
 	}
 
