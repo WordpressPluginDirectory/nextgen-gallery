@@ -59,7 +59,7 @@ if ( ! empty( $image ) ) {
 			data-thumbnail="<?php echo esc_attr( $storage->get_image_url( $image, 'thumb' ) ); ?>"
 			data-image-id="<?php echo esc_attr( $image->{$image->id_field} ); ?>"
 			data-title="<?php echo esc_attr( $image->alttext ); ?>"
-			data-description="<?php echo esc_attr( stripslashes( $image->description ) ); ?>"
+			data-description="<?php echo esc_attr( stripslashes( $image->description ?? '' ) ); ?>"
 			target='<?php echo esc_attr( $target ); ?>'
 			<?php echo $effect_code; ?>>
 			<img class="ngg-singlepic"

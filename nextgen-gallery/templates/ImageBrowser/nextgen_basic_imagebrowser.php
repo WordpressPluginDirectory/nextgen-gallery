@@ -37,7 +37,7 @@ $template_params = [
 			data-thumbnail="<?php print esc_attr( $storage->get_image_url( $image, 'thumb' ) ); ?>"
 			data-image-id="<?php print esc_attr( $image->{$image->id_field} ); ?>"
 			data-title="<?php print esc_attr( $image->alttext ); ?>"
-			data-description="<?php print esc_attr( stripslashes( $image->description ) ); ?>"
+			data-description="<?php print esc_attr( stripslashes( $image->description ?? '' ) ); ?>"
 			<?php print $effect_code; ?>>
 			<img title='<?php print esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->alttext ) ); ?>'
 				alt='<?php print esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->alttext ) ); ?>'

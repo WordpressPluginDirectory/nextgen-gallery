@@ -215,7 +215,7 @@ function nggallery_sortorder( $galleryID = 0 ) {
 								style="background-image:url('<?php print \Imagely\NGG\Util\Router::esc_url( $picture->thumbURL ); ?>')">
 							</div>
 							<div class="imageBox_label">
-								<span><?php print esc_html( stripslashes( $picture->alttext ) ); ?></span>
+								<span><?php print esc_html( stripslashes( $picture->alttext ?? '' ) ); ?></span>
 							</div>
 						</div>
 						<?php

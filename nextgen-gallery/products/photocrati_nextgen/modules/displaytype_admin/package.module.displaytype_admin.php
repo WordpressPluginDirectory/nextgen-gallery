@@ -326,11 +326,11 @@ class A_NextGen_Basic_SinglePic_Form extends Mixin_Display_Type_Form
     }
     public function _render_nextgen_basic_singlepic_dimensions_field($display_type)
     {
-        return $this->object->render_partial('imagely-displaytype_admin#nextgen_basic_singlepic_settings_dimensions', ['display_type_name' => $display_type->name, 'dimensions_label' => __('Thumbnail dimensions', 'nggallery'), 'width_label' => __('Width'), 'width' => $display_type->settings['width'], 'height_label' => __('Height'), 'height' => $display_type->settings['height']], true);
+        return $this->object->render_partial('imagely-displaytype_admin#nextgen_basic_singlepic_settings_dimensions', ['display_type_name' => $display_type->name, 'dimensions_label' => __('Thumbnail dimensions', 'nggallery'), 'width_label' => __('Width', 'nggallery'), 'width' => $display_type->settings['width'], 'height_label' => __('Height', 'nggallery'), 'height' => $display_type->settings['height']], true);
     }
     public function _render_nextgen_basic_singlepic_link_field($display_type)
     {
-        return $this->object->render_partial('imagely-displaytype_admin#nextgen_basic_singlepic_settings_link', ['display_type_name' => $display_type->name, 'link_label' => __('Link'), 'link' => $display_type->settings['link']], true);
+        return $this->object->render_partial('imagely-displaytype_admin#nextgen_basic_singlepic_settings_link', ['display_type_name' => $display_type->name, 'link_label' => __('Link', 'nggallery'), 'link' => $display_type->settings['link']], true);
     }
     public function _render_nextgen_basic_singlepic_link_target_field($display_type)
     {
@@ -580,7 +580,7 @@ class A_NextGen_Basic_Template_Form extends Mixin
     {
         wp_enqueue_style('ngg_template_settings', $this->get_static_url('imagely-displaytype_admin#ngg_template_settings.css'));
         wp_enqueue_script('ngg_template_settings', $this->get_static_url('imagely-displaytype_admin#ngg_template_settings.js'), ['ngg_select2'], true);
-        wp_localize_script('ngg_template_settings', 'ngg_template_settings', ['placeholder_text' => __('No template selected')]);
+        wp_localize_script('ngg_template_settings', 'ngg_template_settings', ['placeholder_text' => __('No template selected', 'nggallery')]);
     }
 }
 /**

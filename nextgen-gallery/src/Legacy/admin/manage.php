@@ -1078,7 +1078,7 @@ class nggManageGallery {
 
 		$total_pages = ( $per_page > 0 ) ? ceil( $total_items / $per_page ) : 1;
 
-		$output = '<span class="displaying-num">' . sprintf( _n( '1 item', '%s items', $total_items ), number_format_i18n( $total_items ) ) . '</span>';
+		$output = '<span class="displaying-num">' . sprintf( _n( '1 item', '%s items', $total_items, 'nggallery' ), number_format_i18n( $total_items ) ) . '</span>';
 
 		$current_url = ( is_ssl() ? 'https://' : 'http://' ) . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
 
@@ -1097,7 +1097,7 @@ class nggManageGallery {
 		$page_links[] = sprintf(
 			"<a class='%s' title='%s' href='%s'>%s</a>",
 			'first-page' . $disable_first,
-			esc_attr__( 'Go to the first page' ),
+			esc_attr__( 'Go to the first page' , 'nggallery'),
 			Router::esc_url( remove_query_arg( 'paged', $current_url ) ),
 			'&laquo;'
 		);
@@ -1123,7 +1123,7 @@ class nggManageGallery {
 		}
 
 		$html_total_pages = sprintf( "<span class='total-pages'>%s</span>", number_format_i18n( $total_pages ) );
-		$page_links[]     = '<span class="paging-input">' . sprintf( _x( '%1$s of %2$s', 'paging' ), $html_current_page, $html_total_pages ) . '</span>';
+		$page_links[]     = '<span class="paging-input">' . sprintf( _x( '%1$s of %2$s', 'paging', 'nggallery' ), $html_current_page, $html_total_pages ) . '</span>';
 
 		$page_links[] = sprintf(
 			"<a class='%s' title='%s' href='%s'>%s</a>",

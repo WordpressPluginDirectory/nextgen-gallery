@@ -1153,6 +1153,9 @@ class API {
 												$settings    = \Imagely\NGG\Settings\Settings::get_instance();
 												$delete_fine = true;
 
+												// Fire the action hook BEFORE deletion so that listening plugins can access the database record
+												do_action( 'ngg_delete_picture', $ngg_image->{$ngg_image->id_field}, $ngg_image );
+
 												if ( $settings->get( 'deleteImg' ) ) {
 													if ( ! $storage->delete_image( $ngg_image ) ) {
 														$image_error = __( 'Could not delete image file(s) from disk (%1$s).', 'nggallery' );
@@ -1162,8 +1165,6 @@ class API {
 												}
 
 												if ( $image_error == null ) {
-													do_action( 'ngg_delete_picture', $ngg_image->{$ngg_image->id_field}, $ngg_image );
-
 													$image_status = 'done';
 												}
 											} else {

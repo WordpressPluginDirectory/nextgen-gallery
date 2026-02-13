@@ -71,7 +71,7 @@ class Image extends Model {
 				'filename',
 				185,
 				'<=',
-				__( 'Image filenames may not be longer than 185 characters in length', 'nextgen-gallery' )
+				__( 'Image filenames may not be longer than 185 characters in length', 'nggallery' )
 			)
 		);
 

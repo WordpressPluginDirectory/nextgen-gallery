@@ -96,13 +96,16 @@ class Slideshow extends \WP_Widget {
 			$instance['limit'] = 10;
 		}
 
+		// Ensure widget_id is available
+		$widget_id_slug = isset( $args['widget_id'] ) && ! empty( $args['widget_id'] ) ? $args['widget_id'] : 'ngg-widget';
+
 		$params = [
 			'container_ids'           => $instance['galleryid'],
 			'display_type'            => 'photocrati-nextgen_basic_slideshow',
 			'gallery_width'           => $instance['width'],
 			'gallery_height'          => $instance['height'],
 			'source'                  => 'galleries',
-			'slug'                    => 'widget-' . $args['widget_id'],
+			'slug'                    => 'widget-' . $widget_id_slug,
 			'entity_types'            => [ 'image' ],
 			'show_thumbnail_link'     => false,
 			'show_slideshow_link'     => false,
@@ -233,13 +236,17 @@ class Slideshow extends \WP_Widget {
 	 * @return string
 	 */
 	public function render_slideshow( $args, $instance ) {
+		// Get widget_id from args (WordPress standard) or fallback to $this->id (WP_Widget property)
+		// This ensures cache key matches what was stored during pre-caching in wp_enqueue_scripts
+		$widget_id = ! empty( $args['widget_id'] ) ? $args['widget_id'] : ( ! empty( $this->id ) ? $this->id : 'slideshow-' . $this->number );
+
 		// This displayed gallery is created dynamically at runtime.
-		if ( empty( self::$displayed_gallery_ids[ $args['widget_id'] ] ) ) {
+		if ( empty( self::$displayed_gallery_ids[ $widget_id ] ) ) {
 			$displayed_gallery                                       = $this->get_displayed_gallery( $args, $instance );
 			self::$displayed_gallery_ids[ $displayed_gallery->id() ] = $displayed_gallery;
 		} else {
 			// The displayed gallery was created during the action wp_enqueue_resources and was cached to avoid ID conflicts.
-			$displayed_gallery = self::$displayed_gallery_ids[ $args['widget_id'] ];
+			$displayed_gallery = self::$displayed_gallery_ids[ $widget_id ];
 		}
 
 		return \apply_filters(

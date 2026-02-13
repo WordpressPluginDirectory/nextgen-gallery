@@ -147,7 +147,8 @@ class nggdb {
 	function delete_gallery( $id ) {
 		$mapper  = \Imagely\NGG\DataMappers\Gallery::get_instance();
 		$gallery = $mapper->find( $id );
-		$mapper->destroy( $gallery );
+		// Always delete with dependencies to prevent orphaned image records
+		$mapper->destroy( $gallery, true );
 		wp_cache_delete( $id, 'ngg_gallery' );
 
 		return true;
@@ -189,8 +190,8 @@ class nggdb {
 			}
 
 			// it was a bad idea to use a object, stripslashes_deep() could not used here, learn from it
-			$album->albumdesc = stripslashes( $album->albumdesc );
-			$album->name      = stripslashes( $album->name );
+			$album->albumdesc = stripslashes( $album->albumdesc ?? '' );
+			$album->name      = stripslashes( $album->name ?? '' );
 
 			wp_cache_add( $album->id, $album, 'ngg_album' );
 			return $album;

@@ -23,8 +23,8 @@ function media_upload_nextgen() {
 		$keys        = array_keys( $_POST['send'] );
 		$send_id     = (int) array_shift( $keys );
 		$image       = $_POST['image'][ $send_id ];
-		$alttext     = stripslashes( htmlspecialchars( $image['alttext'], ENT_QUOTES ) );
-		$description = stripslashes( htmlspecialchars( $image['description'], ENT_QUOTES ) );
+		$alttext     = stripslashes( htmlspecialchars( $image['alttext'] ?? '', ENT_QUOTES ) );
+		$description = stripslashes( htmlspecialchars( $image['description'] ?? '', ENT_QUOTES ) );
 
 		// here is no new line allowed.
 		$clean_description = preg_replace( "/\n|\r\n|\r$/", ' ', $description );
@@ -295,22 +295,22 @@ function media_upload_nextgen_form( $errors ) {
 			<div class='filename'></div>
 			<a class='toggle describe-toggle-on' href='#'><?php esc_html_e( 'Show', 'nggallery' ); ?></a>
 			<a class='toggle describe-toggle-off' href='#'><?php esc_html_e( 'Hide', 'nggallery' ); ?></a>
-			<div class='filename new'><?php echo ( empty( $picture->alttext ) ) ? wp_html_excerpt( esc_html( $picture->filename ), 60 ) : stripslashes( wp_html_excerpt( esc_html( $picture->alttext ), 60 ) ); ?></div>
+			<div class='filename new'><?php echo ( empty( $picture->alttext ) ) ? wp_html_excerpt( esc_html( $picture->filename ), 60 ) : stripslashes( wp_html_excerpt( esc_html( $picture->alttext ?? '' ), 60 ) ); ?></div>
 			<table class='slidetoggle describe startclosed'><tbody>
 				<tr class="thumb">
 					<td rowspan='4'><img class='thumbnail' alt='<?php echo esc_attr( $picture->alttext ); ?>' src='<?php echo esc_url( $thumb_url ); ?>'/></td>
 					<td><?php esc_html_e( 'Image ID:', 'nggallery' ); ?><?php echo $picid; ?></td>
 				</tr>
 				<tr><td><?php echo esc_html( $picture->filename ); ?></td></tr>
-				<tr><td><?php echo esc_html( stripslashes( $picture->alttext ) ); ?></td></tr>
+				<tr><td><?php echo esc_html( stripslashes( $picture->alttext ?? '' ) ); ?></td></tr>
 				<tr><td>&nbsp;</td></tr>
 				<tr class="alttext">
 					<td class="label"><label for="image[<?php echo $picid; ?>][alttext]"><?php esc_attr_e( 'Alt/Title text', 'nggallery' ); ?></label></td>
-					<td class="field"><input id="image[<?php echo $picid; ?>][alttext]" name="image[<?php echo $picid; ?>][alttext]" value="<?php echo esc_attr( stripslashes( $picture->alttext ) ); ?>" type="text"/></td>
+					<td class="field"><input id="image[<?php echo $picid; ?>][alttext]" name="image[<?php echo $picid; ?>][alttext]" value="<?php echo esc_attr( stripslashes( $picture->alttext ?? '' ) ); ?>" type="text"/></td>
 				</tr>
 				<tr class="caption">
 					<td class="label"><label for="image[<?php echo $picid; ?>][description]"><?php esc_attr_e( 'Description', 'nggallery' ); ?></label></td>
-						<td class="field"><textarea name="image[<?php echo $picid; ?>][description]" id="image[<?php echo $picid; ?>][description]"><?php echo esc_attr( stripslashes( $picture->description ) ); ?></textarea></td>
+						<td class="field"><textarea name="image[<?php echo $picid; ?>][description]" id="image[<?php echo $picid; ?>][description]"><?php echo esc_attr( stripslashes( $picture->description ?? '' ) ); ?></textarea></td>
 				</tr>
 					<tr class="align">
 						<td class="label"><label for="image[<?php echo $picid; ?>][align]"><?php esc_attr_e( 'Alignment', 'nggallery' ); ?></label></td>

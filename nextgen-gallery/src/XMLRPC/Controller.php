@@ -397,7 +397,7 @@ class Controller {
 					$retval[ $gallery->{$gallery->id_field} ] = (array) $gallery;
 				}
 			} else {
-				$retval = new \IXR_Error( 401, __( 'Sorry, you must be able to manage galleries' ) );
+				$retval = new \IXR_Error( 401, __( 'Sorry, you must be able to manage galleries', 'nggallery' ) );
 			}
 		}
 
@@ -446,7 +446,8 @@ class Controller {
 		$gallery = $this->get_gallery( $args, true );
 
 		if ( ! ( $gallery instanceof \IXR_Error ) && is_object( $gallery ) ) {
-			return GalleryMapper::get_instance()->destroy( $gallery );
+			// Always delete with dependencies to prevent orphaned image records
+			return GalleryMapper::get_instance()->destroy( $gallery, true );
 		}
 
 		return false;

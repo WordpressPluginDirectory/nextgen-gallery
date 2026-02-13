@@ -79,13 +79,15 @@ class LegacyTemplateLocator {
 		}
 
 		// we can filter results by allowing a set of prefixes, one prefix, or by showing all available files.
+		// Note: Legacy templates use lowercase naming (e.g., gallery.php, gallery-caption.php).
+		// The regex is case-SENSITIVE to avoid matching View-based templates like Gallery.php.
 		if ( is_array( $prefix ) ) {
 			$str            = implode( '|', $prefix );
-			$regex_iterator = new \RegexIterator( $iterator, "/({$str})-.+\\.php$/i", \RecursiveRegexIterator::GET_MATCH );
+			$regex_iterator = new \RegexIterator( $iterator, "/({$str})-.+\\.php$/", \RecursiveRegexIterator::GET_MATCH );
 		} elseif ( is_string( $prefix ) ) {
-			$regex_iterator = new \RegexIterator( $iterator, "#(.*)[/\\\\]{$prefix}\\-?.*\\.php$#i", \RecursiveRegexIterator::GET_MATCH );
+			$regex_iterator = new \RegexIterator( $iterator, "#(.*)[/\\\\]{$prefix}\\-?.*\\.php$#", \RecursiveRegexIterator::GET_MATCH );
 		} else {
-			$regex_iterator = new \RegexIterator( $iterator, '/^.+\.php$/i', \RecursiveRegexIterator::GET_MATCH );
+			$regex_iterator = new \RegexIterator( $iterator, '/^.+\.php$/', \RecursiveRegexIterator::GET_MATCH );
 		}
 
 		$files = [];
@@ -125,6 +127,15 @@ class LegacyTemplateLocator {
 		// Ensure we have a PHP extension.
 		if ( strpos( $custom_template, '.php' ) === false ) {
 			$custom_template .= '.php';
+		}
+
+		// SECURITY: Check for directory traversal patterns in ALL cases BEFORE processing.
+		// This prevents LFI attacks via shortcode template parameters like "../../../../../../poc".
+		// Normalize slashes first to catch mixed separator bypass attempts.
+		$normalized_for_check = str_replace( [ '/', '\\' ], DIRECTORY_SEPARATOR, $custom_template );
+		if ( preg_match( '#\.\.' . preg_quote( DIRECTORY_SEPARATOR, '#' ) . '#', $normalized_for_check ) ) {
+			// Directory traversal attempt detected - do not load this template.
+			return false;
 		}
 
 		// Get allowed template directories once for reuse.

@@ -21,10 +21,13 @@ class I18N {
 	}
 
 	public function register_hooks() {
+		// Load translations early to avoid WordPress 6.7+ warnings about translations loading too early
+		// This must happen before admin_menu where translation functions are used
+		add_action( 'plugins_loaded', [ $this, 'load_textdomain' ], 10 );
 		add_action( 'init', [ $this, 'register_translation_hooks' ], 2 );
 	}
 
-	public function register_translation_hooks() {
+	public function load_textdomain() {
 		$dir = \str_replace(
 			\wp_normalize_path( WP_PLUGIN_DIR ),
 			'',
@@ -33,6 +36,9 @@ class I18N {
 
 		// Load text domain.
 		\load_plugin_textdomain( 'nggallery', false, $dir );
+	}
+
+	public function register_translation_hooks() {
 
 		// Hooks to register image, gallery, and album name & description with WPML.
 		\add_action( 'ngg_image_updated', [ $this, 'register_image_strings' ] );

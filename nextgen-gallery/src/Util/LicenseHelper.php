@@ -285,18 +285,18 @@ class LicenseHelper {
 		}
 
 		$messages = [
-			'empty_site_url'             => __( 'The site URL is missing. Please provide a valid URL.', 'nextgen-gallery' ),
-			'license_not_found'          => __( 'The license key was not found. Please verify and try again.', 'nextgen-gallery' ),
-			'license_status_expired'     => __( 'The license key has expired. Please renew your license.', 'nextgen-gallery' ),
-			'license_expired'            => __( 'The license key has expired. Please renew your license.', 'nextgen-gallery' ),
-			'license_status_disabled'    => __( 'The license key has not been activated yet. Please contact support.', 'nextgen-gallery' ),
-			'license_disabled'           => __( 'The license key has not been activated yet. Please contact support.', 'nextgen-gallery' ),
-			'license_status_revoked'     => __( 'The license key has been revoked. Please contact support.', 'nextgen-gallery' ),
-			'license_revoked'            => __( 'The license key has been revoked. Please contact support.', 'nextgen-gallery' ),
-			'license_limit_installations' => __( 'The license key has reached the maximum number of installations.', 'nextgen-gallery' ),
+			'empty_site_url'             => __( 'The site URL is missing. Please provide a valid URL.', 'nggallery' ),
+			'license_not_found'          => __( 'The license key was not found. Please verify and try again.', 'nggallery' ),
+			'license_status_expired'     => __( 'The license key has expired. Please renew your license.', 'nggallery' ),
+			'license_expired'            => __( 'The license key has expired. Please renew your license.', 'nggallery' ),
+			'license_status_disabled'    => __( 'The license key has not been activated yet. Please contact support.', 'nggallery' ),
+			'license_disabled'           => __( 'The license key has not been activated yet. Please contact support.', 'nggallery' ),
+			'license_status_revoked'     => __( 'The license key has been revoked. Please contact support.', 'nggallery' ),
+			'license_revoked'            => __( 'The license key has been revoked. Please contact support.', 'nggallery' ),
+			'license_limit_installations' => __( 'The license key has reached the maximum number of installations.', 'nggallery' ),
 		];
 
-		return $messages[ $error_code ] ?? __( 'An unknown error occurred. Please try again.', 'nextgen-gallery' );
+		return $messages[ $error_code ] ?? __( 'An unknown error occurred. Please try again.', 'nggallery' );
 	}
 }
 

@@ -137,6 +137,17 @@ class SettingsREST {
 				'permission_callback' => [ self::class, 'check_edit_permission' ],
 			]
 		);
+
+		// Get system information.
+		register_rest_route(
+			'imagely/v1',
+			'/system-info',
+			[
+				'methods'             => 'GET',
+				'callback'            => [ self::class, 'get_system_info' ],
+				'permission_callback' => [ self::class, 'check_read_permission' ],
+			]
+		);
 	}
 
 	/**
@@ -1006,5 +1017,24 @@ class SettingsREST {
 				[ 'status' => 500 ]
 			);
 		}
+	}
+
+	/**
+	 * Get system information
+	 *
+	 * @return WP_REST_Response System information
+	 */
+	public static function get_system_info() {
+		// Use the existing method from Admin\App class
+		if ( class_exists( '\Imagely\NGG\Admin\App' ) ) {
+			$system_info = \Imagely\NGG\Admin\App::get_system_info();
+			return new WP_REST_Response( $system_info, 200 );
+		}
+
+		return new WP_Error(
+			'system_info_unavailable',
+			__( 'System information is not available', 'nggallery' ),
+			[ 'status' => 500 ]
+		);
 	}
 }

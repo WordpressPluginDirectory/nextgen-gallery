@@ -25,6 +25,18 @@ class Gallery extends \WP_Widget {
 
 		parent::__construct( 'ngg-images', \__( 'NextGEN Widget', 'nggallery' ), $widget_ops );
 
+		// Add templates directory to legacy template locator so Widget templates can be found.
+		// The regex in LegacyTemplateLocator is case-sensitive, so View-based templates like
+		// Widget/Display/Gallery.php won't appear in the legacy template dropdown (they use
+		// uppercase naming, while legacy templates use lowercase like gallery.php).
+		\add_filter(
+			'ngg_legacy_template_directories',
+			function ( $dirs ) {
+				$dirs['NextGEN Templates'] = NGG_PLUGIN_DIR . 'templates' . DIRECTORY_SEPARATOR;
+				return $dirs;
+			}
+		);
+
 		// Determine what widgets will exist in the future, create their displayed galleries, enqueue their resources,
 		// and cache the resulting displayed gallery for later rendering to avoid the ID changing due to misc attributes
 		// in $args being different now and at render time ($args is sidebar information that is not relevant).
@@ -200,8 +212,6 @@ class Gallery extends \WP_Widget {
 		// Used later.
 		$renderer = Renderer::get_instance();
 
-		$view = new View( 'Widget/Display/Gallery', [], 'photocrati-widget#display_gallery' );
-
 		// IE8 webslice support if needed.
 		if ( ! empty( $instance['webslice'] ) ) {
 			$before_widget .= '<div class="hslice" id="ngg-webslice">';
@@ -210,10 +220,13 @@ class Gallery extends \WP_Widget {
 		}
 
 		$source   = ( $instance['type'] == 'random' ? 'random_images' : 'recent' );
-		$template = ! empty( $instance['template'] ) ? $instance['template'] : $view->find_template_abspath( 'Widget/Display/Gallery', 'photocrati-widget#display_gallery' );
+		$template = ! empty( $instance['template'] ) ? $instance['template'] : 'Widget/Display/Gallery';
+
+		// Ensure widget_id is available
+		$widget_id_slug = isset( $args['widget_id'] ) && ! empty( $args['widget_id'] ) ? $args['widget_id'] : 'ngg-widget';
 
 		$params = [
-			'slug'                         => 'widget-' . $args['widget_id'],
+			'slug'                         => 'widget-' . $widget_id_slug,
 			'source'                       => $source,
 			'display_type'                 => NGG_BASIC_THUMBNAILS,
 			'images_per_page'              => $instance['items'],
@@ -304,13 +317,15 @@ class Gallery extends \WP_Widget {
 	 * @param array $instance
 	 */
 	public function widget( $args, $instance ) {
+		$widget_id = ! empty( $args['widget_id'] ) ? $args['widget_id'] : ( ! empty( $this->id ) ? $this->id : 'ngg-images-' . $this->number );
+
 		// This displayed gallery is created dynamically at runtime.
-		if ( empty( self::$displayed_gallery_ids[ $args['widget_id'] ] ) ) {
+		if ( empty( self::$displayed_gallery_ids[ $widget_id ] ) ) {
 			$displayed_gallery                                       = $this->get_displayed_gallery( $args, $instance );
 			self::$displayed_gallery_ids[ $displayed_gallery->id() ] = $displayed_gallery;
 		} else {
 			// The displayed gallery was created during the action wp_enqueue_resources and was cached to avoid ID conflicts.
-			$displayed_gallery = self::$displayed_gallery_ids[ $args['widget_id'] ];
+			$displayed_gallery = self::$displayed_gallery_ids[ $widget_id ];
 		}
 
 		print Renderer::get_instance()->display_images( $displayed_gallery );

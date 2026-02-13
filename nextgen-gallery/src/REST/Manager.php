@@ -21,6 +21,7 @@ use Imagely\NGG\REST\DataMappers\LicenseREST;
 use Imagely\NGG\REST\DataMappers\NotificationsREST;
 use Imagely\NGG\REST\DataMappers\PluginManagementREST;
 use Imagely\NGG\REST\DataMappers\TagREST;
+use Imagely\NGG\REST\ConvertGallery\ConvertGalleryREST;
 
 /**
  * REST API Manager
@@ -57,5 +58,8 @@ class Manager {
 
 		$license = new LicenseREST();
 		$license->register_routes();
+
+		// Register the Convert Gallery REST endpoints.
+		ConvertGalleryREST::register_routes();
 	}
 }

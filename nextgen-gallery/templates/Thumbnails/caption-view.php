@@ -47,7 +47,7 @@ if ( ! intval( $ajax_pagination ) ) {
 									data-thumbnail="<?php echo esc_attr( $storage->get_image_url( $image, 'thumb' ) ); ?>"
 									data-image-id="<?php echo esc_attr( $image->{$image->id_field} ); ?>"
 									data-title="<?php echo esc_attr( $image->alttext ); ?>"
-									data-description="<?php echo esc_attr( stripslashes( $image->description ) ); ?>"
+									data-description="<?php echo esc_attr( stripslashes( $image->description ?? '' ) ); ?>"
 									data-image-slug="<?php echo esc_attr( $image->image_slug ); ?>"
 									<?php echo $effect_code; ?>>
 									<img title="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->alttext ) ); ?>"

@@ -2127,7 +2127,7 @@ class C_Gallery_Storage extends C_Component
                     $width = $dst_w;
                     $height = $dst_h;
                 } else {
-                    $result['error'] = new WP_Error('error_getting_dimensions', __('Could not calculate resized image dimensions'));
+                    $result['error'] = new WP_Error('error_getting_dimensions', __('Could not calculate resized image dimensions', 'nggallery'));
                 }
             } else {
                 $result['method'] = 'nextgen';
@@ -3366,7 +3366,7 @@ class C_Gallery_Storage extends C_Component
                 if (($dimensions = getimagesize($new_image_abspath)) !== false) {
                     if (isset($dimensions[0]) && intval($dimensions[0]) > 30000 || isset($dimensions[1]) && intval($dimensions[1]) > 30000) {
                         unlink($new_image_abspath);
-                        throw new E_UploadException(__('Image file too large. Maximum image dimensions supported are 30k x 30k.'));
+                        throw new E_UploadException(__('Image file too large. Maximum image dimensions supported are 30k x 30k.', 'nggallery'));
                     }
                 }
             }
@@ -3393,7 +3393,7 @@ class C_Gallery_Storage extends C_Component
                         if (!empty($exception)) {
                             $exception .= '<br/>';
                         }
-                        $exception .= __(sprintf('Error while uploading %s: %s', $filename, $error), 'nextgen-gallery');
+                        $exception .= __(sprintf('Error while uploading %s: %s', $filename, $error), 'nggallery');
                     }
                 }
                 throw new E_UploadException($exception);

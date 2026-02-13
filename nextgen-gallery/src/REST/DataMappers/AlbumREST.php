@@ -24,6 +24,31 @@ use Imagely\NGG\DataMappers\Image as ImageMapper;
  */
 class AlbumREST {
 
+	/**
+	 * Sanitize per_page parameter to allow -1 for "all"
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return int
+	 */
+	public static function sanitize_per_page( $value ) {
+		$int_value = (int) $value;
+		// Allow -1 for "all", otherwise ensure positive
+		return ( -1 === $int_value ) ? -1 : absint( $int_value );
+	}
+
+	/**
+	 * Sanitize pageid parameter - converts null/empty to 0 (not linked)
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return int
+	 */
+	public static function sanitize_pageid( $value ) {
+		// null, empty string, or 0 all mean "not linked"
+		if ( null === $value || '' === $value || 0 === $value ) {
+			return 0;
+		}
+		return absint( $value );
+	}
 
 	/**
 	 * Register the REST API routes for albums
@@ -56,11 +81,11 @@ class AlbumREST {
 						'default'           => 'ASC',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
-					'per_page'          => [
-						'type'              => 'integer',
-						'default'           => 25,
-						'sanitize_callback' => 'absint',
-					],
+				'per_page'          => [
+					'type'              => 'integer',
+					'default'           => 25,
+					'sanitize_callback' => [ self::class, 'sanitize_per_page' ],
+				],
 					'page'              => [
 						'type'              => 'integer',
 						'default'           => 1,
@@ -124,7 +149,7 @@ class AlbumREST {
 					'pageid' => [
 						'required'          => false,
 						'type'              => 'integer',
-						'sanitize_callback' => 'absint',
+					'sanitize_callback' => [ self::class, 'sanitize_pageid' ],
 					],
 					'display_type'          => [
 						'required'          => false,
@@ -182,7 +207,13 @@ class AlbumREST {
 					'pageid' => [
 						'required'          => false,
 						'type'              => 'integer',
-						'sanitize_callback' => 'absint',
+					'sanitize_callback' => [ self::class, 'sanitize_pageid' ],
+				],
+				'sortorder' => [
+					'required'          => false,
+					'type'              => 'array',
+					'sanitize_callback' => [ self::class, 'sanitize_sortorder' ],
+					'validate_callback' => [ self::class, 'validate_sortorder' ],
 					],
 					'display_type'          => [
 						'required'          => false,
@@ -383,7 +414,13 @@ class AlbumREST {
 		}
 
 		// Get pagination parameters.
-		$per_page = $request->get_param( 'per_page' );
+		$per_page_param = (int) $request->get_param( 'per_page' );
+		// Normalize all negative values to -1 (treated as "all") for consistency.
+		if ( $per_page_param < 0 ) {
+			$per_page_param = -1;
+		}
+		// Handle -1 as "all" (WordPress standard for unlimited pagination)
+		$per_page = ( -1 === $per_page_param ) ? PHP_INT_MAX : $per_page_param;
 		$page     = $request->get_param( 'page' );
 		$offset   = ( $page - 1 ) * $per_page;
 
@@ -471,8 +508,6 @@ class AlbumREST {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public static function create_album( WP_REST_Request $request ) {
-		error_log( '🚀 create_album called with params: ' . print_r( $request->get_params(), true ) );
-
 		$mapper = AlbumMapper::get_instance();
 		$album  = new Album();
 
@@ -488,8 +523,6 @@ class AlbumREST {
 			$album->previewpic = self::get_first_gallery_thumbnail( $album->sortorder );
 		}
 
-		error_log( '📝 Album object before save: ' . print_r( $album, true ) );
-
 		// Handle display type fields
 		if ( $request->has_param( 'display_type' ) ) {
 			$album->display_type = $request->get_param( 'display_type' );
@@ -501,11 +534,7 @@ class AlbumREST {
 		try {
 			// Ensure defaults are set before saving (including slug generation)
 			$mapper->set_defaults( $album );
-
-			error_log( '💾 Attempting to save album...' );
 			$result = $mapper->save( $album );
-			error_log( '✅ Save result: ' . print_r( $result, true ) );
-			error_log( '🆔 Album ID after save: ' . $album->id );
 
 			return new WP_REST_Response(
 				[
@@ -515,8 +544,6 @@ class AlbumREST {
 				201
 			);
 		} catch ( \Exception $e ) {
-			error_log( '❌ Save failed with exception: ' . $e->getMessage() );
-			error_log( '❌ Exception trace: ' . $e->getTraceAsString() );
 			return new WP_Error(
 				'save_failed',
 				$e->getMessage(),
@@ -823,14 +850,35 @@ class AlbumREST {
 			return [];
 		}
 
-		return array_map( function( $item ) {
-			// If it starts with 'a', it's an album - keep the prefix and sanitize the ID
+		$gallery_mapper = GalleryMapper::get_instance();
+		$album_mapper   = AlbumMapper::get_instance();
+		$valid_items    = [];
+
+		foreach ( $sortorder as $item ) {
+			// Check if it's an album (starts with 'a')
 			if ( is_string( $item ) && strpos( $item, 'a' ) === 0 ) {
-				return 'a' . absint( substr( $item, 1 ) );
+				$album_id = absint( substr( $item, 1 ) );
+				if ( $album_id > 0 ) {
+					// Verify album exists before adding to sortorder
+					$album = $album_mapper->find( $album_id );
+					if ( $album ) {
+						$valid_items[] = 'a' . $album_id;
+					}
+				}
+			} else {
+				// It's a gallery ID
+				$gallery_id = absint( $item );
+				if ( $gallery_id > 0 ) {
+					// Verify gallery exists before adding to sortorder
+					$gallery = $gallery_mapper->find( $gallery_id );
+					if ( $gallery ) {
+						$valid_items[] = $gallery_id;
+					}
+				}
 			}
-			// Otherwise it's a gallery ID - convert to integer
-			return absint( $item );
-		}, $sortorder );
+		}
+
+		return $valid_items;
 	}
 
 	/**
@@ -847,40 +895,7 @@ class AlbumREST {
 			);
 		}
 
-		// Validate each gallery and album ID exists
-		$gallery_mapper = GalleryMapper::get_instance();
-		$album_mapper = AlbumMapper::get_instance();
-
-		foreach ( $sortorder as $item ) {
-			// Check if it's an album (starts with 'a')
-			if ( is_string( $item ) && strpos( $item, 'a' ) === 0 ) {
-				$album_id = absint( substr( $item, 1 ) );
-				if ( $album_id > 0 ) {
-					$album = $album_mapper->find( $album_id );
-					if ( ! $album ) {
-						return new WP_Error(
-							'invalid_album',
-							/* translators: %d: Album ID */
-							sprintf( __( 'Album with ID %d not found', 'nggallery' ), $album_id )
-						);
-					}
-				}
-			} else {
-				// It's a gallery
-				$gallery_id = absint( $item );
-				if ( $gallery_id > 0 ) {
-					$gallery = $gallery_mapper->find( $gallery_id );
-					if ( ! $gallery ) {
-						return new WP_Error(
-							'invalid_gallery_id',
-							/* translators: %d: Gallery ID */
-							sprintf( __( 'Gallery with ID %d does not exist', 'nggallery' ), $gallery_id )
-						);
-					}
-				}
-			}
-		}
-
+		// Basic validation passed
 		return true;
 	}
 }

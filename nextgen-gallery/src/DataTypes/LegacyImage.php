@@ -171,7 +171,7 @@ class LegacyImage {
 				return $this->_cache['imageURL'];
 
 			case 'linktitle':
-				$this->_cache['linktitle'] = htmlspecialchars( stripslashes( $this->__get( 'description' ) ) );
+				$this->_cache['linktitle'] = htmlspecialchars( stripslashes( $this->__get( 'description' ) ?? '' ) );
 				return $this->_cache['linktitle'];
 
 			case 'name':
@@ -254,7 +254,7 @@ class LegacyImage {
 
 			case 'thumbHTML':
 				$tmp                       = '<a href="' . $this->__get( 'imageURL' ) . '" title="'
-					. htmlspecialchars( stripslashes( $this->__get( 'description' ) ) )
+					. htmlspecialchars( stripslashes( $this->__get( 'description' ) ?? '' ) )
 					. '" ' . $this->get_thumbcode( $this->__get( 'name' ) ) . '>' . '<img alt="' . $this->__get( 'alttext' )
 					. '" src="' . $this->thumbURL . '"/>' . '</a>';
 				$this->_cache['href']      = $tmp;
@@ -310,7 +310,7 @@ class LegacyImage {
 				return $this->__get( 'thumbnailURL' );
 
 			case 'title':
-				$this->_cache['title'] = stripslashes( $this->__get( 'name' ) );
+				$this->_cache['title'] = stripslashes( $this->__get( 'name' ) ?? '' );
 				return $this->_cache['title'];
 
 			case 'url':

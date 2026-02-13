@@ -221,7 +221,7 @@ class nggPostThumbnail {
 			if ( !empty( $thumbnail_html ) ) {
 				$ajax_nonce = wp_create_nonce( "set_post_thumbnail-$post_ID" );
 				$content    = sprintf( $set_thumbnail_link, $thumbnail_html );
-				$content   .= '<p class="hide-if-no-js"><a href="#" id="remove-post-thumbnail" onclick="WPRemoveThumbnail(\'' . $ajax_nonce . '\');return false;">' . esc_html__( 'Remove featured image' ) . '</a></p>';
+				$content   .= '<p class="hide-if-no-js"><a href="#" id="remove-post-thumbnail" onclick="WPRemoveThumbnail(\'' . $ajax_nonce . '\');return false;">' . esc_html__( 'Remove featured image' , 'nggallery') . '</a></p>';
 			}
 		}
 

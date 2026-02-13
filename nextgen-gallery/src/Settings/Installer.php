@@ -139,6 +139,9 @@ class Installer {
 
 			// Admin table pagination.
 			'admin_table_per_page'              => 20, // Default number of items per page in admin tables (albums, galleries, tags, orders, etc.).
+
+			// Item details pagination.
+			'item_details_per_page'              => 50, // Default number of items per page in items details of gallery and album.
 		]
 		);
 

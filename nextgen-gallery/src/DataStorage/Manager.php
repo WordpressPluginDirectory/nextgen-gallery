@@ -861,14 +861,21 @@ class Manager {
 			return;
 		}
 
+		// Some tools write non-standard EXIF orientation values (e.g. 0). We only support 3/6/8 (rotate only).
+		// Ignore everything else to avoid unnecessary re-processing and potential failures on certain servers.
+		$orientation = (int) $exif['Orientation'];
+		if ( ! in_array( $orientation, [ 3, 6, 8 ], true ) ) {
+			return;
+		}
+
 		$degree = 0;
-		if ( $exif['Orientation'] == 3 ) {
+		if ( $orientation == 3 ) {
 			$degree = 180;
 		}
-		if ( $exif['Orientation'] == 6 ) {
+		if ( $orientation == 6 ) {
 			$degree = 90;
 		}
-		if ( $exif['Orientation'] == 8 ) {
+		if ( $orientation == 8 ) {
 			$degree = 270;
 		}
 
@@ -2098,15 +2105,22 @@ class Manager {
 	public function import_image_file( $dst_gallery, $image_abspath, $filename = null, $image = false, $override = false, $move = false ) {
 		$image_abspath = wp_normalize_path( $image_abspath );
 
+		// Image processing (EXIF rotation, resize, thumbnail generation) can be memory intensive.
+		// In many environments WP_MEMORY_LIMIT can be low (e.g. 40M) even when PHP memory is higher.
+		// Ask WordPress to raise memory for image operations when possible.
+		if ( function_exists( 'wp_raise_memory_limit' ) ) {
+			wp_raise_memory_limit( 'image' );
+		}
+
 		if ( $this->is_current_user_over_quota() ) {
 			$message = sprintf( __( 'Sorry, you have used your space allocation. Please delete some files to upload more files.', 'nggallery' ) );
 			throw new \E_NoSpaceAvailableException( esc_html( $message ) );
 		}
 
-		// Do we have a gallery to import to?
-		if ( $dst_gallery ) {
-			// Get the gallery abspath. This is where we will put the image files.
-			$gallery_abspath = $this->get_gallery_abspath( $dst_gallery );
+			// Do we have a gallery to import to?
+			if ( $dst_gallery ) {
+				// Get the gallery abspath. This is where we will put the image files.
+				$gallery_abspath = $this->get_gallery_abspath( $dst_gallery );
 
 			// If we can't write to the directory, then there's no point in continuing.
 			if ( ! @file_exists( $gallery_abspath ) ) {
@@ -2154,7 +2168,7 @@ class Manager {
 					if ( ( isset( $dimensions[0] ) && intval( $dimensions[0] ) > 30000 )
 						|| ( isset( $dimensions[1] ) && intval( $dimensions[1] ) > 30000 ) ) {
 						unlink( $new_image_abspath );
-						throw new \E_UploadException( esc_html( __( 'Image file too large. Maximum image dimensions supported are 30k x 30k.' ) ) );
+						throw new \E_UploadException( esc_html( __( 'Image file too large. Maximum image dimensions supported are 30k x 30k.' , 'nggallery') ) );
 					}
 				}
 			}
@@ -2185,7 +2199,7 @@ class Manager {
 							if ( ! empty( $exception ) ) {
 								$exception .= '<br/>';
 							}
-							$exception .= __( sprintf( 'Error while uploading %s: %s', $filename, $error ), 'nextgen-gallery' );
+							$exception .= __( sprintf( 'Error while uploading %s: %s', $filename, $error ), 'nggallery' );
 						}
 					}
 					throw new \E_UploadException( $exception );
@@ -2446,7 +2460,16 @@ class Manager {
 	 * @return string
 	 */
 	public function get_image_abspath( $image, $size = 'full', $check_existence = false ) {
-		$image_id = is_numeric( $image ) ? $image : $image->pid;
+		// Handle both object and array formats, and numeric IDs
+		if ( is_numeric( $image ) ) {
+			$image_id = $image;
+		} elseif ( is_array( $image ) ) {
+			$image_id = isset( $image['pid'] ) ? $image['pid'] : ( isset( $image['id'] ) ? $image['id'] : 0 );
+		} elseif ( is_object( $image ) && isset( $image->pid ) ) {
+			$image_id = $image->pid;
+		} else {
+			$image_id = 0;
+		}
 		$size     = $this->normalize_image_size_name( $size );
 		$key      = strval( $image_id ) . $size;
 
@@ -2466,7 +2489,16 @@ class Manager {
 	 */
 	public function get_image_url( $image, $size = 'full' ) {
 		$retval   = null;
-		$image_id = is_numeric( $image ) ? $image : $image->pid;
+		// Handle both object and array formats, and numeric IDs
+		if ( is_numeric( $image ) ) {
+			$image_id = $image;
+		} elseif ( is_array( $image ) ) {
+			$image_id = isset( $image['pid'] ) ? $image['pid'] : ( isset( $image['id'] ) ? $image['id'] : 0 );
+		} elseif ( is_object( $image ) && isset( $image->pid ) ) {
+			$image_id = $image->pid;
+		} else {
+			$image_id = 0;
+		}
 		$key      = strval( $image_id ) . $size;
 		$success  = true;
 
@@ -2515,8 +2547,17 @@ class Manager {
 	 * Flushes the cache we use for path/url calculation for images
 	 */
 	public function flush_image_path_cache( $image, $size ) {
-		$image = is_numeric( $image ) ? $image : $image->pid;
-		$key   = strval( $image ) . $size;
+		// Handle both object and array formats, and numeric IDs
+		if ( is_numeric( $image ) ) {
+			$image_id = $image;
+		} elseif ( is_array( $image ) ) {
+			$image_id = isset( $image['pid'] ) ? $image['pid'] : ( isset( $image['id'] ) ? $image['id'] : 0 );
+		} elseif ( is_object( $image ) && isset( $image->pid ) ) {
+			$image_id = $image->pid;
+		} else {
+			$image_id = 0;
+		}
+		$key   = strval( $image_id ) . $size;
 
 		unset( self::$image_abspath_cache[ $key ] );
 		unset( self::$image_url_cache[ $key ] );

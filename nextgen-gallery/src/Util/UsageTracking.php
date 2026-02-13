@@ -236,7 +236,7 @@ class UsageTracking {
 
 		$schedules['weekly'] = [
 			'interval' => 604800,
-			'display'  => __( 'Once Weekly', 'nextgen-gallery' ),
+			'display'  => __( 'Once Weekly', 'nggallery' ),
 		];
 
 		return $schedules;

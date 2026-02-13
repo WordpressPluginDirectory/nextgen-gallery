@@ -21,7 +21,7 @@
                             data-fullsize='" . esc_attr( $gallery->previewpic_fullsized_url ) . "'
                             data-thumbnail='" . esc_attr( $gallery->previewurl ) . "'
                             data-title='" . esc_attr( $gallery->previewpic_image->alttext ) . "'
-                            data-description='" . esc_attr( stripslashes( $gallery->previewpic_image->description ) ) . "'
+                            data-description='" . esc_attr( stripslashes( $gallery->previewpic_image->description ?? '' ) ) . "'
                             data-image-id='" . esc_attr( $gallery->previewpic ) . "'";
 				}
 			} else {

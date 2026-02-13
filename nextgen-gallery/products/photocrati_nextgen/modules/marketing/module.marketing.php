@@ -234,7 +234,7 @@ class M_Marketing extends C_Base_Module {
 					'unlock_url'                 => esc_url( $this->get_utm_link( 'https://enviragallery.com/pricing', 'listgallery', 'unlock' ) ),
 					'unlock_title'               => esc_html__( 'Unlock All Features', 'nggallery' ),
 					'unlock_text'                => esc_html__( 'Upgrade to Pro to get access to Albums, Protected Images,  Video Galleries, and more!', 'nggallery' ),
-					'unlock_btn'                 => esc_html__( 'Unlock Gallery Features ' ),
+					'unlock_btn'                 => esc_html__( 'Unlock Gallery Features ', 'nggallery' ),
 				]
 			);
 

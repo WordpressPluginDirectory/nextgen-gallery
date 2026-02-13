@@ -37,6 +37,35 @@ class ImageREST {
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
 					],
+					'per_page'   => [
+						'type'              => 'integer',
+						'default'           => 100,
+						'sanitize_callback' => function( $value ) {
+							// Allow -1 for "all images", otherwise ensure minimum of 1
+							$int_value = (int) $value;
+							if ( $int_value < 0 ) {
+								return -1; // Normalize to -1 for "all"
+							}
+							return max( 1, $int_value );
+						},
+					],
+					'page'       => [
+						'type'              => 'integer',
+						'default'           => 1,
+						'sanitize_callback' => 'absint',
+					],
+					'orderby'    => [
+						'type'              => 'string',
+						'enum'              => [ 'sortorder', 'pid', 'filename', 'imagedate' ],
+						'default'           => 'sortorder',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'order'      => [
+						'type'              => 'string',
+						'enum'              => [ 'ASC', 'DESC' ],
+						'default'           => 'ASC',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
 				],
 			]
 		);
@@ -300,25 +329,67 @@ class ImageREST {
 	}
 
 	/**
-	 * Get all images with optional filtering.
+	 * Get all images with optional filtering and pagination.
 	 *
-	 * @param WP_REST_Request $request The request object containing gallery_id parameter.
+	 * @param WP_REST_Request $request The request object containing gallery_id, per_page, page, orderby, order parameters.
 	 * @return WP_REST_Response
 	 */
 	public static function get_images( WP_REST_Request $request ) {
+		global $wpdb;
 		$gallery_id = $request->get_param( 'gallery_id' );
 
+		// Get pagination parameters
+		$per_page_param = (int) $request->get_param( 'per_page' );
+		// Normalize all negative values to -1 (treated as "all") for consistency
+		if ( $per_page_param < 0 ) {
+			$per_page_param = -1;
+		}
+		// Handle -1 as "all" (WordPress standard for unlimited pagination)
+		$per_page = ( -1 === $per_page_param ) ? PHP_INT_MAX : $per_page_param;
+		$page     = max( 1, (int) $request->get_param( 'page' ) );
+		$offset   = ( $page - 1 ) * $per_page;
+
+		// Get ordering parameters
+		$orderby = $request->get_param( 'orderby' ) ?? 'sortorder';
+		$order   = strtoupper( $request->get_param( 'order' ) ?? 'ASC' );
+
 		$mapper = ImageMapper::get_instance();
-		$mapper->select();
+		$query  = $mapper->select();
 
 		if ( $gallery_id ) {
-			$mapper->where( [ 'galleryid = %d', $gallery_id ] );
+			$query->where( [ 'galleryid = %d', $gallery_id ] );
 		}
 
-		$images      = $mapper->run_query();
+		// Calculate total items for pagination
+		$count_query = $mapper->select();
+		if ( $gallery_id ) {
+			$count_query->where( [ 'galleryid = %d', $gallery_id ] );
+		}
+		$total_items = count( $count_query->run_query( false, false, true ) );
+
+		// Add ordering and pagination
+		$query->order_by( $orderby, $order );
+		if ( -1 !== $per_page_param ) {
+			$query->limit( $per_page, $offset );
+		}
+
+		$images      = $query->run_query();
 		$images_data = array_map( [ self::class, 'prepare_image_for_response' ], $images );
 
-		return new WP_REST_Response( $images_data );
+		$response = new WP_REST_Response( $images_data );
+
+		// Add pagination headers
+		if ( -1 !== $per_page_param ) {
+			$total_pages = ceil( $total_items / $per_page );
+			$response->header( 'X-WP-Total', $total_items );
+			$response->header( 'X-WP-TotalPages', $total_pages );
+		} else {
+			// When returning all items, set total pages to 1
+			$response->header( 'X-WP-Total', $total_items );
+			$response->header( 'X-WP-TotalPages', 1 );
+		}
+
+		return $response;
 	}
 
 	/**
@@ -413,7 +484,28 @@ class ImageREST {
 		$gallery_id = $image->galleryid;
 
 		try {
-			$mapper->destroy( $image );
+			// Fire the action hook for other plugins to respond to image deletion
+			// This must be called BEFORE any deletion so that listening plugins can access the database record
+			do_action( 'ngg_delete_picture', $image_id, $image );
+
+			// Check if we should delete image files from filesystem
+			$settings = \Imagely\NGG\Settings\Settings::get_instance();
+			$storage  = \Imagely\NGG\DataStorage\Manager::get_instance();
+
+			if ( $settings->get( 'deleteImg' ) ) {
+				// Delete image files from filesystem and database
+				$delete_success = $storage->delete_image( $image );
+				if ( ! $delete_success ) {
+					return new WP_Error(
+						'delete_files_failed',
+						__( 'Could not delete image file(s) from disk', 'nggallery' ),
+						[ 'status' => 500 ]
+					);
+				}
+			} else {
+				// Only remove from database, keep files on disk
+				$mapper->destroy( $image );
+			}
 
 			// Check if the deleted image was the gallery's preview image
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -451,6 +543,7 @@ class ImageREST {
 					'message' => __( 'Image deleted successfully', 'nggallery' ),
 					'deleted' => true,
 					'id'      => $image_id,
+					'files_deleted' => (bool) $settings->get( 'deleteImg' ),
 				]
 			);
 		} catch ( \Exception $e ) {
@@ -540,6 +633,12 @@ class ImageREST {
 	 * @return WP_REST_Response
 	 */
 	public static function import_media_library( WP_REST_Request $request ) {
+		// Image imports can require significant memory for decoding/resizing.
+		// In REST requests, WordPress may still be running at WP_MEMORY_LIMIT (often low).
+		if ( function_exists( 'wp_raise_memory_limit' ) ) {
+			\wp_raise_memory_limit( 'image' );
+		}
+
 		$retval          = [];
 		$created_gallery = false;
 		$gallery_id      = (int) $request->get_param( 'gallery_id' );
@@ -661,6 +760,12 @@ class ImageREST {
 	 * @return WP_REST_Response
 	 */
 	public static function upload_image( WP_REST_Request $request ) {
+		// Image uploads can require significant memory for decoding/resizing.
+		// In REST requests, WordPress may still be running at WP_MEMORY_LIMIT (often low).
+		if ( function_exists( 'wp_raise_memory_limit' ) ) {
+			\wp_raise_memory_limit( 'image' );
+		}
+
 		$created_gallery = false;
 		$gallery_id      = (int) $request->get_param( 'gallery_id' );
 		$gallery_name    = $request->get_param( 'gallery_name' );

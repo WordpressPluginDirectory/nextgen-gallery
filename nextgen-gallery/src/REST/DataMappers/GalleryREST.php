@@ -23,6 +23,18 @@ use Imagely\NGG\Util\Security;
  */
 class GalleryREST {
 	/**
+	 * Sanitize per_page parameter to allow -1 for "all"
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return int
+	 */
+	public static function sanitize_per_page( $value ) {
+		$int_value = (int) $value;
+		// Allow -1 for "all", otherwise ensure positive
+		return ( -1 === $int_value ) ? -1 : absint( $int_value );
+	}
+
+	/**
 	 * Register the REST API routes
 	 */
 	public static function register_routes() {
@@ -54,16 +66,16 @@ class GalleryREST {
 						'default'           => 'ASC',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
-					'per_page'          => [
-						'type'              => 'integer',
-						'default'           => 25,
-						'sanitize_callback' => 'absint',
-					],
-					'page'              => [
-						'type'              => 'integer',
-						'default'           => 1,
-						'sanitize_callback' => 'absint',
-					],
+				'per_page'          => [
+					'type'              => 'integer',
+					'default'           => 25,
+					'sanitize_callback' => [ self::class, 'sanitize_per_page' ],
+				],
+				'page'              => [
+					'type'              => 'integer',
+					'default'           => 1,
+					'sanitize_callback' => 'absint', // Keep absint for page (always positive)
+				],
 					'ecommerce_filter'  => [
 						'type'              => 'string',
 						'enum'              => [ 'enabled', 'disabled' ],
@@ -96,6 +108,32 @@ class GalleryREST {
 						'required'          => true,
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
+					],
+				],
+			]
+		);
+
+		// Get multiple galleries by IDs (batch endpoint for performance).
+		register_rest_route(
+			'imagely/v1',
+			'/galleries/batch',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ self::class, 'get_galleries_batch' ],
+				'permission_callback' => [ self::class, 'check_read_permission' ],
+				'args'                => [
+					'ids' => [
+						'required'          => true,
+						'type'              => 'array',
+						'items'             => [
+							'type' => 'integer',
+						],
+						'sanitize_callback' => function( $value ) {
+							if ( ! is_array( $value ) ) {
+								return [];
+							}
+							return array_map( 'absint', array_filter( $value ) );
+						},
 					],
 				],
 			]
@@ -311,7 +349,13 @@ class GalleryREST {
 		$order   = strtoupper( $request->get_param( 'order' ) ?? 'ASC' );
 
 		// Get pagination parameters.
-		$per_page = $request->get_param( 'per_page' );
+		$per_page_param = (int) $request->get_param( 'per_page' );
+		// Normalize all negative values to -1 (treated as "all") for consistency.
+		if ( $per_page_param < 0 ) {
+			$per_page_param = -1;
+		}
+		// Handle -1 as "all" (WordPress standard for unlimited pagination)
+		$per_page = ( -1 === $per_page_param ) ? PHP_INT_MAX : $per_page_param;
 		$page     = $request->get_param( 'page' );
 		$offset   = ( $page - 1 ) * $per_page;
 
@@ -450,6 +494,59 @@ class GalleryREST {
 		}
 
 		return new WP_REST_Response( self::prepare_gallery_for_response( $gallery ), 200 );
+	}
+
+	/**
+	 * Get multiple galleries by IDs in a single batch request (performance optimization)
+	 *
+	 * @param WP_REST_Request $request The REST request object containing array of gallery IDs.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function get_galleries_batch( WP_REST_Request $request ) {
+		$ids = $request->get_param( 'ids' );
+
+		if ( empty( $ids ) || ! is_array( $ids ) ) {
+			return new WP_Error(
+				'invalid_ids',
+				__( 'Invalid gallery IDs provided', 'nggallery' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		// Limit batch size to prevent abuse (max 100 galleries per request)
+		if ( count( $ids ) > 100 ) {
+			return new WP_Error(
+				'batch_too_large',
+				__( 'Maximum 100 galleries can be requested at once', 'nggallery' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		$mapper          = GalleryMapper::get_instance();
+		$current_user_id = get_current_user_id();
+		$can_edit_all    = Security::is_allowed( 'nextgen_edit_gallery_unowned' );
+
+		$galleries = [];
+		foreach ( $ids as $id ) {
+			$gallery = $mapper->find( $id );
+
+			if ( ! $gallery ) {
+				// Skip galleries that don't exist instead of failing entire request
+				continue;
+			}
+
+			// Check permissions for each gallery
+			$can_manage = ( (int) $current_user_id === (int) $gallery->author ) || $can_edit_all;
+
+			if ( ! $can_manage ) {
+				// Skip galleries user doesn't have permission to view
+				continue;
+			}
+
+			$galleries[] = self::prepare_gallery_for_response( $gallery );
+		}
+
+		return new WP_REST_Response( $galleries, 200 );
 	}
 
 	/**
@@ -593,10 +690,21 @@ class GalleryREST {
 		}
 
 		try {
-			$mapper->destroy( $gallery );
+			// Check if we should delete gallery files and folders from filesystem.
+			// Note: The Gallery mapper handles physical file deletion internally
+			// based on this setting; it should not control whether dependent
+			// database records are removed.
+			$settings = \Imagely\NGG\Settings\Settings::get_instance();
+			$delete_files = $settings->get( 'deleteImg' );
+
+			// Always delete gallery dependencies (images) from the database;
+			// $delete_files only affects physical file deletion logic internally.
+			$mapper->destroy( $gallery, true );
+
 			return new WP_REST_Response(
 				[
-					'message' => __( 'Gallery deleted successfully', 'nggallery' ),
+					'message'      => __( 'Gallery deleted successfully', 'nggallery' ),
+					'files_deleted' => (bool) $delete_files,
 				],
 				200
 			);
@@ -881,13 +989,13 @@ class GalleryREST {
 			'slug'                  => $gallery->slug,
 			'extras_post_id'        => $gallery->extras_post_id,
 			'parent_id'             => $gallery->parent_id ?? null,
-			'pricelist_id'          => $gallery->pricelist_id,
+			'pricelist_id'          => $gallery->pricelist_id ?? null,
 			'counter'               => $gallery->counter ?? 0,
 			'previewpic_url'        => $thumbnail ?? '',
 			'display_type'          => $gallery->display_type ?? 'photocrati-nextgen_basic_thumbnails',
-			'display_type_settings' => $gallery->display_type_settings,
-			'is_private'            => (bool) $gallery->is_private,
-			'is_ecommerce_enabled'  => $gallery->is_ecommerce_enabled,
+			'display_type_settings' => $gallery->display_type_settings ?? [],
+			'is_private'            => (bool) ($gallery->is_private ?? false),
+			'is_ecommerce_enabled'  => $gallery->is_ecommerce_enabled ?? false,
 			'date_created'          => $gallery->date_created,
 			'date_modified'         => $gallery->date_modified,
 		];

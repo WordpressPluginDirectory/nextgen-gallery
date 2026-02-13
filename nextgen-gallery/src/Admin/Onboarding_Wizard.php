@@ -198,7 +198,7 @@ class Onboarding_Wizard {
 			<title>
 				<?php
 				// translators: %s is the plugin name.
-				printf( esc_html__( '%1$s &rsaquo; Onboarding Wizard', 'nextgen-gallery' ), esc_html( 'Imagely' ) );
+				printf( esc_html__( '%1$s &rsaquo; Onboarding Wizard', 'nggallery' ), esc_html( 'Imagely' ) );
 				?>
 			</title>
 		</head>

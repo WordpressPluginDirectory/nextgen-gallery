@@ -23,6 +23,7 @@ class App {
 	public function hooks() {
 		add_action( 'admin_menu', [ $this, 'admin_menu' ] );
 		add_action( 'admin_menu', [ $this, 'add_upgrade_menu_item' ], 1000 );
+		add_action( 'admin_menu', [ $this, 'add_cdn_menu_item' ], 11 );
 		add_action( 'admin_head', [ $this, 'admin_inline_styles' ] );
 		add_action( 'admin_footer', [ $this, 'admin_sidebar_target' ] );
 	}
@@ -178,6 +179,14 @@ class App {
 			true
 		);
 
+		// Load translations for the adminApp script
+		// WordPress will automatically load the JSON file based on the script path
+		wp_set_script_translations(
+			'imagely-settings-app',
+			'nggallery',
+			NGG_PLUGIN_DIR . 'static/I18N'
+		);
+
 		wp_localize_script(
 			'imagely-settings-app',
 			'imagelyApp',
@@ -239,7 +248,6 @@ HTML;
 			'debug'                    => self::is_debug(),
 			'proTypeInstalled'         => self::get_pro_type_installed(),
 			'licenseData'              => self::get_license_data(),
-			'systemInfo'               => self::get_system_info(),
 			'enviraCdnConfig'          => self::get_cdn_config(),
 			'canAccessRolesSettings'   => self::can_access_roles_settings(),
 			'canAccessLicenseSettings' => self::can_access_license_settings(),
@@ -366,9 +374,20 @@ HTML;
 	 * @return array System information array
 	 */
 	public static function get_system_info() {
-		global $wp_version;
+		global $wp_version, $wpdb;
+
+		$settings = \Imagely\NGG\Settings\Settings::get_instance();
+
+		// Get database info
+		$db_server_info = method_exists( $wpdb, 'db_server_info' ) ? $wpdb->db_server_info() : '';
+		$mysql_type     = stripos( $db_server_info, 'mariadb' ) !== false ? 'MariaDB' : 'MySQL';
+		$mysql_version  = method_exists( $wpdb, 'db_version' ) ? $wpdb->db_version() : 'Unknown';
+
+		// Get upload directory info
+		$upload_dir = wp_upload_dir();
 
 		$system_info = [
+			// Existing fields
 			'php_version'       => phpversion(),
 			'wordpress_version' => $wp_version,
 			'memory_limit'      => ini_get( 'memory_limit' ),
@@ -377,6 +396,59 @@ HTML;
 			'plugin_version'    => defined( 'NGG_PLUGIN_VERSION' ) ? NGG_PLUGIN_VERSION : 'Unknown',
 			'gd_version'        => self::get_gd_version(),
 			'imagick_version'   => self::get_imagick_version(),
+
+			// Server Environment
+			'php_os'            => PHP_OS,
+			'php_sapi'          => php_sapi_name(),
+			'mysql_version'     => $mysql_version,
+			'mysql_type'        => $mysql_type,
+			'curl_version'      => function_exists( 'curl_version' ) ? curl_version()['version'] : 'Not available',
+			'openssl_version'   => defined( 'OPENSSL_VERSION_TEXT' ) ? OPENSSL_VERSION_TEXT : 'Not available',
+
+			// PHP Extensions
+			'exif_enabled'      => function_exists( 'exif_read_data' ) ? 'Yes' : 'No',
+			'iptc_enabled'      => function_exists( 'iptcparse' ) ? 'Yes' : 'No',
+			'mbstring_enabled'  => extension_loaded( 'mbstring' ) ? 'Yes' : 'No',
+			'zip_enabled'       => extension_loaded( 'zip' ) ? 'Yes' : 'No',
+			'fileinfo_enabled'  => extension_loaded( 'fileinfo' ) ? 'Yes' : 'No',
+
+			// PHP Configuration
+			'post_max_size'     => ini_get( 'post_max_size' ),
+			'max_execution_time' => ini_get( 'max_execution_time' ),
+			'max_input_vars'    => ini_get( 'max_input_vars' ),
+			'upload_max_filesize' => ini_get( 'upload_max_filesize' ),
+			'allow_url_fopen'   => ini_get( 'allow_url_fopen' ) ? 'Yes' : 'No',
+
+			// WordPress Configuration
+			'wp_debug'          => defined( 'WP_DEBUG' ) && WP_DEBUG ? 'Yes' : 'No',
+			'wp_debug_log'      => defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ? 'Yes' : 'No',
+			'wp_memory_limit'   => defined( 'WP_MEMORY_LIMIT' ) ? WP_MEMORY_LIMIT : 'Not set',
+			'site_url'          => site_url(),
+			'home_url'          => home_url(),
+			'is_multisite'      => is_multisite() ? 'Yes' : 'No',
+			'active_theme'      => wp_get_theme()->get( 'Name' ) . ' ' . wp_get_theme()->get( 'Version' ),
+
+			// NextGen Specific Settings
+			'ngg_options_version' => get_option( 'ngg_options_version', 'Not set' ),
+			'image_library_preference' => $settings->get( 'imgLibrary', 'gd' ),
+			'thumbnail_quality' => $settings->get( 'thumbquality', '100' ),
+			'backup_images'     => $settings->get( 'imgBackup', false ) ? 'Yes' : 'No',
+			'galleries_count'   => wp_count_posts( 'ngg_gallery' )->publish ?? 0,
+			'images_count'      => $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}ngg_pictures" ) ?? 0,
+
+			// Server Paths
+			'wp_content_dir'    => WP_CONTENT_DIR,
+			'upload_dir'        => $upload_dir['basedir'],
+			'ngg_gallery_path'  => $settings->get( 'gallerypath', 'Not set' ),
+
+			// Additional Settings
+			'timezone'          => wp_timezone_string(),
+			'locale'            => get_locale(),
+			'permalink_structure' => get_option( 'permalink_structure', 'Default' ),
+
+			// NextGen Legacy Settings
+			'show_legacy_admin_pages' => $settings->get( 'ngg_show_old_settings', false ) ? 'Yes' : 'No',
+			'activate_legacy_block' => $settings->get( 'ngg_installation_type', 'fresh' ) === 'existing' ? 'Yes' : 'No',
 		];
 
 		return $system_info;
@@ -529,6 +601,25 @@ HTML;
 			$submenu['imagely'][ $upgrade_link_position ][] = 'imagely-sidebar-upgrade-pro';
 		}
 		// phpcs:enable WordPress.WP.GlobalVariablesOverride.Prohibited
+	}
+
+	/**
+	 * Add CDN menu item.
+	 *
+	 * @return void
+	 */
+	public function add_cdn_menu_item() {
+		global $submenu;
+		$utm = '?utm_source=imagely&utm_medium=admin-menu&utm_campaign=imagely-cdn&utm_content=' . NGG_PLUGIN_VERSION;
+		// Only add if the submenu exists.
+		if ( isset( $submenu['imagely'] ) ) {
+			$submenu['imagely'][] = [
+				// Use HTML in the menu title, but be aware some WP versions may not render it.
+				'Imagely CDN <span class="imagely_cdn_new_badge">NEW</span>',
+				'manage_options',
+				'https://www.imagely.com/cdn/' . $utm,
+			];
+		}
 	}
 
 	/**

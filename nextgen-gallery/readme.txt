@@ -2,10 +2,10 @@
 Contributors: photocrati, imagely
 Tags: gallery, wordpress gallery plugin, photo gallery, image gallery, slideshow
 Requires at least: 5.5.4
-Stable tag: 4.0.3
+Stable tag: 4.0.5
 Tested up to: 6.9
 License: GPLv3
-Requires PHP: 7.0
+Requires PHP: 7.4
 
 The most popular gallery plugin that lets you create galleries and albums in seconds.
 
@@ -196,6 +196,13 @@ For more information, feel free to visit the official website for the NextGEN Ga
 
 
 == Changelog ==
+
+= 4.0.5 - 02.12.2025 =
+* Fixed: Unresolved template.
+* Added: Convert WordPress galleries to Imagely — convert a single gallery from the block editor ("Convert to Imagely Gallery" in the sidebar) or bulk convert from Imagely → Settings → Convert Galleries; supports classic [gallery] shortcodes and Gutenberg Gallery blocks; preserves image metadata and backs up original content before conversion.
+* Fixed: Legacy Template dropdown no longer shows internal template files; only valid legacy templates appear in the list.
+* Fixed: Imagely Widget displays correctly again after legacy template dropdown improvements.
+* Improved: PHP 8.1+ compatibility; resolved deprecation warnings when previewing galleries or using legacy templates with empty image or gallery descriptions.
 
 = v4.0.3 - 12.18.2025 =
 • Added: REST endpoint to scan a gallery folder and import newly added images, and a client hook to trigger it.

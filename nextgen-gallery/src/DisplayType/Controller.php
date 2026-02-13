@@ -439,15 +439,16 @@ class Controller {
 		}
 
 		// find our gallery to build the new one on.
-		$orig_gallery = $gallery_map->find( current( $picture_list->container )->galleryid );
+		$current_image = current( $picture_list->container );
+		$orig_gallery  = $current_image ? $gallery_map->find( $current_image->galleryid ) : null;
 
 		// create the 'gallery' object.
 		$gallery                    = new \stdclass();
 		$gallery->ID                = $displayed_gallery->id();
-		$gallery->name              = stripslashes( $orig_gallery->name );
-		$gallery->title             = stripslashes( $orig_gallery->title );
-		$gallery->description       = \html_entity_decode( \stripslashes( $orig_gallery->galdesc ) );
-		$gallery->pageid            = $orig_gallery->pageid;
+		$gallery->name              = $orig_gallery ? stripslashes( $orig_gallery->name ?? '' ) : '';
+		$gallery->title             = $orig_gallery ? stripslashes( $orig_gallery->title ?? '' ) : '';
+		$gallery->description       = $orig_gallery ? html_entity_decode( stripslashes( $orig_gallery->galdesc ?? '' ) ) : '';
+		$gallery->pageid            = $orig_gallery ? ( $orig_gallery->pageid ?? 0 ) : 0;
 		$gallery->anchor            = 'ngg-gallery-' . $gallery_id . '-' . $current_page;
 		$gallery->displayed_gallery = &$displayed_gallery;
 		$gallery->columns           = @intval( $displayed_gallery->display_settings['number_of_columns'] );
