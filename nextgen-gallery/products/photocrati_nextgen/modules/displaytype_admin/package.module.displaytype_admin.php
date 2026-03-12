@@ -117,10 +117,17 @@ class A_NextGen_Basic_Extended_Album_Form extends Mixin_NextGen_Basic_Album_Form
     }
 }
 /**
+ * Mixin for display type form.
+ *
  * @mixin C_Form
  */
 class Mixin_Display_Type_Form extends Mixin
 {
+    /**
+     * Model instance.
+     *
+     * @var object|null
+     */
     public $_model = null;
     public function initialize()
     {
@@ -159,8 +166,8 @@ class Mixin_Display_Type_Form extends Mixin
     /**
      * Returns the name of the display type. Sub-class should override
      *
-     * @throws Exception
-     * @return string
+     * @throws Exception When method is not implemented
+     * @return void
      */
     public function get_display_type_name()
     {
@@ -186,7 +193,7 @@ class Mixin_Display_Type_Form extends Mixin
      */
     public function get_title()
     {
-        return __($this->object->get_model()->title, 'nggallery');
+        return $this->object->get_model()->title;
     }
     /**
      * Saves the settings for the display type
@@ -304,6 +311,8 @@ class Mixin_Display_Type_Form extends Mixin
     }
 }
 /**
+ * SinglePicture form adapter.
+ *
  * @mixin C_Form
  */
 class A_NextGen_Basic_SinglePic_Form extends Mixin_Display_Type_Form
@@ -466,6 +475,8 @@ class A_NextGen_Basic_Slideshow_Form extends Mixin_Display_Type_Form
     }
 }
 /**
+ * Tagcloud form adapter.
+ *
  * @mixin C_Form
  */
 class A_NextGen_Basic_Tagcloud_Form extends Mixin_Display_Type_Form
@@ -497,6 +508,7 @@ class A_NextGen_Basic_Tagcloud_Form extends Mixin_Display_Type_Form
         $mapper = \Imagely\NGG\DataMappers\DisplayType::get_instance();
         $display_types = $mapper->find_all();
         foreach ($display_types as $dt) {
+            // phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
             if (in_array($dt->name, $skip_types)) {
                 continue;
             }
@@ -578,7 +590,8 @@ class A_NextGen_Basic_Template_Form extends Mixin
     }
     public function enqueue_static_resources()
     {
-        wp_enqueue_style('ngg_template_settings', $this->get_static_url('imagely-displaytype_admin#ngg_template_settings.css'));
+        wp_enqueue_style('ngg_template_settings', $this->get_static_url('imagely-displaytype_admin#ngg_template_settings.css'), [], NGG_SCRIPT_VERSION);
+        // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.NotInFooter
         wp_enqueue_script('ngg_template_settings', $this->get_static_url('imagely-displaytype_admin#ngg_template_settings.js'), ['ngg_select2'], true);
         wp_localize_script('ngg_template_settings', 'ngg_template_settings', ['placeholder_text' => __('No template selected', 'nggallery')]);
     }
@@ -695,6 +708,8 @@ class A_NextGen_Basic_Compact_Album_Form extends Mixin_NextGen_Basic_Album_Form
     }
 }
 /**
+ * ImageBrowser form adapter.
+ *
  * @mixin C_Form
  */
 class A_NextGen_Basic_ImageBrowser_Form extends Mixin_Display_Type_Form

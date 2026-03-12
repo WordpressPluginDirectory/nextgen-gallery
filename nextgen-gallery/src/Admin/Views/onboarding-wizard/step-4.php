@@ -11,7 +11,7 @@ use Imagely\NGG\Admin\Onboarding_Wizard;
 $onboarding = new Onboarding_Wizard();
 
 // Check if license key is already verified.
-$ngg_pro_key = get_option('photocrati_license_default', null);
+$ngg_pro_key = get_option( 'photocrati_license_default', null );
 ?>
 <div class="nextgen-gallery-onboarding-form-step nextgen-gallery-wizard-license-key" id="summary">
 	<div class="nextgen-gallery-onboarding-wizard-body">
@@ -28,7 +28,7 @@ $ngg_pro_key = get_option('photocrati_license_default', null);
 				<div class="nextgen-gallery-onboarding-description">
 
 					<?php
-					// Translators: %s is the license type.
+					/* translators: %s: license type */
 					printf( __( 'You are currently using NextGEN <strong>%s</strong>.', 'nggallery' ), esc_html( ucfirst( $license_type ) ) ); // // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					?>
 				</div>
@@ -99,7 +99,7 @@ $ngg_pro_key = get_option('photocrati_license_default', null);
 				<form id="nextgen-gallery-settings-verify-key" method="post">
 					<div class="nextgen-gallery-row ">
 						<div class="nextgen-gallery-col col-xs-12 col-sm-8 text-xs-left nextgen-gallery-onboarding-input">
-							<input type="password" required name="nextgen-gallery-license-key" id="nextgen-gallery-settings-key" value="<?php echo esc_html( $ngg_pro_key ) ?>" placeholder="<?php esc_attr_e( 'Enter your license key', 'nggallery' ); ?>"/>
+							<input type="password" required name="nextgen-gallery-license-key" id="nextgen-gallery-settings-key" value="<?php echo esc_html( $ngg_pro_key ); ?>" placeholder="<?php esc_attr_e( 'Enter your license key', 'nggallery' ); ?>"/>
 						</div>
 						<div class="nextgen-gallery-col col-xs-12 col-sm-2 text-xs-left">
 							<input type="submit" name="nextgen-gallery-verify-submit" value="<?php esc_attr_e( 'Connect', 'nggallery' ); ?>" class=" btn nextgen-gallery-onboarding-wizard-primary-btn nextgen-gallery-verify-submit" id="nextgen-gallery-settings-connect-btn"/>

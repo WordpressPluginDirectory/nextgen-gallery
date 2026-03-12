@@ -41,26 +41,26 @@ class ConvertGalleryREST {
 				'callback'            => [ $instance, 'convert_single_gallery' ],
 				'permission_callback' => [ $instance, 'verify_single_convert_permission' ],
 				'args'                => [
-					'post_id' => [
+					'post_id'      => [
 						'required'          => false,
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
 					],
-					'columns' => [
+					'columns'      => [
 						'type'              => 'integer',
 						'default'           => 3,
 						'sanitize_callback' => 'absint',
 					],
-					'sizeSlug' => [
+					'sizeSlug'     => [
 						'type'              => 'string',
 						'default'           => 'thumbnail',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
-					'linkTarget' => [
+					'linkTarget'   => [
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
-					'images' => [
+					'images'       => [
 						'type'     => 'array',
 						'required' => true,
 						'items'    => [

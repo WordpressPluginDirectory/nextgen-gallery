@@ -88,8 +88,8 @@ $onboarding = new Onboarding_Wizard();
 			</div>
 		</div>
 		<?php
-		$is_installed = $onboarding->is_recommended_plugin_installed( 'ngg-gallery-themes' );
-		$checked      = $is_installed ? 'checked="checked"' : '';
+		$is_installed  = $onboarding->is_recommended_plugin_installed( 'ngg-gallery-themes' );
+		$checked       = $is_installed ? 'checked="checked"' : '';
 		$installs_text = ! $is_installed ? esc_html__( 'Installs NextGEN Gallery Pro', 'nggallery' ) : esc_html__( 'NextGEN Pro is already installed', 'nggallery' );
 		?>
 		<div class="feature-grid small-padding medium-margin">
@@ -125,8 +125,8 @@ $onboarding = new Onboarding_Wizard();
 			</div>
 		</div>
 		<?php
-		$is_installed = $onboarding->is_recommended_plugin_installed( 'ngg-ecommerce' );
-		$checked      = $is_installed ? 'checked="checked"' : '';
+		$is_installed  = $onboarding->is_recommended_plugin_installed( 'ngg-ecommerce' );
+		$checked       = $is_installed ? 'checked="checked"' : '';
 		$installs_text = ! $is_installed ? esc_html__( 'Installs NextGEN Gallery Pro', 'nggallery' ) : esc_html__( 'NextGEN Pro is already installed', 'nggallery' );
 		?>
 		<div class="feature-grid small-padding medium-margin">
@@ -163,8 +163,8 @@ $onboarding = new Onboarding_Wizard();
 			</div>
 		</div>
 		<?php
-		$is_installed = $onboarding->is_recommended_plugin_installed( 'ngg-ecom-management' );
-		$checked      = $is_installed ? 'checked="checked"' : '';
+		$is_installed  = $onboarding->is_recommended_plugin_installed( 'ngg-ecom-management' );
+		$checked       = $is_installed ? 'checked="checked"' : '';
 		$installs_text = ! $is_installed ? esc_html__( 'Installs NextGEN Gallery Pro', 'nggallery' ) : esc_html__( 'NextGEN Pro is already installed', 'nggallery' );
 		?>
 		<div class="feature-grid small-padding medium-margin">
@@ -201,8 +201,8 @@ $onboarding = new Onboarding_Wizard();
 			</div>
 		</div>
 		<?php
-		$is_installed = $onboarding->is_recommended_plugin_installed( 'ngg-safe-checkout' );
-		$checked      = $is_installed ? 'checked="checked"' : '';
+		$is_installed  = $onboarding->is_recommended_plugin_installed( 'ngg-safe-checkout' );
+		$checked       = $is_installed ? 'checked="checked"' : '';
 		$installs_text = ! $is_installed ? esc_html__( 'Installs NextGEN Gallery Pro', 'nggallery' ) : esc_html__( 'NextGEN Pro is already installed', 'nggallery' );
 		?>
 		<div class="feature-grid small-padding medium-margin">
@@ -239,8 +239,8 @@ $onboarding = new Onboarding_Wizard();
 			</div>
 		</div>
 		<?php
-		$is_installed = $onboarding->is_recommended_plugin_installed( 'ngg-image-proofing' );
-		$checked      = $is_installed ? 'checked="checked"' : '';
+		$is_installed  = $onboarding->is_recommended_plugin_installed( 'ngg-image-proofing' );
+		$checked       = $is_installed ? 'checked="checked"' : '';
 		$installs_text = ! $is_installed ? esc_html__( 'Installs NextGEN Gallery Pro', 'nggallery' ) : esc_html__( 'NextGEN Pro is already installed', 'nggallery' );
 		?>
 		<div class="feature-grid small-padding medium-margin">

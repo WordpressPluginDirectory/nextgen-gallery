@@ -1,7 +1,15 @@
 <?php
 
+/**
+ * Marketing module.
+ */
 class M_Marketing extends C_Base_Module {
 
+	/**
+	 * Object instance.
+	 *
+	 * @var object
+	 */
 	public $object;
 
 	public function define(
@@ -25,8 +33,18 @@ class M_Marketing extends C_Base_Module {
 		);
 	}
 
+	/**
+	 * Big hitters block two cache.
+	 *
+	 * @var array
+	 */
 	public static $big_hitters_block_two_cache = [];
 
+	/**
+	 * Display setting blocks.
+	 *
+	 * @var array
+	 */
 	protected static $display_setting_blocks = [ 'tile', 'mosaic', 'masonry' ];
 
 	public static function is_plus_or_pro_enabled() {
@@ -37,18 +55,23 @@ class M_Marketing extends C_Base_Module {
 	}
 
 	/**
+	 * Gets i18n strings.
+	 *
 	 * @return stdClass
 	 */
 	public static function get_i18n() {
-		$i18n                        = new stdClass();
-		$i18n->lite_coupon           = __( 'NextGEN Basic users get a discount of 50% off regular price', 'nggallery' );
-		$i18n->bonus                 = __( 'Bonus', 'nggallery' );
+		$i18n              = new stdClass();
+		$i18n->lite_coupon = __( 'NextGEN Basic users get a discount of 50% off regular price', 'nggallery' );
+		$i18n->bonus       = __( 'Bonus', 'nggallery' );
+		/* translators: %s: feature name */
 		$i18n->feature_not_available = __( "We're sorry, but %s is not available in the lite version of NextGEN Gallery. Please upgrade to NextGEN Pro to unlock these awesome features.", 'nggallery' );
 
 		return $i18n;
 	}
 
 	/**
+	 * Gets i18n fragment.
+	 *
 	 * @return string
 	 */
 	public static function get_i18n_fragment( $msg ) {
@@ -94,6 +117,7 @@ class M_Marketing extends C_Base_Module {
 			'ngg_manage_albums_marketing_block',
 			function () {
 				self::enqueue_blocks_style();
+				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- self::get_big_hitters_block_albums() returns safe HTML for marketing block
 				print self::get_big_hitters_block_albums();
 			}
 		);
@@ -102,6 +126,7 @@ class M_Marketing extends C_Base_Module {
 			'ngg_manage_galleries_marketing_block',
 			function () {
 				self::enqueue_blocks_style();
+				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- self::get_big_hitters_block_two() returns safe HTML for marketing block
 				print self::get_big_hitters_block_two( 'managegalleries' );
 			}
 		);
@@ -110,6 +135,7 @@ class M_Marketing extends C_Base_Module {
 			'ngg_manage_images_marketing_block',
 			function () {
 				self::enqueue_blocks_style();
+				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- self::get_big_hitters_block_two() returns safe HTML for marketing block
 				print self::get_big_hitters_block_two( 'manageimages' );
 			}
 		);
@@ -118,6 +144,7 @@ class M_Marketing extends C_Base_Module {
 			'ngg_sort_images_marketing_block',
 			function () {
 				self::enqueue_blocks_style();
+				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- self::get_big_hitters_block_two() returns safe HTML for marketing block
 				print self::get_big_hitters_block_two( 'sortgallery' );
 			}
 		);
@@ -127,6 +154,7 @@ class M_Marketing extends C_Base_Module {
 			function () {
 				$title = __( 'Want to sell your images online?', 'nggallery' );
 				$block = new C_Marketing_Block_Single_Line( $title, 'managegalleries', 'wanttosell' );
+				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $block->render() returns safe HTML for marketing block
 				print $block->render();
 			}
 		);
@@ -178,6 +206,7 @@ class M_Marketing extends C_Base_Module {
 						NGG_SCRIPT_VERSION
 					);
 
+     // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.NotInFooter
 					wp_register_script(
 						'jquery-modal',
 						C_Router::get_instance()->get_static_url( 'photocrati-marketing#jquery.modal.min.js' ),
@@ -282,6 +311,7 @@ class M_Marketing extends C_Base_Module {
 		$url = self::get_utm_link( 'https://www.imagely.com/lite', 'topbar', 'getnextgenpro' );
 
 		$message = sprintf(
+			/* translators: %s: upgrade URL */
 			__( 'You are using NextGEN Gallery. To unlock more features, consider <a href="%s" target="_blank">upgrading to NextGEN Pro</a>.', 'nggallery' ),
 			$url
 		);
@@ -303,6 +333,7 @@ class M_Marketing extends C_Base_Module {
 			return;
 		}
 
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Safe hardcoded CSS styles
 		echo '<style>
 			.nextgen-sidebar-upgrade-pro {
 				background-color: #37993B;
@@ -418,6 +449,8 @@ class M_Marketing extends C_Base_Module {
 	}
 
 	/**
+	 * Gets big hitter link URL.
+	 *
 	 * @param string $path
 	 * @param string $medium
 	 * @param string $campaign
@@ -520,6 +553,8 @@ class M_Marketing extends C_Base_Module {
 	}
 
 	/**
+	 * Gets big hitters block two.
+	 *
 	 * @param string $medium
 	 * @return string
 	 */
@@ -582,6 +617,8 @@ class M_Marketing extends C_Base_Module {
 	}
 
 	/**
+	 * Gets type list.
+	 *
 	 * @return array
 	 */
 	public function get_type_list() {

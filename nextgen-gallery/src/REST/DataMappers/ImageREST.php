@@ -13,6 +13,7 @@ use WP_Error;
 use Imagely\NGG\DataMappers\Image as ImageMapper;
 use Imagely\NGG\DataTypes\Image;
 use Imagely\NGG\Util\Security;
+use Imagely\NGG\Util\Transient;
 
 /**
  * Class ImageREST
@@ -40,7 +41,7 @@ class ImageREST {
 					'per_page'   => [
 						'type'              => 'integer',
 						'default'           => 100,
-						'sanitize_callback' => function( $value ) {
+						'sanitize_callback' => function ( $value ) {
 							// Allow -1 for "all images", otherwise ensure minimum of 1
 							$int_value = (int) $value;
 							if ( $int_value < 0 ) {
@@ -97,37 +98,37 @@ class ImageREST {
 				'callback'            => [ self::class, 'update_image' ],
 				'permission_callback' => [ self::class, 'check_edit_permission' ],
 				'args'                => [
-					'id'          => [
+					'id'           => [
 						'required'          => true,
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
 					],
-					'alttext'     => [
+					'alttext'      => [
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
-					'description' => [
+					'description'  => [
 						'type'              => 'string',
 						'sanitize_callback' => 'wp_kses_post',
 					],
-					'exclude'     => [
+					'exclude'      => [
 						'type' => 'boolean',
 					],
-					'image_slug'  => [
+					'image_slug'   => [
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_title',
 					],
-					'sortorder'   => [
+					'sortorder'    => [
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
 					],
-					'tags'        => [
+					'tags'         => [
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
 					'pricelist_id' => [
 						'type'              => 'integer',
-						'sanitize_callback' => function( $value ) {
+						'sanitize_callback' => function ( $value ) {
 							// Allow -1 for "not for sale", 0 for "use gallery pricelist", positive integers for actual pricelists
 							$int_value = (int) $value;
 							return ( $int_value === -1 || $int_value >= 0 ) ? $int_value : 0;
@@ -171,30 +172,30 @@ class ImageREST {
 						'items'    => [
 							'type'       => 'object',
 							'properties' => [
-								'id'          => [
+								'id'           => [
 									'required' => true,
 									'type'     => 'integer',
 								],
-								'alttext'     => [
+								'alttext'      => [
 									'type' => 'string',
 								],
-								'description' => [
+								'description'  => [
 									'type' => 'string',
 								],
-								'exclude'     => [
+								'exclude'      => [
 									'type' => 'boolean',
 								],
-								'image_slug'  => [
+								'image_slug'   => [
 									'type' => 'string',
 								],
-								'sortorder'   => [
+								'sortorder'    => [
 									'type' => 'integer',
 								],
-								'tags'        => [
+								'tags'         => [
 									'type' => 'string',
 								],
 								'pricelist_id' => [
-									'type' => 'integer',
+									'type'        => 'integer',
 									'description' => 'Pricelist ID for ecommerce functionality',
 								],
 							],
@@ -508,7 +509,7 @@ class ImageREST {
 			}
 
 			// Check if the deleted image was the gallery's preview image
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
 			$gallery_preview = $wpdb->get_var(
 				$wpdb->prepare(
 					"SELECT previewpic FROM {$wpdb->nggallery} WHERE gid = %d AND previewpic = %d",
@@ -519,7 +520,7 @@ class ImageREST {
 
 			// If this was the preview image, update the gallery to use the first available image
 			if ( $gallery_preview ) {
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
 				$first_image_id = $wpdb->get_var(
 					$wpdb->prepare(
 						"SELECT pid FROM {$wpdb->nggpictures} WHERE galleryid = %d ORDER BY sortorder ASC, pid ASC LIMIT 1",
@@ -538,11 +539,12 @@ class ImageREST {
 				);
 			}
 
+			Transient::flush( 'rest_galleries' );
 			return new WP_REST_Response(
 				[
-					'message' => __( 'Image deleted successfully', 'nggallery' ),
-					'deleted' => true,
-					'id'      => $image_id,
+					'message'       => __( 'Image deleted successfully', 'nggallery' ),
+					'deleted'       => true,
+					'id'            => $image_id,
 					'files_deleted' => (bool) $settings->get( 'deleteImg' ),
 				]
 			);
@@ -680,6 +682,7 @@ class ImageREST {
 				);
 			}
 		}
+		Transient::flush( 'rest_galleries' );
 
 		$retval['gallery_id'] = $gallery_id;
 		$storage              = \Imagely\NGG\DataStorage\Manager::get_instance();
@@ -849,7 +852,44 @@ class ImageREST {
 		}
 
 		$status = ! empty( $retval['error'] ) ? 500 : 200;
+		if ( $status === 200 ) {
+			Transient::flush( 'rest_galleries' );
+		}
 		return new WP_REST_Response( $retval, $status );
+	}
+
+	/**
+	 * Returns the absolute root path allowed for folder browsing and importing.
+	 *
+	 * On single-site this is NGG_IMPORT_ROOT (wp-content by default).
+	 * On multisite subsites the path is validated against the current blog's
+	 * upload directory so that one subsite cannot reach another's files.
+	 *
+	 * @return string | \WP_Error
+	 */
+	private static function get_import_root() {
+		$root = is_multisite()
+			? \Imagely\NGG\DataStorage\Manager::get_instance()->get_upload_abspath()
+			: NGG_IMPORT_ROOT;
+		$root = str_replace( '/', DIRECTORY_SEPARATOR, $root );
+		$root = untrailingslashit( $root );
+
+		if ( is_multisite() && ! is_main_site() ) {
+			$upload_dir       = wp_upload_dir();
+			$blog_upload_base = trailingslashit( wp_normalize_path( realpath( $upload_dir['basedir'] ) ?: $upload_dir['basedir'] ) );
+			$resolved_root    = wp_normalize_path( realpath( $root ) ?: $root );
+			$normalized_root  = trailingslashit( $resolved_root );
+
+			if ( strpos( $normalized_root, $blog_upload_base ) !== 0 ) {
+				return new \WP_Error(
+					'invalid_gallery_path',
+					__( 'Access denied. You can only browse your own upload directory.', 'nggallery' ),
+					[ 'status' => 403 ]
+				);
+			}
+		}
+
+		return $root;
 	}
 
 	/**
@@ -859,14 +899,13 @@ class ImageREST {
 	 * @return WP_REST_Response
 	 */
 	public static function browse_folder( WP_REST_Request $request ) {
-		$retval       = [];
-				$dir  = $request->get_param( 'dir' );
-				$root = is_multisite()
-			? \Imagely\NGG\DataStorage\Manager::get_instance()->get_upload_abspath()
-			: NGG_IMPORT_ROOT;
-		$root         = str_replace( '/', DIRECTORY_SEPARATOR, $root );
-		$root         = untrailingslashit( $root );
-		$browse_path  = $root;
+		$retval = [];
+		$dir    = $request->get_param( 'dir' );
+		$root   = self::get_import_root();
+		if ( is_wp_error( $root ) ) {
+			return new WP_REST_Response( [ 'error' => $root->get_error_message() ], 403 );
+		}
+		$browse_path = $root;
 		if ( ! empty( $dir ) ) {
 			$browse_path = $root . DIRECTORY_SEPARATOR . ltrim( $dir, DIRECTORY_SEPARATOR );
 		}
@@ -938,11 +977,12 @@ class ImageREST {
 			$gallery_title = null;
 		}
 
-		$root        = is_multisite()
-			? \Imagely\NGG\DataStorage\Manager::get_instance()->get_upload_abspath()
-			: NGG_IMPORT_ROOT;
-		$root        = str_replace( '/', DIRECTORY_SEPARATOR, $root );
-		$root        = untrailingslashit( $root );
+		$root = self::get_import_root();
+
+		if ( is_wp_error( $root ) ) {
+			return new WP_REST_Response( [ 'error' => $root->get_error_message() ], 403 );
+		}
+
 		$import_path = str_replace( '//', DIRECTORY_SEPARATOR, path_join( $root, $folder ) );
 
 		// First check if the path exists and is accessible.
@@ -1039,6 +1079,7 @@ class ImageREST {
 				500
 			);
 		}
+		Transient::flush( 'rest_galleries' );
 
 		return new WP_REST_Response( $retval, 200 );
 	}
@@ -1061,8 +1102,9 @@ class ImageREST {
 		// If Orientation is missing from stored metadata, try to get it from live EXIF
 		if ( ! isset( $meta_data['Orientation'] ) || empty( $meta_data['Orientation'] ) ) {
 			require_once NGGALLERY_ABSPATH . '/lib/meta.php';
-			$meta = new \nggMeta( $image );
-			if ( $orientation = $meta->get_EXIF( 'Orientation' ) ) {
+			$meta        = new \nggMeta( $image );
+			$orientation = $meta->get_EXIF( 'Orientation' );
+			if ( $orientation ) {
 				$meta_data['Orientation'] = $orientation;
 			}
 		}
@@ -1103,7 +1145,7 @@ class ImageREST {
 	private static function set_gallery_preview_if_empty( $gallery_id, $image_id ) {
 		global $wpdb;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$current_preview = $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT previewpic FROM {$wpdb->nggallery} WHERE gid = %d",

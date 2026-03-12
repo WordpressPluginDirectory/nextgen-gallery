@@ -1,5 +1,5 @@
 <?php
-/*
+/**
 {
 	Module: photocrati-nextgen_other_options,
 	Depends: { photocrati-nextgen_admin }
@@ -8,8 +8,16 @@
 
 define( 'NGG_OTHER_OPTIONS_SLUG', 'ngg_other_options' );
 
+/**
+ * NextGen other options module.
+ */
 class M_NextGen_Other_Options extends C_Base_Module {
 
+	/**
+	 * Object instance.
+	 *
+	 * @var object
+	 */
 	public $object;
 
 	public function define(
@@ -67,6 +75,7 @@ class M_NextGen_Other_Options extends C_Base_Module {
 	public function add_admin_bar_menu() {
 		global $wp_admin_bar;
 
+  // phpcs:ignore WordPress.WP.Capabilities.Unknown
 		if ( current_user_can( 'NextGEN Change options' ) ) {
 			$wp_admin_bar->add_menu(
 				[

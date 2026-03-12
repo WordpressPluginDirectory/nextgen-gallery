@@ -129,7 +129,4 @@ class LicenseREST {
 			200
 		);
 	}
-
 }
-
-

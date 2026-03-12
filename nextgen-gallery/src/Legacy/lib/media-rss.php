@@ -8,6 +8,7 @@
 class nggMediaRss {
 
 	public static function add_mrss_alternate_link() {
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Safe HTML link tag with escaped URL from self::get_mrss_url()
 		echo "<link id='MediaRSS' rel='alternate' type='application/rss+xml' title='NextGEN Gallery RSS Feed' href='" . self::get_mrss_url() . "' />\n";
 	}
 

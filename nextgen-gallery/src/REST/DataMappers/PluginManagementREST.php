@@ -152,14 +152,28 @@ class PluginManagementREST {
 			$creds = request_filesystem_credentials( $url, $method, false, false, null );
 			if ( false === $creds ) {
 				$form = ob_get_clean();
-				return new \WP_Error( 'filesystem_credentials_required', 'Filesystem credentials required', [ 'status' => 403, 'form' => $form ] );
+				return new \WP_Error(
+					'filesystem_credentials_required',
+					__( 'Filesystem credentials required', 'nggallery' ),
+					[
+						'status' => 403,
+						'form'   => $form,
+					]
+				);
 			}
 
 			if ( ! WP_Filesystem( $creds ) ) {
 				ob_start();
 				request_filesystem_credentials( $url, $method, true, false, null );
 				$form = ob_get_clean();
-				return new \WP_Error( 'filesystem_not_accessible', 'Filesystem not accessible', [ 'status' => 403, 'form' => $form ] );
+				return new \WP_Error(
+					'filesystem_not_accessible',
+					__( 'Filesystem not accessible', 'nggallery' ),
+					[
+						'status' => 403,
+						'form'   => $form,
+					]
+				);
 			}
 
 			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
@@ -243,4 +257,3 @@ class PluginManagementREST {
 		return new \WP_REST_Response( [ 'success' => true ], 200 );
 	}
 }
-

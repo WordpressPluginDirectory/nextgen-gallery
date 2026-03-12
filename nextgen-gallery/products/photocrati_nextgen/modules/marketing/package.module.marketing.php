@@ -1,7 +1,12 @@
 <?php
+/**
+ * Marketing add gallery MVC adapter.
+ */
 class A_Marketing_AddGallery_MVC extends Mixin
 {
     /**
+     * Gets the base add gallery block.
+     *
      * @param string $medium
      * @return string
      */
@@ -16,7 +21,11 @@ class A_Marketing_AddGallery_MVC extends Mixin
         $root_element = $this->call_parent('render_object');
         M_Marketing::enqueue_blocks_style();
         foreach ($root_element->find('admin_page.content_main_form', true) as $container) {
-            /** @var C_MVC_View_Element $container */
+            /**
+             * Container element.
+             *
+             * @var C_MVC_View_Element $container
+             */
             switch ($container->get_object()->context) {
                 case 'upload_images':
                     $medium = 'addgalleryimages';
@@ -78,7 +87,11 @@ class A_Marketing_Animations_Form extends Mixin
             $svg
         )];
         $url = M_Marketing::get_utm_link('https://www.imagely.com/lite', 'otheroptions', 'imageanimation-learnmore');
-        $base['footer'] = sprintf(__("<a href='%s'>Get NextGEN Pro today and unlock all the powerful features >></a><br/><br/><strong>Bonus:</strong> NextGEN users get <strong>50&percnt; off</strong> regular prices, automatically applied at checkout.", 'nggallery'), $url);
+        $base['footer'] = sprintf(
+            /* translators: %s: upgrade URL */
+            __("<a href='%s'>Get NextGEN Pro today and unlock all the powerful features >></a><br/><br/><strong>Bonus:</strong> NextGEN users get <strong>50&percnt; off</strong> regular prices, automatically applied at checkout.", 'nggallery'),
+            $url
+        );
         $block = new C_Marketing_Block_Two_Columns($base['title'], $base['description'], $base['links'], $base['footer'], $base['medium'], $base['campaign']);
         return $block->render();
     }
@@ -94,6 +107,8 @@ class A_Marketing_Animations_Form extends Mixin
     }
 }
 /**
+ * Marketing display settings form adapter.
+ *
  * @mixin C_Form
  * @property C_MVC_Controller $object
  */
@@ -151,6 +166,8 @@ class A_Marketing_Display_Settings_Form extends Mixin_Display_Type_Form
     }
 }
 /**
+ * Marketing display type settings form adapter.
+ *
  * @property C_Form $object
  */
 class A_Marketing_Display_Type_Settings_Form extends Mixin
@@ -192,6 +209,9 @@ class A_Marketing_Display_Type_Settings_Form extends Mixin
         return $this->object->render_partial('photocrati-marketing#display_type_settings', ['display_type' => $display_type, 'i18n' => $this->get_i18n()], true);
     }
 }
+/**
+ * Marketing lightbox options MVC adapter.
+ */
 class A_Marketing_Lightbox_Options_MVC extends Mixin
 {
     public function render_object()
@@ -206,6 +226,8 @@ class A_Marketing_Lightbox_Options_MVC extends Mixin
     }
 }
 /**
+ * Marketing other options form adapter.
+ *
  * @mixin C_Form
  * @property C_MVC_Controller $object
  */
@@ -226,19 +248,48 @@ class A_Marketing_Other_Options_Form extends Mixin
         return $this->call_parent('enqueue_static_resources');
     }
 }
+/**
+ * Marketing block base class.
+ */
 abstract class C_Marketing_Block_Base
 {
+    /**
+     * Source identifier.
+     *
+     * @var string
+     */
     public $source = '';
+    /**
+     * Medium identifier.
+     *
+     * @var string
+     */
     public $medium = '';
+    /**
+     * Campaign identifier.
+     *
+     * @var string
+     */
     public $campaign = '';
+    /**
+     * Template name.
+     *
+     * @var string
+     */
     public $template = '';
+    /**
+     * Link text.
+     *
+     * @var string
+     */
     public $link_text = '';
     /**
+     * Constructor for marketing block base.
+     *
      * @param string $template
      * @param string $medium
      * @param string $campaign
      * @param string $src
-     * @return C_Marketing_Block_Base
      */
     public function __construct($template, $medium, $campaign, $src = 'ngg')
     {
@@ -247,32 +298,55 @@ abstract class C_Marketing_Block_Base
         $this->medium = $medium;
         $this->campaign = $campaign;
         $this->link_text = __('Upgrade Now', 'nggallery');
-        return $this;
     }
-    public function render($return = true)
+    public function render($return_output = true)
     {
         $view = new C_MVC_View('photocrati-marketing#block-' . $this->template, ['block' => $this, 'link_text' => $this->link_text]);
-        return $view->render($return);
+        return $view->render($return_output);
     }
     public function get_upgrade_link()
     {
         return M_Marketing::get_utm_link('https://www.imagely.com/lite', $this->medium, $this->campaign, $this->source);
     }
 }
+/**
+ * Marketing block card class.
+ */
 class C_Marketing_Block_Card extends C_Marketing_Block_Base
 {
+    /**
+     * Card title.
+     *
+     * @var string
+     */
     public $title = '';
+    /**
+     * Thumbnail URL.
+     *
+     * @var string
+     */
     public $thumb_url = '';
+    /**
+     * Card description.
+     *
+     * @var string
+     */
     public $description = '';
+    /**
+     * Card icon.
+     *
+     * @var string
+     */
     public $icon = '';
     /**
+     * Constructor for card marketing block.
+     *
      * @param string $title Card title.
      * @param string $desc Card description.
      * @param string $icon Icon found under static/icons/.
      * @param string $medium
      * @param string $campaign
      * @param string $src
-     * @return C_Marketing_Block_Card
      */
     public function __construct($title, $desc, $icon, $medium, $campaign, $src = 'ngg')
     {
@@ -280,29 +354,67 @@ class C_Marketing_Block_Card extends C_Marketing_Block_Base
         $this->title = $title;
         $this->description = $desc;
         $this->icon = \Imagely\NGG\Util\Router::get_instance()->get_static_url('photocrati-marketing#icons/' . $icon);
-        return $this;
     }
 }
+/**
+ * Marketing block large class.
+ */
 class C_Marketing_Block_Large extends C_Marketing_Block_Base
 {
+    /**
+     * Block title.
+     *
+     * @var string
+     */
     public $title = '';
+    /**
+     * Block description.
+     *
+     * @var string
+     */
     public $description = '';
+    /**
+     * Block links.
+     *
+     * @var array
+     */
     public $links = array();
+    /**
+     * Block footer.
+     *
+     * @var string
+     */
     public $footer = '';
+    /**
+     * Thumbnail URL.
+     *
+     * @var string
+     */
     public $thumbnail_url = '';
+    /**
+     * Demo URL.
+     *
+     * @var string
+     */
     public $demo_url = '';
+    /**
+     * Demo text.
+     *
+     * @var string
+     */
     public $demo_text = '';
     /**
+     * Constructor for large marketing block.
+     *
      * @param string $title
      * @param string $description
      * @param string $footer
      * @param string $thumbnail_url Either a full HTTPS path or a FontAwesome icon (must begin with fa-).
      * @param string $demo_url
      * @param string $demo_text
-     * @param string $campaign
      * @param string $medium
+     * @param string $campaign
      * @param string $src
-     * @return C_Marketing_Block_Large
      */
     public function __construct($title, $description, $footer, $thumbnail_url, $demo_url, $demo_text, $medium, $campaign, $src = 'ngg')
     {
@@ -314,26 +426,53 @@ class C_Marketing_Block_Large extends C_Marketing_Block_Base
         $this->demo_url = $demo_url;
         $this->demo_text = $demo_text;
         $this->link_text = __('Upgrade to NextGEN Pro', 'nggallery');
-        return $this;
     }
 }
+/**
+ * Marketing block popup class.
+ */
 class C_Marketing_Block_Popup extends C_Marketing_Block_Base
 {
+    /**
+     * Block title.
+     *
+     * @var string
+     */
     public $title = '';
+    /**
+     * Block description.
+     *
+     * @var string
+     */
     public $description = '';
+    /**
+     * Block links.
+     *
+     * @var array
+     */
     public $links = array();
+    /**
+     * Block footer.
+     *
+     * @var string
+     */
     public $footer = '';
+    /**
+     * Thumbnail URL.
+     *
+     * @var string
+     */
     public $thumbnail_url = '';
     /**
+     * Constructor for popup marketing block.
+     *
      * @param string $title
      * @param string $description
      * @param string $footer
      * @param string $thumbnail_url Either a full HTTPS path or a FontAwesome icon (must begin with fa-).
-     * @param string $demo_url
      * @param string $medium
      * @param string $campaign
      * @param string $src
-     * @return C_Marketing_Block_Popup
      */
     public function __construct($title, $description, $footer, $thumbnail_url, $medium, $campaign, $src = 'ngg')
     {
@@ -343,21 +482,44 @@ class C_Marketing_Block_Popup extends C_Marketing_Block_Base
         $this->footer = $footer;
         $this->thumbnail_url = $thumbnail_url;
         $this->link_text = __('Upgrade to NextGEN Pro', 'nggallery');
-        return $this;
     }
 }
+/**
+ * Marketing block single line class.
+ */
 class C_Marketing_Block_Single_Line extends C_Marketing_Block_Base
 {
+    /**
+     * Block title.
+     *
+     * @var string
+     */
     public $title = '';
+    /**
+     * Source identifier.
+     *
+     * @var string
+     */
     public $source = '';
+    /**
+     * Medium identifier.
+     *
+     * @var string
+     */
     public $medium = '';
+    /**
+     * Campaign identifier.
+     *
+     * @var string
+     */
     public $campaign = '';
     /**
-     * @return C_Marketing_Block_Single_Line
-     * @var string $medium
-     * @var string $campaign
-     * @var string $src (optional) Defaults to 'nggallery'
-     * @var string $title
+     * Constructor for single-line marketing block.
+     *
+     * @param string $title
+     * @param string $medium
+     * @param string $campaign
+     * @param string $src (optional) Defaults to 'nggallery'
      */
     public function __construct($title, $medium, $campaign, $src = 'ngg')
     {
@@ -366,16 +528,40 @@ class C_Marketing_Block_Single_Line extends C_Marketing_Block_Base
         $this->source = $src;
         $this->medium = $medium;
         $this->campaign = $campaign;
-        return $this;
     }
 }
+/**
+ * Marketing block two columns class.
+ */
 class C_Marketing_Block_Two_Columns extends C_Marketing_Block_Base
 {
+    /**
+     * Block title.
+     *
+     * @var string
+     */
     public $title = '';
+    /**
+     * Block description.
+     *
+     * @var string|string[]
+     */
     public $description = '';
+    /**
+     * Block links.
+     *
+     * @var array
+     */
     public $links = array();
+    /**
+     * Block footer.
+     *
+     * @var string
+     */
     public $footer = '';
     /**
+     * Constructor for two-columns marketing block.
+     *
      * @param string          $title
      * @param string|string[] $description
      * @param array           $links
@@ -383,7 +569,6 @@ class C_Marketing_Block_Two_Columns extends C_Marketing_Block_Base
      * @param string          $medium
      * @param string          $campaign
      * @param string          $src
-     * @return C_Marketing_Block_Two_Columns
      */
     public function __construct($title, $description, $links, $footer, $medium, $campaign, $src = 'ngg')
     {
@@ -392,6 +577,5 @@ class C_Marketing_Block_Two_Columns extends C_Marketing_Block_Base
         $this->description = $description;
         $this->links = $links;
         $this->footer = $footer;
-        return $this;
     }
 }

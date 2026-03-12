@@ -8,6 +8,9 @@
 
 namespace Imagely\NGG\Admin;
 
+use Imagely\NGG\DataMappers\Gallery as GalleryMapper;
+use Imagely\NGG\REST\DataMappers\AddonsREST;
+
 /**
  * Class Shortcode_Preview
  *
@@ -56,6 +59,17 @@ class Shortcode_Preview {
 		// Verify nonce for security.
 		if ( ! isset( $_GET['nonce_preview'] ) || ! wp_verify_nonce( sanitize_key( $_GET['nonce_preview'] ), 'ngg_preview_shortcode' ) ) {
 			wp_die( esc_html__( 'Security check failed.', 'nggallery' ) );
+		}
+
+		// Check if gallery has an external source addon that is not enabled.
+		$gallery_ids = isset( $_GET['gallery_ids'] ) ? sanitize_text_field( wp_unslash( $_GET['gallery_ids'] ) ) : '';
+		if ( $gallery_ids ) {
+			$gallery_mapper = GalleryMapper::get_instance();
+			$gallery        = $gallery_mapper->find( intval( $gallery_ids ) );
+			if ( $gallery && ! AddonsREST::can_render_gallery( $gallery ) ) {
+				self::render_preview_page( '', null );
+				exit;
+			}
 		}
 
 		// Hide admin bar for this page.

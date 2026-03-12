@@ -2,19 +2,54 @@
 
 namespace Imagely\NGG\DisplayType;
 
+/**
+ * Controller Factory for Display Types
+ *
+ * Manages registration and instantiation of display type controllers.
+ */
 class ControllerFactory {
 
+	/**
+	 * Array of registered controllers
+	 *
+	 * @var array
+	 */
 	protected static $registration = [];
-	protected static $handlers     = [];
-	protected static $instances    = [];
 
+	/**
+	 * Array of controller handlers
+	 *
+	 * @var array
+	 */
+	protected static $handlers = [];
+
+	/**
+	 * Array of controller instances
+	 *
+	 * @var array
+	 */
+	protected static $instances = [];
+
+	/**
+	 * Array mapping display type names to aliases
+	 *
+	 * @var array
+	 */
 	protected static $mapping = [];
 
+	/**
+	 * Registered display type modules.
+	 *
+	 * @var array
+	 */
 	private static $registered_modules = [];
 
 	/**
-	 * @param string $id
-	 * @param string $class_name
+	 * Registers a display type controller
+	 *
+	 * @param string $id The controller ID.
+	 * @param string $class_name The controller class name.
+	 * @param array  $aliases Array of aliases for the controller.
 	 * @return void
 	 */
 	public static function register_controller( $id, $class_name, $aliases = [] ) {
@@ -30,9 +65,14 @@ class ControllerFactory {
 
 		\Imagely\NGG\Util\Installer::add_handler( $id, $class_name );
 
-		self::$registered_modules[$id] = $class_name;
+		self::$registered_modules[ $id ] = $class_name;
 	}
 
+	/**
+	 * Gets all registered controllers
+	 *
+	 * @return array
+	 */
 	public static function get_registered() {
 		return self::$registration;
 	}
@@ -42,7 +82,9 @@ class ControllerFactory {
 	}
 
 	/**
-	 * @param string $id
+	 * Checks if a controller is registered
+	 *
+	 * @param string $id The controller ID.
 	 * @return bool
 	 */
 	public static function has_controller( $id ) {
@@ -50,7 +92,9 @@ class ControllerFactory {
 	}
 
 	/**
-	 * @param string $id
+	 * Gets a controller instance by ID
+	 *
+	 * @param string $id The controller ID.
 	 * @return Controller|void
 	 */
 	public static function get_controller( $id ) {
@@ -65,6 +109,12 @@ class ControllerFactory {
 		return self::$instances[ $id ];
 	}
 
+	/**
+	 * Gets the display type ID from name or alias
+	 *
+	 * @param string $name_or_alias The display type name or alias.
+	 * @return string|null
+	 */
 	public static function get_display_type_id( $name_or_alias ) {
 		if ( isset( self::$mapping[ $name_or_alias ] ) ) {
 			return $name_or_alias;

@@ -25,7 +25,7 @@ $checked    = 'checked';
 			</div>
 		</div>
 		<?php
-		$is_installed = $onboarding->is_recommended_plugin_installed( 'wpforms-lite' );
+		$is_installed  = $onboarding->is_recommended_plugin_installed( 'wpforms-lite' );
 		$installs_text = ! $is_installed ? esc_html__( 'Installs WP Forms', 'nggallery' ) : esc_html__( 'WP Forms is already installed', 'nggallery' );
 
 		?>
@@ -64,7 +64,7 @@ $checked    = 'checked';
 			</div>
 		</div>
 		<?php
-		$is_installed = $onboarding->is_recommended_plugin_installed( 'google-analytics-for-wordpress' );
+		$is_installed  = $onboarding->is_recommended_plugin_installed( 'google-analytics-for-wordpress' );
 		$installs_text = ! $is_installed ? esc_html__( 'Installs Google Analytics For WordPress', 'nggallery' ) : esc_html__( 'Google Analytics For WordPress is already installed', 'nggallery' );
 
 		?>
@@ -103,7 +103,7 @@ $checked    = 'checked';
 			</div>
 		</div>
 		<?php
-		$is_installed = $onboarding->is_recommended_plugin_installed( 'duplicator' );
+		$is_installed  = $onboarding->is_recommended_plugin_installed( 'duplicator' );
 		$installs_text = ! $is_installed ? esc_html__( 'Installs Duplicator', 'nggallery' ) : esc_html__( 'Duplicator is already installed', 'nggallery' );
 
 		?>
@@ -142,7 +142,7 @@ $checked    = 'checked';
 			</div>
 		</div>
 		<?php
-		$is_installed = $onboarding->is_recommended_plugin_installed( 'all-in-one-seo-pack' );
+		$is_installed  = $onboarding->is_recommended_plugin_installed( 'all-in-one-seo-pack' );
 		$installs_text = ! $is_installed ? esc_html__( 'Installs All In One SEO Pack', 'nggallery' ) : esc_html__( 'All In One SEO Pack is already installed', 'nggallery' );
 
 		?>
@@ -181,7 +181,7 @@ $checked    = 'checked';
 			</div>
 		</div>
 		<?php
-		$is_installed = $onboarding->is_recommended_plugin_installed( 'wp-mail-smtp' );
+		$is_installed  = $onboarding->is_recommended_plugin_installed( 'wp-mail-smtp' );
 		$installs_text = ! $is_installed ? esc_html__( 'Installs WP Mail SMTP', 'nggallery' ) : esc_html__( 'WP Mail SMTP is already installed', 'nggallery' );
 
 		?>

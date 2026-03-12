@@ -1,11 +1,15 @@
 <?php
 
+/**
+ * NextGen product installer class.
+ */
 class C_NextGen_Product_Installer {
 
 	public function _filter_modules( $pope_modules_list, $product ) {
 		foreach ( $product as $module_name ) {
 			$module = C_Component_Registry::get_instance()->get_module( $module_name );
 			$str    = $module->module_id . '|' . $module->module_version;
+   // phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
 			$search = array_search( $str, $pope_modules_list );
 			if ( false !== $search ) {
 				unset( $pope_modules_list[ $search ] );
@@ -37,7 +41,8 @@ class C_NextGen_Product_Installer {
 				}
 			}
 		} catch ( ReflectionException $ex ) {
-			// Oh oh...
+			// Silently fail if reflection operations fail and return empty modules array.
+			unset( $ex );
 		}
 
 		return $modules;
@@ -64,7 +69,8 @@ class C_NextGen_Product_Installer {
 
 			// run each modules respective uninstall routines.
 			foreach ( $modules_to_load as $module_name ) {
-				if ( ( $handler = \Imagely\NGG\Util\Installer::get_handler_instance( $module_name ) ) ) {
+				$handler = \Imagely\NGG\Util\Installer::get_handler_instance( $module_name );
+				if ( $handler ) {
 					if ( method_exists( $handler, 'uninstall' ) ) {
 						$handler->uninstall( $hard );
 					}
@@ -73,6 +79,7 @@ class C_NextGen_Product_Installer {
 		}
 
 		// lastly remove this product itself from the pope_module_list registry.
+  // phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
 		$search = array_search( 'photocrati-nextgen|' . NGG_PLUGIN_VERSION, $pope_modules_list );
 		if ( false !== $search ) {
 			unset( $pope_modules_list[ $search ] );
@@ -93,7 +100,8 @@ class C_NextGen_Product_Installer {
 
 		if ( false !== $pro_version ) {
 			$pope_modules_list = $this->_filter_modules( $pope_modules_list, $this->get_modules_to_load_for( 'photocrati-nextgen-pro' ) );
-			$search            = array_search( 'photocrati-nextgen-pro|' . $pro_version, $pope_modules_list );
+   // phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
+			$search = array_search( 'photocrati-nextgen-pro|' . $pro_version, $pope_modules_list );
 			if ( false !== $search ) {
 				unset( $pope_modules_list[ $search ] );
 			}
@@ -110,7 +118,8 @@ class C_NextGen_Product_Installer {
 
 		if ( false !== $plus_version ) {
 			$pope_modules_list = $this->_filter_modules( $pope_modules_list, $this->get_modules_to_load_for( 'photocrati-nextgen-plus' ) );
-			$search            = array_search( 'photocrati-nextgen-plus|' . $plus_version, $pope_modules_list );
+   // phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
+			$search = array_search( 'photocrati-nextgen-plus|' . $plus_version, $pope_modules_list );
 			if ( false !== $search ) {
 				unset( $pope_modules_list[ $search ] );
 			}

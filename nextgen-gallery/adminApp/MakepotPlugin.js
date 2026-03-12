@@ -7,7 +7,6 @@
  * 3. Ensures temp files are always cleaned up, even on errors
  */
 
-/* eslint-disable @typescript-eslint/no-require-imports -- CommonJS required for webpack plugins */
 const fs = require('fs');
 const path = require('path');
 
@@ -74,6 +73,8 @@ class MakepotPlugin {
 					.replace(/#: src\/[^\s]+\.tsx?:(\d+)/g, `#: ${this.options.scriptPath}:$1`);
 
 				fs.writeFileSync(this.options.output, potContent, 'utf8');
+				fs.unlinkSync(this.options.tempOutput);
+
 				console.warn(`[MakepotPlugin] Generated: ${this.options.output}`);
 			} catch (error) {
 				console.error(`[MakepotPlugin] Error processing POT file:`, error);

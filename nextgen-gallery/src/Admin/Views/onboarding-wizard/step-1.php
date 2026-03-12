@@ -55,15 +55,15 @@ $onboarding = new Onboarding_Wizard();
 					</div>
 				</div>
 				<div class="settings-name" id="ngg-pro-upsell" style="display: none;">
- 					<div class="nextgen-gallery-onboarding-description small-margin">
- 						<?php esc_html_e( 'Unlock Built-In E-commerce to sell your photos online.', 'nggallery' ); ?>
-					  <a target="_blank" href="<?php echo esc_url('http://www.imagely.com/lite/?utm_source=WordPress&utm_campaign=nextgen-galleryliteplugin&utm_medium=nextgen-gallery-wizard-welcome') ?>" ><?php esc_html_e('Upgrade Now', 'nggallery' ); ?>
-						  <svg width="13" height="9" viewBox="0 0 13 9" fill="none" xmlns="http://www.w3.org/2000/svg">
-							  <path d="M7.73438 9L6.65156 7.9125L9.39727 5.25H0V3.75H9.39727L6.65156 1.0875L7.73438 0L12.375 4.5L7.73438 9Z" fill="#618E00"/>
-						  </svg>
-					  </a>
+					<div class="nextgen-gallery-onboarding-description small-margin">
+						<?php esc_html_e( 'Unlock Built-In E-commerce to sell your photos online.', 'nggallery' ); ?>
+						<a target="_blank" href="<?php echo esc_url( 'http://www.imagely.com/lite/?utm_source=WordPress&utm_campaign=nextgen-galleryliteplugin&utm_medium=nextgen-gallery-wizard-welcome' ); ?>" ><?php esc_html_e( 'Upgrade Now', 'nggallery' ); ?>
+							<svg width="13" height="9" viewBox="0 0 13 9" fill="none" xmlns="http://www.w3.org/2000/svg">
+								<path d="M7.73438 9L6.65156 7.9125L9.39727 5.25H0V3.75H9.39727L6.65156 1.0875L7.73438 0L12.375 4.5L7.73438 9Z" fill="#618E00"/>
+							</svg>
+						</a>
 					</div>
- 				</div>
+				</div>
 				<div class="settings-name">
 					<div class="name small-margin">
 						<?php esc_html_e( 'Join NextGEN Community', 'nggallery' ); ?>

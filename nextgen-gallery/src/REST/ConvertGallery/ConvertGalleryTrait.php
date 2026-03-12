@@ -134,13 +134,15 @@ trait ConvertGalleryTrait {
 						$ngg_image->alttext = $image_data['alt'];
 					} elseif ( $attachment instanceof \WP_Post && ! empty( $attachment->post_excerpt ) ) {
 						$ngg_image->alttext = $attachment->post_excerpt;
-					} elseif ( $attachment_alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ) {
-						$ngg_image->alttext = $attachment_alt;
-					} elseif ( ! empty( $image_data['title'] ) ) {
-						// Only use title as fallback if no alt text is available.
-						$ngg_image->alttext = $image_data['title'];
+					} else {
+						$attachment_alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true );
+						if ( $attachment_alt ) {
+							$ngg_image->alttext = $attachment_alt;
+						} elseif ( ! empty( $image_data['title'] ) ) {
+							// Only use title as fallback if no alt text is available.
+							$ngg_image->alttext = $image_data['title'];
+						}
 					}
-
 					// Use description from WordPress attachment.
 					if ( $attachment instanceof \WP_Post && ! empty( $attachment->post_content ) ) {
 						$ngg_image->description = $attachment->post_content;
@@ -320,11 +322,10 @@ trait ConvertGalleryTrait {
 								// Use the `alt` from the HTML if not available in attributes.
 								$image_alt = '';
 								if ( ! empty( $inner_block['innerHTML'] ) ) {
-									$doc = new \DOMDocument( '1.0', 'UTF-8' );
+									$doc                          = new \DOMDocument( '1.0', 'UTF-8' );
 									$previous_use_internal_errors = libxml_use_internal_errors( true );
 									// Prepend UTF-8 encoding declaration to prevent character corruption.
-									// Use @ to suppress any remaining warnings from malformed HTML.
-									$loaded = @$doc->loadHTML( '<?xml encoding="UTF-8">' . $inner_block['innerHTML'] );
+									$loaded = $doc->loadHTML( '<?xml encoding="UTF-8">' . $inner_block['innerHTML'] );
 									libxml_clear_errors();
 									libxml_use_internal_errors( $previous_use_internal_errors );
 

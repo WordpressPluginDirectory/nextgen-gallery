@@ -13,6 +13,7 @@ use WP_Error;
 use Imagely\NGG\DataMappers\Album as AlbumMapper;
 use Imagely\NGG\DataTypes\Album;
 use Imagely\NGG\Util\Security;
+use Imagely\NGG\Util\Transient;
 use Imagely\NGG\DataMappers\Gallery as GalleryMapper;
 use Imagely\NGG\DataMappers\Image as ImageMapper;
 
@@ -62,7 +63,7 @@ class AlbumREST {
 				'callback'            => [ self::class, 'get_albums' ],
 				'permission_callback' => [ self::class, 'check_read_permission' ],
 				'args'                => [
-					'orderby'           => [
+					'orderby'  => [
 						'type'              => 'string',
 						'enum'              => [
 							'id',
@@ -75,23 +76,23 @@ class AlbumREST {
 						'default'           => 'id',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
-					'order'             => [
+					'order'    => [
 						'type'              => 'string',
 						'enum'              => [ 'ASC', 'DESC' ],
 						'default'           => 'ASC',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
-				'per_page'          => [
-					'type'              => 'integer',
-					'default'           => 25,
-					'sanitize_callback' => [ self::class, 'sanitize_per_page' ],
-				],
-					'page'              => [
+					'per_page' => [
+						'type'              => 'integer',
+						'default'           => 25,
+						'sanitize_callback' => [ self::class, 'sanitize_per_page' ],
+					],
+					'page'     => [
 						'type'              => 'integer',
 						'default'           => 1,
 						'sanitize_callback' => 'absint',
 					],
-					'search'            => [
+					'search'   => [
 						'type'              => 'string',
 						'description'       => 'Search albums by name',
 						'sanitize_callback' => 'sanitize_text_field',
@@ -128,28 +129,28 @@ class AlbumREST {
 				'callback'            => [ self::class, 'create_album' ],
 				'permission_callback' => [ self::class, 'check_edit_permission' ],
 				'args'                => [
-					'name'             => [
+					'name'                  => [
 						'required'          => true,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 						'validate_callback' => [ self::class, 'validate_album_name' ],
 					],
-					'description'      => [
+					'description'           => [
 						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => 'wp_kses_post',
 						'validate_callback' => [ self::class, 'validate_album_description' ],
 					],
-					'preview_image_id' => [
+					'preview_image_id'      => [
 						'required'          => false,
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
 						'validate_callback' => [ self::class, 'validate_preview_image_id' ],
 					],
-					'pageid' => [
+					'pageid'                => [
 						'required'          => false,
 						'type'              => 'integer',
-					'sanitize_callback' => [ self::class, 'sanitize_pageid' ],
+						'sanitize_callback' => [ self::class, 'sanitize_pageid' ],
 					],
 					'display_type'          => [
 						'required'          => false,
@@ -161,7 +162,7 @@ class AlbumREST {
 						'type'              => 'object',
 						'sanitize_callback' => [ self::class, 'sanitize_display_type_settings' ],
 					],
-					'sortorder' => [
+					'sortorder'             => [
 						'required'          => false,
 						'type'              => 'array',
 						'sanitize_callback' => [ self::class, 'sanitize_sortorder' ],
@@ -180,40 +181,40 @@ class AlbumREST {
 				'callback'            => [ self::class, 'update_album' ],
 				'permission_callback' => [ self::class, 'check_edit_permission' ],
 				'args'                => [
-					'id'               => [
+					'id'                    => [
 						'required'          => true,
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
 						'validate_callback' => [ self::class, 'validate_id' ],
 					],
-					'name'             => [
+					'name'                  => [
 						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 						'validate_callback' => [ self::class, 'validate_album_name' ],
 					],
-					'description'      => [
+					'description'           => [
 						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => 'wp_kses_post',
 						'validate_callback' => [ self::class, 'validate_album_description' ],
 					],
-					'preview_image_id' => [
+					'preview_image_id'      => [
 						'required'          => false,
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
 						'validate_callback' => [ self::class, 'validate_preview_image_id' ],
 					],
-					'pageid' => [
+					'pageid'                => [
 						'required'          => false,
 						'type'              => 'integer',
-					'sanitize_callback' => [ self::class, 'sanitize_pageid' ],
-				],
-				'sortorder' => [
-					'required'          => false,
-					'type'              => 'array',
-					'sanitize_callback' => [ self::class, 'sanitize_sortorder' ],
-					'validate_callback' => [ self::class, 'validate_sortorder' ],
+						'sanitize_callback' => [ self::class, 'sanitize_pageid' ],
+					],
+					'sortorder'             => [
+						'required'          => false,
+						'type'              => 'array',
+						'sanitize_callback' => [ self::class, 'sanitize_sortorder' ],
+						'validate_callback' => [ self::class, 'validate_sortorder' ],
 					],
 					'display_type'          => [
 						'required'          => false,
@@ -344,7 +345,7 @@ class AlbumREST {
 
 		if ( false === $exists ) {
 			global $wpdb;
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
 			$exists = $wpdb->get_var(
 				$wpdb->prepare(
 					"SELECT COUNT(*) FROM {$wpdb->nggpictures} WHERE pid = %d",
@@ -400,12 +401,12 @@ class AlbumREST {
 
 		// Map frontend column names to database column names
 		$column_mapping = [
-			'id'          => 'id',
-			'name'        => 'name',
-			'created'     => 'date_created',
-			'modified'    => 'date_modified',
-			'slug'        => 'slug',
-			'previewpic'  => 'previewpic',
+			'id'         => 'id',
+			'name'       => 'name',
+			'created'    => 'date_created',
+			'modified'   => 'date_modified',
+			'slug'       => 'slug',
+			'previewpic' => 'previewpic',
 		];
 
 		// Map the orderby parameter to the actual database column
@@ -424,6 +425,24 @@ class AlbumREST {
 		$page     = $request->get_param( 'page' );
 		$offset   = ( $page - 1 ) * $per_page;
 
+		$cache_params  = [
+			$orderby,
+			$order,
+			$per_page_param,
+			$page,
+			$request->get_param( 'search' ),
+		];
+		$cache_key     = Transient::create_key( 'rest_albums', $cache_params );
+		$cached_result = Transient::fetch( $cache_key, false );
+
+		if ( $cached_result ) {
+			// Normalize objects → arrays for REST response
+			$response = json_decode( wp_json_encode( $cached_result['response'] ?? [] ), true );
+			$result   = new WP_REST_Response( $response, 200 );
+			$result->header( 'X-WP-Total', $cached_result['total_items'] ?? 0 );
+			$result->header( 'X-WP-TotalPages', $cached_result['total_pages'] ?? 0 );
+			return $result;
+		}
 		// Build the base query and apply filters.
 		$query = $mapper->select();
 
@@ -437,7 +456,7 @@ class AlbumREST {
 		$params        = [];
 
 		if ( $request->has_param( 'search' ) ) {
-			$search_term    = '%' . $request->get_param( 'search' ) . '%';
+			$search_term     = '%' . $request->get_param( 'search' ) . '%';
 			$where_clauses[] = 'name LIKE %s';
 			$params[]        = $search_term;
 		}
@@ -454,7 +473,7 @@ class AlbumREST {
 			$sql = $wpdb->prepare( $sql, $params );
 		}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared
 		$total_items = (int) $wpdb->get_var( $sql );
 
 		// Fetch current page of items.
@@ -468,10 +487,16 @@ class AlbumREST {
 			$response[] = self::prepare_album_list_item_for_response( $album );
 		}
 
+		$total_pages = ceil( $total_items / $per_page );
+		$cache_data  = [
+			'response'    => $response,
+			'total_items' => $total_items,
+			'total_pages' => $total_pages,
+		];
+		Transient::update( $cache_key, $cache_data );
 		$result = new WP_REST_Response( $response, 200 );
 
 		// Add pagination headers.
-		$total_pages = ceil( $total_items / $per_page );
 		$result->header( 'X-WP-Total', $total_items );
 		$result->header( 'X-WP-TotalPages', $total_pages );
 
@@ -511,10 +536,10 @@ class AlbumREST {
 		$mapper = AlbumMapper::get_instance();
 		$album  = new Album();
 
-		$album->name       = $request->get_param( 'name' );
-		$album->albumdesc  = $request->get_param( 'description' ) ?? '';
-		$album->pageid     = $request->get_param( 'pageid' ) ?? 0;
-		$album->sortorder  = $request->get_param( 'sortorder' ) ?? [];
+		$album->name      = $request->get_param( 'name' );
+		$album->albumdesc = $request->get_param( 'description' ) ?? '';
+		$album->pageid    = $request->get_param( 'pageid' ) ?? 0;
+		$album->sortorder = $request->get_param( 'sortorder' ) ?? [];
 
 		// Set preview image: use provided preview_image_id or default to first gallery thumbnail
 		if ( $request->has_param( 'preview_image_id' ) && $request->get_param( 'preview_image_id' ) ) {
@@ -536,6 +561,7 @@ class AlbumREST {
 			$mapper->set_defaults( $album );
 			$result = $mapper->save( $album );
 
+			Transient::flush( 'rest_albums' );
 			return new WP_REST_Response(
 				[
 					'album'   => self::prepare_album_for_response( $album ),
@@ -604,6 +630,7 @@ class AlbumREST {
 			$mapper->set_defaults( $album );
 
 			$mapper->save( $album );
+			Transient::flush( 'rest_albums' );
 			return new WP_REST_Response(
 				[
 					'album'   => self::prepare_album_for_response( $album ),
@@ -642,6 +669,7 @@ class AlbumREST {
 
 		try {
 			$mapper->destroy( $album );
+			Transient::flush( 'rest_albums' );
 			return new WP_REST_Response(
 				[
 					'message' => __( 'Album deleted successfully', 'nggallery' ),
@@ -817,7 +845,7 @@ class AlbumREST {
 		}
 
 		$gallery_mapper = GalleryMapper::get_instance();
-		$gallery = $gallery_mapper->find( $first_gallery_id );
+		$gallery        = $gallery_mapper->find( $first_gallery_id );
 
 		if ( ! $gallery ) {
 			return 0;
@@ -830,7 +858,12 @@ class AlbumREST {
 
 		// Otherwise, get the first image from this gallery
 		$image_mapper = ImageMapper::get_instance();
-		$images = $image_mapper->find_all( array( 'galleryid' => $first_gallery_id, 'limit' => 1 ) );
+		$images       = $image_mapper->find_all(
+			array(
+				'galleryid' => $first_gallery_id,
+				'limit'     => 1,
+			)
+		);
 
 		if ( ! empty( $images ) && isset( $images[0] ) ) {
 			return $images[0]->pid;

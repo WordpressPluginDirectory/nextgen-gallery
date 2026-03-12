@@ -68,69 +68,71 @@ class RolesCapabilities extends \WP_REST_Controller {
 	 */
 	public function get_roles_capabilities( $request ) {
 		$capabilities = [
-			'general' => [
-				'name' => __( 'Main NextGEN Gallery overview', 'nggallery' ),
-				'capability' => 'NextGEN Gallery overview',
+			'general'          => [
+				'name'         => __( 'Main NextGEN Gallery overview', 'nggallery' ),
+				'capability'   => 'NextGEN Gallery overview',
 				'current_role' => $this->ngg_get_role( 'NextGEN Gallery overview' ),
 			],
-			'tinymce' => [
-				'name' => __( 'Use TinyMCE Button / Upload tab', 'nggallery' ),
-				'capability' => 'NextGEN Use TinyMCE',
+			'tinymce'          => [
+				'name'         => __( 'Use TinyMCE Button / Upload tab', 'nggallery' ),
+				'capability'   => 'NextGEN Use TinyMCE',
 				'current_role' => $this->ngg_get_role( 'NextGEN Use TinyMCE' ),
 			],
-			'add_gallery' => [
-				'name' => __( 'Add gallery / Upload images', 'nggallery' ),
-				'capability' => 'NextGEN Upload images',
+			'add_gallery'      => [
+				'name'         => __( 'Add gallery / Upload images', 'nggallery' ),
+				'capability'   => 'NextGEN Upload images',
 				'current_role' => $this->ngg_get_role( 'NextGEN Upload images' ),
 			],
-			'manage_gallery' => [
-				'name' => __( 'Manage gallery', 'nggallery' ),
-				'capability' => 'NextGEN Manage gallery',
+			'manage_gallery'   => [
+				'name'         => __( 'Manage gallery', 'nggallery' ),
+				'capability'   => 'NextGEN Manage gallery',
 				'current_role' => $this->ngg_get_role( 'NextGEN Manage gallery' ),
 			],
-			'manage_others' => [
-				'name' => __( 'Manage others gallery', 'nggallery' ),
-				'capability' => 'NextGEN Manage others gallery',
+			'manage_others'    => [
+				'name'         => __( 'Manage others gallery', 'nggallery' ),
+				'capability'   => 'NextGEN Manage others gallery',
 				'current_role' => $this->ngg_get_role( 'NextGEN Manage others gallery' ),
 			],
-			'manage_tags' => [
-				'name' => __( 'Manage tags', 'nggallery' ),
-				'capability' => 'NextGEN Manage tags',
+			'manage_tags'      => [
+				'name'         => __( 'Manage tags', 'nggallery' ),
+				'capability'   => 'NextGEN Manage tags',
 				'current_role' => $this->ngg_get_role( 'NextGEN Manage tags' ),
 			],
-			'edit_album' => [
-				'name' => __( 'Edit Album', 'nggallery' ),
-				'capability' => 'NextGEN Edit album',
+			'edit_album'       => [
+				'name'         => __( 'Edit Album', 'nggallery' ),
+				'capability'   => 'NextGEN Edit album',
 				'current_role' => $this->ngg_get_role( 'NextGEN Edit album' ),
 			],
-			'change_style' => [
-				'name' => __( 'Change style', 'nggallery' ),
-				'capability' => 'NextGEN Change style',
+			'change_style'     => [
+				'name'         => __( 'Change style', 'nggallery' ),
+				'capability'   => 'NextGEN Change style',
 				'current_role' => $this->ngg_get_role( 'NextGEN Change style' ),
 			],
-			'change_options' => [
-				'name' => __( 'Change options', 'nggallery' ),
-				'capability' => 'NextGEN Change options',
+			'change_options'   => [
+				'name'         => __( 'Change options', 'nggallery' ),
+				'capability'   => 'NextGEN Change options',
 				'current_role' => $this->ngg_get_role( 'NextGEN Change options' ),
 			],
 			'attach_interface' => [
-				'name' => __( 'NextGEN Attach Interface', 'nggallery' ),
-				'capability' => 'NextGEN Attach Interface',
+				'name'         => __( 'NextGEN Attach Interface', 'nggallery' ),
+				'capability'   => 'NextGEN Attach Interface',
 				'current_role' => $this->ngg_get_role( 'NextGEN Attach Interface' ),
 			],
 		];
 
 		// Get available WordPress roles
-		$roles = [];
+		$roles    = [];
 		$wp_roles = wp_roles()->roles;
 		foreach ( $wp_roles as $role_key => $role_data ) {
 			$roles[ $role_key ] = $role_data['name'];
 		}
 
-		return new \WP_REST_Response( [
-			'capabilities' => $capabilities,
-			'roles' => $roles,
-		] );
+		return new \WP_REST_Response(
+			[
+				'capabilities' => $capabilities,
+				'roles'        => $roles,
+			]
+		);
 	}
 
 	/**
@@ -145,19 +147,19 @@ class RolesCapabilities extends \WP_REST_Controller {
 
 		// Validate and sanitize the data
 		$valid_capabilities = [
-			'general' => 'NextGEN Gallery overview',
-			'tinymce' => 'NextGEN Use TinyMCE',
-			'add_gallery' => 'NextGEN Upload images',
-			'manage_gallery' => 'NextGEN Manage gallery',
-			'manage_others' => 'NextGEN Manage others gallery',
-			'manage_tags' => 'NextGEN Manage tags',
-			'edit_album' => 'NextGEN Edit album',
-			'change_style' => 'NextGEN Change style',
-			'change_options' => 'NextGEN Change options',
+			'general'          => 'NextGEN Gallery overview',
+			'tinymce'          => 'NextGEN Use TinyMCE',
+			'add_gallery'      => 'NextGEN Upload images',
+			'manage_gallery'   => 'NextGEN Manage gallery',
+			'manage_others'    => 'NextGEN Manage others gallery',
+			'manage_tags'      => 'NextGEN Manage tags',
+			'edit_album'       => 'NextGEN Edit album',
+			'change_style'     => 'NextGEN Change style',
+			'change_options'   => 'NextGEN Change options',
 			'attach_interface' => 'NextGEN Attach Interface',
 		];
 
-		$wp_roles = wp_roles()->roles;
+		$wp_roles    = wp_roles()->roles;
 		$valid_roles = array_keys( $wp_roles );
 
 		// Update each capability
@@ -172,10 +174,12 @@ class RolesCapabilities extends \WP_REST_Controller {
 			}
 		}
 
-		return new \WP_REST_Response( [
-			'success' => true,
-			'message' => __( 'Roles and capabilities updated successfully', 'nggallery' ),
-		] );
+		return new \WP_REST_Response(
+			[
+				'success' => true,
+				'message' => __( 'Roles and capabilities updated successfully', 'nggallery' ),
+			]
+		);
 	}
 
 	/**

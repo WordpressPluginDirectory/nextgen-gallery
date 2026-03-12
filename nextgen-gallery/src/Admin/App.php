@@ -5,7 +5,6 @@
  * @package Imagely\NGG\Admin
  */
 
-// TODO: Add comments at the end via ai.
 // phpcs:disable Squiz.Commenting
 
 namespace Imagely\NGG\Admin;
@@ -43,7 +42,7 @@ class App {
 		$this->hook_suffixes[] = add_menu_page(
 			__( 'Imagely', 'nggallery' ),
 			__( 'Imagely', 'nggallery' ) . $nav_append_count,
-			'NextGEN Gallery overview',
+			'NextGEN Gallery overview', // phpcs:ignore WordPress.WP.Capabilities.Unknown
 			$menu,
 			[ $this, 'render_settings_page' ],
 			plugins_url( 'assets/images/logo-icon.png', NGG_PLUGIN_FILE ),
@@ -76,6 +75,11 @@ class App {
 				'name'       => __( 'Tags', 'nggallery' ),
 				'capability' => 'NextGEN Manage tags',
 				'menu_slug'  => "$menu-tags",
+			],
+			[
+				'name'       => __( 'Features', 'nggallery' ),
+				'capability' => 'manage_options',
+				'menu_slug'  => "$menu-addons",
 			],
 		];
 
@@ -205,6 +209,7 @@ class App {
 	}
 
 	public function render_settings_page() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only GET parameter for display mode
 		$embed     = isset( $_GET['embed'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['embed'] ) );
 		$embed_css = $embed ? '<style>
 		#adminmenumain, #wpadminbar, #screen-meta, #wpfooter, #wpbody-content > .notice, #wpbody-content > .updated, #wpbody-content > .error { display:none !important; }
@@ -277,7 +282,7 @@ HTML;
 
 			foreach ( $found as $label => $files ) {
 				foreach ( $files as $file ) {
-					$filename                        = basename( $file );
+					$filename                      = basename( $file );
 					$templates[ $prefix ][ $file ] = "{$label}: {$filename}";
 				}
 			}
@@ -388,67 +393,68 @@ HTML;
 
 		$system_info = [
 			// Existing fields
-			'php_version'       => phpversion(),
-			'wordpress_version' => $wp_version,
-			'memory_limit'      => ini_get( 'memory_limit' ),
-			'max_upload_size'   => size_format( wp_max_upload_size() ),
-			'server_software'   => isset( $_SERVER['SERVER_SOFTWARE'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_SOFTWARE'] ) ) : 'Unknown',
-			'plugin_version'    => defined( 'NGG_PLUGIN_VERSION' ) ? NGG_PLUGIN_VERSION : 'Unknown',
-			'gd_version'        => self::get_gd_version(),
-			'imagick_version'   => self::get_imagick_version(),
+			'php_version'              => phpversion(),
+			'wordpress_version'        => $wp_version,
+			'memory_limit'             => ini_get( 'memory_limit' ),
+			'max_upload_size'          => size_format( wp_max_upload_size() ),
+			'server_software'          => isset( $_SERVER['SERVER_SOFTWARE'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_SOFTWARE'] ) ) : 'Unknown',
+			'plugin_version'           => defined( 'NGG_PLUGIN_VERSION' ) ? NGG_PLUGIN_VERSION : 'Unknown',
+			'gd_version'               => self::get_gd_version(),
+			'imagick_version'          => self::get_imagick_version(),
 
 			// Server Environment
-			'php_os'            => PHP_OS,
-			'php_sapi'          => php_sapi_name(),
-			'mysql_version'     => $mysql_version,
-			'mysql_type'        => $mysql_type,
-			'curl_version'      => function_exists( 'curl_version' ) ? curl_version()['version'] : 'Not available',
-			'openssl_version'   => defined( 'OPENSSL_VERSION_TEXT' ) ? OPENSSL_VERSION_TEXT : 'Not available',
+			'php_os'                   => PHP_OS,
+			'php_sapi'                 => php_sapi_name(),
+			'mysql_version'            => $mysql_version,
+			'mysql_type'               => $mysql_type,
+			'curl_version'             => function_exists( 'curl_version' ) ? curl_version()['version'] : 'Not available',
+			'openssl_version'          => defined( 'OPENSSL_VERSION_TEXT' ) ? OPENSSL_VERSION_TEXT : 'Not available',
 
 			// PHP Extensions
-			'exif_enabled'      => function_exists( 'exif_read_data' ) ? 'Yes' : 'No',
-			'iptc_enabled'      => function_exists( 'iptcparse' ) ? 'Yes' : 'No',
-			'mbstring_enabled'  => extension_loaded( 'mbstring' ) ? 'Yes' : 'No',
-			'zip_enabled'       => extension_loaded( 'zip' ) ? 'Yes' : 'No',
-			'fileinfo_enabled'  => extension_loaded( 'fileinfo' ) ? 'Yes' : 'No',
+			'exif_enabled'             => function_exists( 'exif_read_data' ) ? 'Yes' : 'No',
+			'iptc_enabled'             => function_exists( 'iptcparse' ) ? 'Yes' : 'No',
+			'mbstring_enabled'         => extension_loaded( 'mbstring' ) ? 'Yes' : 'No',
+			'zip_enabled'              => extension_loaded( 'zip' ) ? 'Yes' : 'No',
+			'fileinfo_enabled'         => extension_loaded( 'fileinfo' ) ? 'Yes' : 'No',
 
 			// PHP Configuration
-			'post_max_size'     => ini_get( 'post_max_size' ),
-			'max_execution_time' => ini_get( 'max_execution_time' ),
-			'max_input_vars'    => ini_get( 'max_input_vars' ),
-			'upload_max_filesize' => ini_get( 'upload_max_filesize' ),
-			'allow_url_fopen'   => ini_get( 'allow_url_fopen' ) ? 'Yes' : 'No',
+			'post_max_size'            => ini_get( 'post_max_size' ),
+			'max_execution_time'       => ini_get( 'max_execution_time' ),
+			'max_input_vars'           => ini_get( 'max_input_vars' ),
+			'upload_max_filesize'      => ini_get( 'upload_max_filesize' ),
+			'allow_url_fopen'          => ini_get( 'allow_url_fopen' ) ? 'Yes' : 'No',
 
 			// WordPress Configuration
-			'wp_debug'          => defined( 'WP_DEBUG' ) && WP_DEBUG ? 'Yes' : 'No',
-			'wp_debug_log'      => defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ? 'Yes' : 'No',
-			'wp_memory_limit'   => defined( 'WP_MEMORY_LIMIT' ) ? WP_MEMORY_LIMIT : 'Not set',
-			'site_url'          => site_url(),
-			'home_url'          => home_url(),
-			'is_multisite'      => is_multisite() ? 'Yes' : 'No',
-			'active_theme'      => wp_get_theme()->get( 'Name' ) . ' ' . wp_get_theme()->get( 'Version' ),
+			'wp_debug'                 => defined( 'WP_DEBUG' ) && WP_DEBUG ? 'Yes' : 'No',
+			'wp_debug_log'             => defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ? 'Yes' : 'No',
+			'wp_memory_limit'          => defined( 'WP_MEMORY_LIMIT' ) ? WP_MEMORY_LIMIT : 'Not set',
+			'site_url'                 => site_url(),
+			'home_url'                 => home_url(),
+			'is_multisite'             => is_multisite() ? 'Yes' : 'No',
+			'active_theme'             => wp_get_theme()->get( 'Name' ) . ' ' . wp_get_theme()->get( 'Version' ),
 
 			// NextGen Specific Settings
-			'ngg_options_version' => get_option( 'ngg_options_version', 'Not set' ),
+			'ngg_options_version'      => get_option( 'ngg_options_version', 'Not set' ),
 			'image_library_preference' => $settings->get( 'imgLibrary', 'gd' ),
-			'thumbnail_quality' => $settings->get( 'thumbquality', '100' ),
-			'backup_images'     => $settings->get( 'imgBackup', false ) ? 'Yes' : 'No',
-			'galleries_count'   => wp_count_posts( 'ngg_gallery' )->publish ?? 0,
-			'images_count'      => $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}ngg_pictures" ) ?? 0,
+			'thumbnail_quality'        => $settings->get( 'thumbquality', '100' ),
+			'backup_images'            => $settings->get( 'imgBackup', false ) ? 'Yes' : 'No',
+			'galleries_count'          => wp_count_posts( 'ngg_gallery' )->publish ?? 0,
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			'images_count'             => $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}ngg_pictures" ) ?? 0,
 
 			// Server Paths
-			'wp_content_dir'    => WP_CONTENT_DIR,
-			'upload_dir'        => $upload_dir['basedir'],
-			'ngg_gallery_path'  => $settings->get( 'gallerypath', 'Not set' ),
+			'wp_content_dir'           => WP_CONTENT_DIR,
+			'upload_dir'               => $upload_dir['basedir'],
+			'ngg_gallery_path'         => $settings->get( 'gallerypath', 'Not set' ),
 
 			// Additional Settings
-			'timezone'          => wp_timezone_string(),
-			'locale'            => get_locale(),
-			'permalink_structure' => get_option( 'permalink_structure', 'Default' ),
+			'timezone'                 => wp_timezone_string(),
+			'locale'                   => get_locale(),
+			'permalink_structure'      => get_option( 'permalink_structure', 'Default' ),
 
 			// NextGen Legacy Settings
-			'show_legacy_admin_pages' => $settings->get( 'ngg_show_old_settings', false ) ? 'Yes' : 'No',
-			'activate_legacy_block' => $settings->get( 'ngg_installation_type', 'fresh' ) === 'existing' ? 'Yes' : 'No',
+			'show_legacy_admin_pages'  => $settings->get( 'ngg_show_old_settings', false ) ? 'Yes' : 'No',
+			'activate_legacy_block'    => $settings->get( 'ngg_installation_type', 'fresh' ) === 'existing' ? 'Yes' : 'No',
 		];
 
 		return $system_info;
@@ -568,11 +574,11 @@ HTML;
 			'imagely',
 			esc_html__( 'Upgrade to Pro', 'nggallery' ),
 			esc_html__( 'Upgrade to Pro', 'nggallery' ),
-			'NextGEN Gallery overview',
+			'NextGEN Gallery overview', // phpcs:ignore WordPress.WP.Capabilities.Unknown
 			esc_url( $this->get_utm_link( 'https://www.imagely.com/lite/', 'adminsidebar', 'unlockprosidebar' ) )
 		);
 
-		if ( ! current_user_can( 'NextGEN Gallery overview' ) ) {
+		if ( ! current_user_can( 'NextGEN Gallery overview' ) ) { // phpcs:ignore WordPress.WP.Capabilities.Unknown
 			return;
 		}
 

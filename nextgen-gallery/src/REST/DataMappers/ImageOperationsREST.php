@@ -118,18 +118,18 @@ class ImageOperationsREST {
 				'callback'            => [ self::class, 'create_thumbnail' ],
 				'permission_callback' => [ self::class, 'check_edit_permission' ],
 				'args'                => [
-					'id' => [
+					'id'            => [
 						'required'          => true,
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
 					],
-					'width' => [
+					'width'         => [
 						'type'              => 'integer',
 						'minimum'           => 1,
 						'sanitize_callback' => 'absint',
 						'description'       => 'Custom width for thumbnail (optional)',
 					],
-					'height' => [
+					'height'        => [
 						'type'              => 'integer',
 						'minimum'           => 1,
 						'sanitize_callback' => 'absint',
@@ -575,18 +575,18 @@ class ImageOperationsREST {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public static function create_thumbnail( WP_REST_Request $request ) {
-		$image_id       = $request->get_param( 'id' );
-		$width          = $request->get_param( 'width' );
-		$height         = $request->get_param( 'height' );
-		$fix_dimension  = $request->get_param( 'fix_dimension' );
+		$image_id      = $request->get_param( 'id' );
+		$width         = $request->get_param( 'width' );
+		$height        = $request->get_param( 'height' );
+		$fix_dimension = $request->get_param( 'fix_dimension' );
 
 		try {
 			// If custom parameters are provided, temporarily update the global settings
 			$original_options = null;
 			if ( $width || $height || $fix_dimension !== null ) {
-				$ngg_options = get_option( 'ngg_options', [] );
+				$ngg_options      = get_option( 'ngg_options', [] );
 				$original_options = $ngg_options;
-				
+
 				if ( $width ) {
 					$ngg_options['thumbwidth'] = $width;
 				}
@@ -597,7 +597,7 @@ class ImageOperationsREST {
 				if ( $fix_dimension !== null ) {
 					$ngg_options['thumbfix'] = $fix_dimension ? 1 : 0;
 				}
-				
+
 				update_option( 'ngg_options', $ngg_options );
 			}
 
@@ -626,7 +626,7 @@ class ImageOperationsREST {
 			if ( isset( $original_options ) && $original_options !== null ) {
 				update_option( 'ngg_options', $original_options );
 			}
-			
+
 			return new WP_Error(
 				'thumbnail_creation_failed',
 				$e->getMessage(),
@@ -782,15 +782,18 @@ class ImageOperationsREST {
 		$storage  = StorageManager::get_instance();
 
 		try {
-			$image_path   = $storage->get_image_abspath( $image_id );
-			$backup_path  = $image_path . '_backup';
+			$image_path  = $storage->get_image_abspath( $image_id );
+			$backup_path = $image_path . '_backup';
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 			$exif_abspath = @file_exists( $backup_path ) ? $backup_path : $image_path;
-			$exif_iptc    = @EXIFWriter::read_metadata( $exif_abspath );
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$exif_iptc = @EXIFWriter::read_metadata( $exif_abspath );
 
 			foreach ( $storage->get_image_sizes( $image_id ) as $size ) {
 				if ( 'backup' === $size ) {
 					continue;
 				}
+				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 				@EXIFWriter::write_metadata( $storage->get_image_abspath( $image_id, $size ), $exif_iptc );
 			}
 

@@ -11,9 +11,14 @@ use Imagely\NGG\Display\{StaticAssets, View};
 use Imagely\NGG\Settings\Settings;
 use Imagely\NGG\Util\Router;
 
+/**
+ * Thumbnails display type controller.
+ */
 class Thumbnails extends ParentController {
 
 	/**
+	 * Gets an alternative displayed gallery.
+	 *
 	 * @param DisplayedGallery $displayed_gallery
 	 * @return DisplayedGallery
 	 */
@@ -50,11 +55,13 @@ class Thumbnails extends ParentController {
 	}
 
 	/**
+	 * Renders thumbnails.
+	 *
 	 * @param DisplayedGallery $displayed_gallery
-	 * @param bool             $return (optional)
+	 * @param bool             $return_output (optional)
 	 * @return string
 	 */
-	public function index_action( $displayed_gallery, $return = false ) {
+	public function index_action( $displayed_gallery, $return_output = false ) {
 		$router = Router::get_instance();
 
 		$storage   = StorageManager::get_instance();
@@ -114,7 +121,7 @@ class Thumbnails extends ParentController {
 					$current_page,
 					$total,
 					$images_per_page,
-					urldecode( $router->get_parameter( 'ajax_pagination_referrer' ) ?: '' )
+					urldecode( $router->get_parameter( 'ajax_pagination_referrer' ) ? $router->get_parameter( 'ajax_pagination_referrer' ) : '' )
 				);
 				$app               = $router->get_routed_app();
 				$app->remove_parameter( 'ajax_pagination_referrer' );
@@ -166,7 +173,7 @@ class Thumbnails extends ParentController {
 			if ( $display_settings['use_imagebrowser_effect'] ) {
 				if ( ! empty( $displayed_gallery->display_settings['original_display_type'] )
 				&& ! empty( $_SERVER['NGG_ORIG_REQUEST_URI'] ) ) {
-					$origin_url = $_SERVER['NGG_ORIG_REQUEST_URI'];
+					$origin_url = sanitize_text_field( wp_unslash( $_SERVER['NGG_ORIG_REQUEST_URI'] ) );
 				}
 
 				$app = $router->get_routed_app();
@@ -192,7 +199,7 @@ class Thumbnails extends ParentController {
 						'effect_code'    => $effect_code,
 					]
 				);
-				return $this->legacy_render( $display_settings['template'], $params, $return, 'gallery' );
+				return $this->legacy_render( $display_settings['template'], $params, $return_output, 'gallery' );
 			} else {
 				$params = $display_settings;
 
@@ -229,7 +236,7 @@ class Thumbnails extends ParentController {
 					'photocrati-nextgen_basic_gallery#thumbnails/index'
 				);
 
-				return $view->render( $return );
+				return $view->render( $return_output );
 			}
 		} elseif ( $display_settings['display_no_images_error'] ) {
 			$view = new View(
@@ -238,13 +245,15 @@ class Thumbnails extends ParentController {
 				'photocrati-nextgen_gallery_display#no_images_found'
 			);
 
-			return $view->render( $return );
+			return $view->render( $return_output );
 		}
 
 		return '';
 	}
 
 	/**
+	 * Enqueues frontend resources for thumbnails.
+	 *
 	 * @param DisplayedGallery $displayed_gallery
 	 */
 	public function enqueue_frontend_resources( $displayed_gallery ) {
@@ -258,6 +267,7 @@ class Thumbnails extends ParentController {
 			NGG_SCRIPT_VERSION
 		);
 
+		// phpcs:ignore WordPress.WP.EnqueuedResourceParameters.NotInFooter
 		\wp_enqueue_script(
 			'nextgen_basic_thumbnails_script',
 			StaticAssets::get_url( 'Thumbnails/nextgen_basic_thumbnails.js', 'photocrati-nextgen_basic_gallery#thumbnails/nextgen_basic_thumbnails.js' ),
@@ -266,6 +276,7 @@ class Thumbnails extends ParentController {
 		);
 
 		if ( $displayed_gallery->display_settings['ajax_pagination'] ) {
+			// phpcs:ignore WordPress.WP.EnqueuedResourceParameters.NotInFooter
 			\wp_enqueue_script(
 				'nextgen-basic-thumbnails-ajax-pagination',
 				StaticAssets::get_url( 'Thumbnails/ajax_pagination.js', 'photocrati-nextgen_basic_gallery#thumbnails/ajax_pagination.js' ),
@@ -364,7 +375,7 @@ class Thumbnails extends ParentController {
 	 * Ensures thumbnails exist for images, regenerating them if necessary
 	 * This is particularly useful for fresh installations where thumbnails might not have been generated
 	 *
-	 * @param array $images Array of image objects
+	 * @param array          $images Array of image objects
 	 * @param StorageManager $storage Storage manager instance
 	 */
 	private function ensure_thumbnails_exist( $images, $storage ) {

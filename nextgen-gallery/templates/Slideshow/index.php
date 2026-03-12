@@ -1,5 +1,8 @@
 <?php
 /**
+ * Slideshow Display Template.
+ *
+ * @package Nextgen Gallery
  * @var C_Displayed_Gallery $displayed_gallery
  * @var \Imagely\NGG\DataStorage\Manager $storage
  * @var array $images
@@ -13,7 +16,9 @@
  * @var string $placeholder
  * @var string $thumbnail_link
  * @var string $thumbnail_link_text
- */ ?>
+ */
+
+?>
 <?php $this->start_element( 'nextgen_gallery.gallery_container', 'container', $displayed_gallery ); ?>
 
 <div class="ngg-galleryoverview ngg-slideshow"
@@ -24,14 +29,21 @@
 			display: none;">
 
 	<?php
-	for ( $i = 0; $i < count( $images ); $i++ ) {
-		$image           = $images[ $i ];
-		$image->style    = 'style="height:' . esc_attr( $gallery_height ) . 'px"';
-		$template_params = [
+	$image_count = count( $images );
+	for ( $i = 0; $i < $image_count; $i++ ) {
+		$image                   = $images[ $i ];
+		$show_tiktok_play_button = (
+			! empty( $image->meta_data ) &&
+			is_array( $image->meta_data ) &&
+			! empty( $image->meta_data['imagely_tiktok_id'] ) &&
+			! empty( $image->meta_data['imagely_tiktok_show_play_button'] )
+		);
+		$image->style            = 'style="height:' . esc_attr( $gallery_height ) . 'px"';
+		$template_params         = [
 			'index' => $i,
 			'class' => 'ngg-gallery-slideshow-image',
 		];
-		$template_params = array_merge( get_defined_vars(), $template_params );
+		$template_params         = array_merge( get_defined_vars(), $template_params );
 
 		$this->start_element( 'nextgen_gallery.image', 'item', $image );
 		?>
@@ -43,12 +55,27 @@
 			data-image-id="<?php echo esc_attr( $image->{$image->id_field} ); ?>"
 			data-title="<?php echo esc_attr( $image->alttext ); ?>"
 			data-description="<?php echo esc_attr( stripslashes( $image->description ?? '' ) ); ?>"
-			<?php echo $effect_code; ?>>
+			<?php if ( ! empty( $image->meta_data['imagely_tiktok_play_url'] ) ) : ?>
+				data-tiktok-play-url="<?php echo esc_attr( $image->meta_data['imagely_tiktok_play_url'] ); ?>"
+			<?php endif; ?>
+			<?php if ( ! empty( $image->meta_data['imagely_tiktok_share_url'] ) ) : ?>
+				data-tiktok-share-url="<?php echo esc_attr( $image->meta_data['imagely_tiktok_share_url'] ); ?>"
+			<?php endif; ?>
+			<?php if ( ! empty( $image->meta_data['imagely_tiktok_embed_link'] ) ) : ?>
+				data-tiktok-embed-url="<?php echo esc_attr( $image->meta_data['imagely_tiktok_embed_link'] ); ?>"
+			<?php endif; ?>
+			<?php if ( ! empty( $image->meta_data['video_link'] ) ) : ?>
+				data-video-url="<?php echo esc_attr( $image->meta_data['video_link'] ); ?>"
+			<?php endif; ?>
+			<?php echo $effect_code; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- effect_code is safe HTML attributes from display settings ?>>
+			<?php if ( $show_tiktok_play_button || ! empty( $image->meta_data['video_link'] ) ) : ?>
+				<span class="ngg-video-play-overlay" aria-hidden="true"></span>
+			<?php endif; ?>
 
 			<img data-image-id='<?php echo esc_attr( $image->pid ); ?>'
 				title="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->description ) ); ?>"
 				alt="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->alttext ) ); ?>"
-				src="<?php echo esc_attr( $storage->get_image_url( $image, 'full' ) ); ?>"
+				src="<?php echo esc_attr( $storage->get_computed_image_url( $image, 'full' ) ); ?>"
 				style="max-height: <?php echo esc_attr( $gallery_height - 20 ); ?>px;"/>
 		</a>
 

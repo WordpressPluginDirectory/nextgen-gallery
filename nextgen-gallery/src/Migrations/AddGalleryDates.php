@@ -87,6 +87,7 @@ class AddGalleryDates {
 			. 'INNER JOIN `' . esc_sql( $posts_table ) . '` p ON p.ID = pm.post_id '
 			. 'WHERE p.post_type = "nextgen_proof" '
 			. 'AND pm.meta_key IN ("date_created","date_modified")';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$wpdb->query( $sql );
 
 		// Insert date_created meta from post modified timestamps.
@@ -94,6 +95,7 @@ class AddGalleryDates {
 			. 'SELECT p.ID, "date_created", '
 			. 'CASE WHEN p.post_modified_gmt = "0000-00-00 00:00:00" THEN p.post_modified ELSE p.post_modified_gmt END '
 			. 'FROM `' . esc_sql( $posts_table ) . '` p WHERE p.post_type = "nextgen_proof"';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$wpdb->query( $sql );
 
 		// Insert date_modified meta from post modified timestamps.
@@ -101,6 +103,7 @@ class AddGalleryDates {
 			. 'SELECT p.ID, "date_modified", '
 			. 'CASE WHEN p.post_modified_gmt = "0000-00-00 00:00:00" THEN p.post_modified ELSE p.post_modified_gmt END '
 			. 'FROM `' . esc_sql( $posts_table ) . '` p WHERE p.post_type = "nextgen_proof"';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$wpdb->query( $sql );
 
 		update_option( 'imagely_dates_migrated', true );

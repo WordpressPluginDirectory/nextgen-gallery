@@ -2,14 +2,26 @@
 
 namespace Imagely\NGG\DisplayType;
 
+/**
+ * Legacy Template Locator
+ *
+ * Helps locate legacy template files for backward compatibility.
+ */
 class LegacyTemplateLocator {
 
-	static $instance = null;
+	/**
+	 * Singleton instance
+	 *
+	 * @var LegacyTemplateLocator|null
+	 */
+	public static $instance = null;
 
 	/**
+	 * Gets the singleton instance
+	 *
 	 * @return LegacyTemplateLocator
 	 */
-	static function get_instance() {
+	public static function get_instance() {
 		if ( ! isset( self::$instance ) ) {
 			self::$instance = new LegacyTemplateLocator();
 		}
@@ -44,6 +56,7 @@ class LegacyTemplateLocator {
 	/**
 	 * Returns an array of all available template files
 	 *
+	 * @param bool|string|array $prefix Optional prefix filter.
 	 * @return array All available template files
 	 */
 	public function find_all( $prefix = false ) {
@@ -62,7 +75,8 @@ class LegacyTemplateLocator {
 	/**
 	 * Recursively scans $dir for files ending in .php
 	 *
-	 * @param string $dir Directory
+	 * @param string            $dir Directory to scan.
+	 * @param bool|string|array $prefix Optional prefix filter.
 	 * @return array All php files in $dir
 	 */
 	public function get_templates_from_dir( $dir, $prefix = false ) {
@@ -142,6 +156,7 @@ class LegacyTemplateLocator {
 		$template_dirs = $this->get_template_directories();
 
 		// Find the abspath of the template to render.
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		if ( ! @file_exists( $custom_template ) ) {
 			// Template doesn't exist as an absolute path, search through registered directories.
 			foreach ( $template_dirs as $dir ) {
@@ -149,6 +164,7 @@ class LegacyTemplateLocator {
 					break;
 				}
 				$filename = implode( DIRECTORY_SEPARATOR, [ rtrim( $dir, '/\\' ), $custom_template ] );
+				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 				if ( @file_exists( $filename ) ) {
 					$template_abspath = $filename;
 				} elseif ( strpos( $custom_template, '-template' ) === false ) {
@@ -159,6 +175,7 @@ class LegacyTemplateLocator {
 							str_replace( '.php', '', $custom_template ) . '-template.php',
 						]
 					);
+					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 					if ( @file_exists( $filename ) ) {
 						$template_abspath = $filename;
 					}
@@ -200,7 +217,7 @@ class LegacyTemplateLocator {
 					sprintf(
 						// Translators: %s is the absolute path that was provided.
 						'Using an absolute path for a NextGEN Gallery legacy template (%s) is deprecated and no longer supported for security reasons. Please move this template file into your active theme or child theme "nggallery" directory and reference it by file name instead.',
-						$custom_template
+						esc_html( $custom_template )
 					),
 					'3.59.13'
 				);

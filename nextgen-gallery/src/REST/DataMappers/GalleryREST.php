@@ -17,6 +17,7 @@ use Imagely\NGG\DataMappers\DisplayType as DisplayTypeMapper;
 
 use Imagely\NGG\DataTypes\Gallery;
 use Imagely\NGG\Util\Security;
+use Imagely\NGG\Util\Transient;
 
 /**
  * Gallery REST API
@@ -66,16 +67,16 @@ class GalleryREST {
 						'default'           => 'ASC',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
-				'per_page'          => [
-					'type'              => 'integer',
-					'default'           => 25,
-					'sanitize_callback' => [ self::class, 'sanitize_per_page' ],
-				],
-				'page'              => [
-					'type'              => 'integer',
-					'default'           => 1,
-					'sanitize_callback' => 'absint', // Keep absint for page (always positive)
-				],
+					'per_page'          => [
+						'type'              => 'integer',
+						'default'           => 25,
+						'sanitize_callback' => [ self::class, 'sanitize_per_page' ],
+					],
+					'page'              => [
+						'type'              => 'integer',
+						'default'           => 1,
+						'sanitize_callback' => 'absint', // Keep absint for page (always positive)
+					],
 					'ecommerce_filter'  => [
 						'type'              => 'string',
 						'enum'              => [ 'enabled', 'disabled' ],
@@ -128,7 +129,7 @@ class GalleryREST {
 						'items'             => [
 							'type' => 'integer',
 						],
-						'sanitize_callback' => function( $value ) {
+						'sanitize_callback' => function ( $value ) {
 							if ( ! is_array( $value ) ) {
 								return [];
 							}
@@ -230,6 +231,10 @@ class GalleryREST {
 					'display_type_settings' => [
 						'type'              => 'object',
 						'sanitize_callback' => [ self::class, 'sanitize_display_type_settings' ],
+					],
+					'external_source'       => [
+						'type'              => 'object',
+						'sanitize_callback' => [ self::class, 'sanitize_external_source' ],
 					],
 					'is_private'            => [
 						'type'              => 'integer',
@@ -362,6 +367,26 @@ class GalleryREST {
 		// Build filter conditions from request.
 		$filters = self::build_filter_conditions( $request );
 
+		$cache_params  = [
+			get_current_user_id(),
+			$orderby,
+			$order,
+			$per_page_param,
+			$page,
+			$request->get_param( 'ecommerce_filter' ),
+			$request->get_param( 'is_private_filter' ),
+			$request->get_param( 'search' ),
+		];
+		$cache_key     = Transient::create_key( 'rest_galleries', $cache_params );
+		$cached_result = Transient::fetch( $cache_key, false );
+		if ( $cached_result ) {
+			// Normalize objects → arrays for REST response
+			$response = json_decode( wp_json_encode( $cached_result['response'] ?? [] ), true );
+			$result   = new WP_REST_Response( $response, 200 );
+			$result->header( 'X-WP-Total', $cached_result['total_items'] ?? 0 );
+			$result->header( 'X-WP-TotalPages', $cached_result['total_pages'] ?? 0 );
+			return $result;
+		}
 		// Build the base query and apply filters.
 		$query = $mapper->select();
 
@@ -382,7 +407,7 @@ class GalleryREST {
 			$sql = $wpdb->prepare( $sql, $filters['params'] );
 		}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared
 		$total_items = (int) $wpdb->get_var( $sql );
 
 		// Fetch current page of items.
@@ -396,10 +421,16 @@ class GalleryREST {
 			$response[] = self::prepare_gallery_list_item_for_response( $gallery );
 		}
 
+		$total_pages = ceil( $total_items / $per_page );
+		$cache_data  = [
+			'response'    => $response,
+			'total_items' => $total_items,
+			'total_pages' => $total_pages,
+		];
+		Transient::update( $cache_key, $cache_data );
 		$result = new WP_REST_Response( $response, 200 );
 
 		// Add pagination headers.
-		$total_pages = ceil( $total_items / $per_page );
 		$result->header( 'X-WP-Total', $total_items );
 		$result->header( 'X-WP-TotalPages', $total_pages );
 
@@ -445,7 +476,7 @@ class GalleryREST {
 		}
 
 		if ( $request->has_param( 'search' ) ) {
-			$search_term         = $request->get_param( 'search' );
+			$search_term          = $request->get_param( 'search' );
 			$search_term_wildcard = '%' . $search_term . '%';
 
 			$conditions[]    = [ 'title LIKE %s', $search_term_wildcard ];
@@ -567,6 +598,7 @@ class GalleryREST {
 
 		try {
 			$mapper->save( $gallery );
+			Transient::flush( 'rest_galleries' );
 			return new WP_REST_Response(
 				self::prepare_gallery_for_response( $gallery ),
 				201
@@ -644,6 +676,9 @@ class GalleryREST {
 		if ( $request->has_param( 'display_type_settings' ) ) {
 			$gallery->display_type_settings = $request->get_param( 'display_type_settings' );
 		}
+		if ( $request->has_param( 'external_source' ) ) {
+			$gallery->external_source = $request->get_param( 'external_source' );
+		}
 		if ( $request->has_param( 'is_private' ) ) {
 			$gallery->is_private = (bool) $request->get_param( 'is_private' );
 		}
@@ -653,6 +688,7 @@ class GalleryREST {
 
 		try {
 			$mapper->save( $gallery );
+			Transient::flush( 'rest_galleries' );
 			return new WP_REST_Response(
 				[
 					'gallery' => self::prepare_gallery_for_response( $gallery ),
@@ -690,21 +726,11 @@ class GalleryREST {
 		}
 
 		try {
-			// Check if we should delete gallery files and folders from filesystem.
-			// Note: The Gallery mapper handles physical file deletion internally
-			// based on this setting; it should not control whether dependent
-			// database records are removed.
-			$settings = \Imagely\NGG\Settings\Settings::get_instance();
-			$delete_files = $settings->get( 'deleteImg' );
-
-			// Always delete gallery dependencies (images) from the database;
-			// $delete_files only affects physical file deletion logic internally.
 			$mapper->destroy( $gallery, true );
-
+			Transient::flush( 'rest_galleries' );
 			return new WP_REST_Response(
 				[
-					'message'      => __( 'Gallery deleted successfully', 'nggallery' ),
-					'files_deleted' => (bool) $delete_files,
+					'message' => __( 'Gallery deleted successfully', 'nggallery' ),
 				],
 				200
 			);
@@ -921,7 +947,7 @@ class GalleryREST {
 	private static function prepare_gallery_list_item_for_response( $gallery ) {
 		global $wpdb;
 
-		// phpcs:ignore
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$gallery->counter = $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT COUNT(*) FROM {$wpdb->nggpictures} WHERE galleryid = %d",
@@ -969,7 +995,7 @@ class GalleryREST {
 			$thumbnail = $storage->get_image_url( $gallery->previewpic, 'thumb' );
 		}
 
-		// phpcs:ignore
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$gallery->counter = $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT COUNT(*) FROM {$wpdb->nggpictures} WHERE galleryid = %d",
@@ -994,7 +1020,8 @@ class GalleryREST {
 			'previewpic_url'        => $thumbnail ?? '',
 			'display_type'          => $gallery->display_type ?? 'photocrati-nextgen_basic_thumbnails',
 			'display_type_settings' => $gallery->display_type_settings ?? [],
-			'is_private'            => (bool) ($gallery->is_private ?? false),
+			'external_source'       => $gallery->external_source ?? [],
+			'is_private'            => (bool) ( $gallery->is_private ?? false ),
 			'is_ecommerce_enabled'  => $gallery->is_ecommerce_enabled ?? false,
 			'date_created'          => $gallery->date_created,
 			'date_modified'         => $gallery->date_modified,
@@ -1045,6 +1072,45 @@ class GalleryREST {
 				}
 			}
 			$sanitized[ $display_type ] = $sanitized_type_settings;
+		}
+
+		return $sanitized;
+	}
+
+	/**
+	 * Sanitize external source settings.
+	 *
+	 * @param array $settings The settings to sanitize.
+	 * @return array
+	 */
+	public static function sanitize_external_source( $settings ) {
+		if ( ! is_array( $settings ) ) {
+			return [];
+		}
+
+		$sanitized = [];
+		foreach ( $settings as $key => $value ) {
+			$key = sanitize_text_field( $key );
+
+			switch ( gettype( $value ) ) {
+				case 'boolean':
+					$sanitized[ $key ] = (bool) $value;
+					break;
+				case 'integer':
+					$sanitized[ $key ] = (int) $value;
+					break;
+				case 'double':
+					$sanitized[ $key ] = (float) $value;
+					break;
+				case 'string':
+					$sanitized[ $key ] = wp_kses_post( $value );
+					break;
+				case 'array':
+					$sanitized[ $key ] = array_map( 'sanitize_text_field', $value );
+					break;
+				default:
+					$sanitized[ $key ] = null;
+			}
 		}
 
 		return $sanitized;

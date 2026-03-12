@@ -388,8 +388,8 @@ class SharedController extends ParentController {
 				if ( ! $found_item || ! isset( $found_item->id_field ) || empty( $found_item->id_field ) ) {
 					continue;
 				}
-				$type   = isset( $found_item->albumdesc ) ? 'album' : 'gallery';
-				$id     = ( 'album' === $type ? 'a' : '' ) . $found_item->{$found_item->id_field};
+				$type = isset( $found_item->albumdesc ) ? 'album' : 'gallery';
+				$id   = ( 'album' === $type ? 'a' : '' ) . $found_item->{$found_item->id_field};
 
 				// Skip if entity not found in cache
 				if ( ! isset( $this->breadcrumb_cache[ $id ] ) ) {
@@ -691,11 +691,11 @@ class SharedController extends ParentController {
 	 * Renders the displayed gallery.
 	 *
 	 * @param DisplayedGallery $displayed_gallery DisplayedGallery object.
-	 * @param bool             $return Return or print the result.
+	 * @param bool             $return_output Return or print the result.
 	 *
 	 * @return ?string
 	 */
-	public function index_action( $displayed_gallery, $return = false ) {
+	public function index_action( $displayed_gallery, $return_output = false ) {
 		$router = Router::get_instance();
 
 		// We need to fetch the selected album containers. We need to do this, because once we fetch the included
@@ -725,7 +725,7 @@ class SharedController extends ParentController {
 				\add_filter( 'ngg_displayed_gallery_rendering', [ $this, 'add_breadcrumbs_to_legacy_templates' ], 9, 2 );
 				\add_filter( 'ngg_display_type_rendering_object', [ $this, 'add_breadcrumbs_and_descriptions' ], 10, 2 );
 
-				$output = $renderer->display_images( $alternate_displayed_gallery, $return );
+				$output = $renderer->display_images( $alternate_displayed_gallery, $return_output );
 
 				\remove_filter( 'ngg_display_type_rendering_object', [ $this, 'add_breadcrumbs_and_descriptions' ], 10 );
 				\remove_filter( 'ngg_displayed_gallery_rendering', [ $this, 'add_description_to_legacy_templates' ], 8 );
@@ -745,7 +745,7 @@ class SharedController extends ParentController {
 			// Preserve the original album list before altering the DisplayedGallery.
 			$original_albums = $displayed_gallery->get_albums();
 
-			if ( in_array( $album, $displayed_gallery->container_ids, false ) ) {
+			if ( in_array( $album, $displayed_gallery->container_ids, true ) ) {
 				$viewing_original_album = true;
 			}
 
@@ -780,7 +780,7 @@ class SharedController extends ParentController {
 				$description = $this->render_legacy_template_description( $displayed_gallery );
 
 				// If enabled enqueue the child entities as JSON for lightboxes to read.
-				$retval = $this->legacy_render( $display_settings['template'], $display_settings, $return, 'album' );
+				$retval = $this->legacy_render( $display_settings['template'], $display_settings, $return_output, 'album' );
 
 				if ( ! empty( $description ) ) {
 					$retval = $description . $retval;
@@ -804,7 +804,7 @@ class SharedController extends ParentController {
 				}
 				$content = $view->rasterize_object( $view_element );
 
-				if ( ! $return ) {
+				if ( ! $return_output ) {
 					// We cannot truly escape this content as it may come from user-supplied or 3rd party templates.
 					echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 				}
@@ -817,7 +817,7 @@ class SharedController extends ParentController {
 				[],
 				'photocrati-nextgen_gallery_display#no_images_found'
 			);
-			return $view->render( $return );
+			return $view->render( $return_output );
 		}
 	}
 
@@ -871,7 +871,6 @@ class SharedController extends ParentController {
 
 		DisplayManager::add_script_data(
 			'ngg_common',
-
 			'galleries.gallery_' . $displayed_gallery->id() . '.wordpress_page_root',
 			get_permalink(),
 			false
@@ -899,11 +898,12 @@ class SharedController extends ParentController {
 
 		$app = $router->get_routed_app();
 
-		$pagination_result = $this->create_pagination(
+		$ajax_pagination_referrer = $router->get_parameter( 'ajax_pagination_referrer' );
+		$pagination_result        = $this->create_pagination(
 			$this->get_current_page( $displayed_gallery ),
 			$displayed_gallery->get_entity_count(),
 			$params['galleries_per_page'],
-			urldecode( $router->get_parameter( 'ajax_pagination_referrer' ) ?: '' )
+			urldecode( $ajax_pagination_referrer ? $ajax_pagination_referrer : '' )
 		);
 
 		$params['displayed_gallery'] = $displayed_gallery;
