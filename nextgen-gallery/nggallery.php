@@ -2,7 +2,7 @@
 /**
  * Plugin Name: NextGEN Gallery
  * Description: The most popular gallery plugin for WordPress and one of the most popular plugins of all time with over 30 million downloads.
- * Version: 4.1.0
+ * Version: 4.1.1
  * Author: Imagely
  * Plugin URI: https://www.imagely.com/wordpress-gallery-plugin/nextgen-gallery/?utm_source=ngglite&utm_medium=pluginlist&utm_campaign=pluginuri
  * Author URI: https://www.imagely.com/?utm_source=ngglite&utm_medium=pluginlist&utm_campaign=authoruri
@@ -421,7 +421,7 @@ class C_NextGEN_Bootstrap {
 			'\Imagely\NGG\DynamicThumbnails\Manager'       => 'C_Dynamic_Thumbnails_Manager',
 			'\Imagely\NGG\IGW\ATPManager'                  => 'M_Attach_To_Post',
 			'\Imagely\NGG\IGW\Controller'                  => 'C_Attach_Controller',
-			'\Imagely\NGG\Settings\Settings'               => 'C_Photocrati_Settings_Manager',
+			'\Imagely\NGG\Settings\Settings'               => [ 'C_NextGen_Settings', 'C_Photocrati_Settings_Manager' ],
 			'\Imagely\NGG\Util\Filesystem'                 => 'C_Fs',
 			'\Imagely\NGG\Util\Installer'                  => 'C_Photocrati_Installer',
 			'\Imagely\NGG\Util\Router'                     => 'C_Router',
@@ -430,9 +430,14 @@ class C_NextGEN_Bootstrap {
 			'\Imagely\NGG\Util\Transient'                  => 'C_Photocrati_Transient_Manager',
 		];
 
-		foreach ( $aliases as $class => $alias ) {
-			// Trigger autoloader to ensure class exists before creating alias.
-			if ( class_exists( $class ) ) {
+		foreach ( $aliases as $class => $alias_names ) {
+			if ( ! class_exists( $class ) ) {
+				continue;
+			}
+			foreach ( (array) $alias_names as $alias ) {
+				if ( class_exists( $alias, false ) || interface_exists( $alias, false ) || trait_exists( $alias, false ) ) {
+					continue;
+				}
 				class_alias( $class, $alias );
 			}
 		}
@@ -1216,7 +1221,7 @@ class C_NextGEN_Bootstrap {
 		define( 'NGG_PRODUCT_DIR', implode( DIRECTORY_SEPARATOR, [ rtrim( NGG_PLUGIN_DIR, '/\\' ), 'products' ] ) );
 		define( 'NGG_MODULE_DIR', implode( DIRECTORY_SEPARATOR, [ rtrim( NGG_PRODUCT_DIR, '/\\' ), 'photocrati_nextgen', 'modules' ] ) );
 		define( 'NGG_PLUGIN_STARTED_AT', microtime() );
-		define( 'NGG_PLUGIN_VERSION', '4.1.0' );
+		define( 'NGG_PLUGIN_VERSION', '4.1.1' );
 
 		$random_version = function_exists( 'wp_rand' ) ? wp_rand( 0, mt_getrandmax() ) : mt_rand( 0, mt_getrandmax() ); // phpcs:ignore WordPress.WP.AlternativeFunctions.rand_mt_rand
 		define( 'NGG_SCRIPT_VERSION', defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ? (string) $random_version : NGG_PLUGIN_VERSION );

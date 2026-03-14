@@ -19,7 +19,7 @@ if ( ! empty( $image ) ) {
 	$width  = intval( $width );
 	$height = intval( $height );
 
-	if ( null !== $width && null !== $height ) {
+	if ( $width > 0 && $height > 0 ) {
 		// check image aspect ratio, avoid distortions
 		$aspect_ratio = $width / $height;
 		if ( $image_ratio > $aspect_ratio ) {
@@ -32,7 +32,7 @@ if ( ! empty( $image ) ) {
 
 		// Ensure that height is always null, or else the image won't be responsive correctly
 		$height = null;
-	} elseif ( null !== $height ) {
+	} elseif ( $height > 0 ) {
 		$width = (int) round( $height * $image_ratio );
 		// Ensure that height is always null, or else the image won't be responsive correctly
 		$height = null;

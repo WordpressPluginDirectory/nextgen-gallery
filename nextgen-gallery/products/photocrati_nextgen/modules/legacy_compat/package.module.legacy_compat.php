@@ -5061,7 +5061,14 @@ class C_NggLegacy_Thumbnail
             imagecopy($tempimage, $this->oldImage, 0, 0, 0, 0, $sourcefile_width, $sourcefile_height);
             $this->newImage = $tempimage;
         }
-        $this->imagecopymerge_alpha($this->newImage, $this->workingImage, $dest_x, $dest_y, 0, 0, $watermarkfile_width, $watermarkfile_height, 100);
+        // PNG/WEBP: use alpha-aware compositing so transparent watermark stays transparent.
+        if ($this->format === 'PNG' || $this->format === 'WEBP') {
+            imagealphablending($this->newImage, true);
+            imagesavealpha($this->newImage, true);
+            imagecopy($this->newImage, $this->workingImage, $dest_x, $dest_y, 0, 0, $watermarkfile_width, $watermarkfile_height);
+        } else {
+            $this->imagecopymerge_alpha($this->newImage, $this->workingImage, $dest_x, $dest_y, 0, 0, $watermarkfile_width, $watermarkfile_height, 100);
+        }
     }
     /**
      * Wrapper to imagecopymerge() that allows PNG transparency

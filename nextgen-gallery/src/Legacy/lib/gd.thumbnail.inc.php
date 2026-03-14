@@ -990,6 +990,11 @@ class ngg_Thumbnail {
 			$this->newImage = $tempimage;
 		}
 
+		// PNG/WEBP: enable alpha on destination so watermark transparency is respected.
+		if ( $this->format === 'PNG' || $this->format === 'WEBP' ) {
+			imagealphablending( $this->newImage, true );
+			imagesavealpha( $this->newImage, true );
+		}
 		imagecopy( $this->newImage, $this->workingImage, $dest_x, $dest_y, 0, 0, $watermarkfile_width, $watermarkfile_height );
 	}
 

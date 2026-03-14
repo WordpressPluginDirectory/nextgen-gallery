@@ -2,7 +2,7 @@
 Contributors: photocrati, imagely
 Tags: gallery, wordpress gallery plugin, photo gallery, image gallery, slideshow
 Requires at least: 5.5.4
-Stable tag: 4.1.0
+Stable tag: 4.1.1
 Tested up to: 6.9
 License: GPLv3
 Requires PHP: 7.4
@@ -196,6 +196,12 @@ For more information, feel free to visit the official website for the NextGEN Ga
 
 
 == Changelog ==
+
+= 4.1.1 - 03.13.2025 =
+* Fixed: PNG and WEBP watermarks no longer lose transparency when applied to images
+* Fixed: Fatal error when using NextGen Gallery with older Pro add-on versions that reference the legacy C_NextGen_Settings class
+* Fixed: SinglePicture display no longer crashes when width/height settings are not configured
+* Fixed: Imagebrowser now opens to the correct image when viewing images within albums (Thumbnails display type)
 
 = 4.1.0 - 03.11.2026
 * Added: Features page for discovering and managing available integrations

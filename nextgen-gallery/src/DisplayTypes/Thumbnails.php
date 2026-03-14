@@ -178,7 +178,6 @@ class Thumbnails extends ParentController {
 
 				$app = $router->get_routed_app();
 				$url = ( ! empty( $origin_url ) ? $origin_url : $app->get_routed_url() );
-				$url = $app->remove_parameter( $url, null, 'image' );
 				$url = $this->set_param_for( $url, 'image', '%STUB%' );
 
 				$effect_code = "class='use_imagebrowser_effect' data-imagebrowser-url='{$url}'";
