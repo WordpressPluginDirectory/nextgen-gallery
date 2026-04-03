@@ -889,6 +889,56 @@ class Manager {
 	}
 
 	/**
+	 * Apply EXIF orientation using ImageMagick when available to avoid legacy GD imagerotate() memory issues.
+	 *
+	 * @param string $image_abspath Absolute path to JPEG.
+	 * @return bool Whether the file was re-oriented successfully.
+	 */
+	private function correct_exif_rotation_with_imagick( $image_abspath ) {
+		if ( defined( 'NGG_DISABLE_IMAGICK' ) && NGG_DISABLE_IMAGICK ) {
+			return false;
+		}
+
+		static $imagick_supports_jpeg = null;
+
+		if ( null === $imagick_supports_jpeg ) {
+			$imagick_supports_jpeg = $this->imagick_supports_jpeg();
+		}
+
+		if ( ! extension_loaded( 'imagick' ) || ! class_exists( 'Imagick' ) || ! $imagick_supports_jpeg ) {
+			return false;
+		}
+
+		$backup_path    = $image_abspath . '_backup';
+		$exif_from_path = @file_exists( $backup_path ) ? $backup_path : $image_abspath; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$exif_iptc      = EXIFWriter::read_metadata( $exif_from_path );
+
+		try {
+			$imagick = new \Imagick( $image_abspath );
+			if ( ! method_exists( $imagick, 'autoOrient' ) ) {
+				return false;
+			}
+			$imagick->autoOrient();
+			$imagick->writeImage( $image_abspath );
+		} catch ( \Exception $e ) {
+			error_log( 'NextGEN Gallery: Imagick EXIF auto-orient failed: ' . $e->getMessage() );
+			return false;
+		} finally {
+			if ( isset( $imagick ) && $imagick instanceof \Imagick ) {
+				$imagick->clear();
+				$imagick->destroy();
+			}
+		}
+
+		if ( ! empty( $exif_iptc ) && is_array( $exif_iptc ) ) {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			@EXIFWriter::write_metadata( $image_abspath, $exif_iptc );
+		}
+
+		return true;
+	}
+
+	/**
 	 * Most major browsers do not honor the Orientation meta found in EXIF. To prevent display issues we inspect
 	 * the EXIF data and rotate the image so that the EXIF field is not necessary to display the image correctly.
 	 * Note: generate_image_clone() will handle the removal of the Orientation tag inside the image EXIF.
@@ -920,6 +970,17 @@ class Manager {
 		// which we don't support; skip them to avoid unnecessary image cloning.
 		$orientation = (int) $exif['Orientation'];
 		if ( ! in_array( $orientation, [ 3, 6, 8 ], true ) ) {
+			return;
+		}
+
+		if ( function_exists( 'wp_raise_memory_limit' ) ) {
+			wp_raise_memory_limit( 'image' );
+		}
+
+		if ( $this->correct_exif_rotation_with_imagick( $image_abspath ) ) {
+			if ( $save ) {
+				$this->update_image_dimension_metadata( $image, $image_abspath );
+			}
 			return;
 		}
 
@@ -2657,7 +2718,7 @@ class Manager {
 			}
 		}
 
-		return $supports_jpeg;
+		return (bool) $supports_jpeg;
 	}
 
 	/**

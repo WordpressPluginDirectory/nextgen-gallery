@@ -592,9 +592,10 @@ class M_Marketing extends C_Base_Module {
 	 * @param string $medium
 	 * @param string $campaign
 	 * @param string $source
+	 * @param string $content UTM content parameter. Defaults to get_utm_version().
 	 * @return string
 	 */
-	public static function get_utm_link( $url, $medium = 'default', $campaign = 'default', $source = 'ngg' ) {
+	public static function get_utm_link( $url, $medium = 'default', $campaign = 'default', $source = 'ngg', $content = '' ) {
 		$params = apply_filters(
 			'ngg_marketing_parameters',
 			[
@@ -602,12 +603,16 @@ class M_Marketing extends C_Base_Module {
 				'medium'   => $medium,
 				'campaign' => $campaign,
 				'source'   => $source,
+				'content'  => ! empty( $content ) ? $content : \Imagely\NGG\Admin\App::get_utm_version(),
 			]
 		);
 
 		$url .= '?utm_source=' . $params['source'];
 		$url .= '&utm_medium=' . $params['medium'];
 		$url .= '&utm_campaign=' . $params['campaign'];
+		if ( ! empty( $params['content'] ?? '' ) ) {
+			$url .= '&utm_content=' . $params['content'];
+		}
 
 		return $url;
 	}

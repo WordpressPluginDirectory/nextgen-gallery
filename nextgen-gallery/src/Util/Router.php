@@ -124,12 +124,12 @@ class Router {
 	 */
 	public function restore_request_uri() {
 		if ( isset( $_SERVER['NGG_ORIG_REQUEST_URI'] ) ) {
-			$request_uri                    = sanitize_text_field( wp_unslash( $_SERVER['NGG_ORIG_REQUEST_URI'] ) );
+			$request_uri                    = self::sanitize_request_uri_for_routing( $_SERVER['NGG_ORIG_REQUEST_URI'] );
 			$_SERVER['REQUEST_URI']         = $request_uri;
 			$_SERVER['HTTP_X_ORIGINAL_URL'] = $request_uri;
 			$_SERVER['UNENCODED_URL']       = $request_uri;
 			if ( isset( $_SERVER['ORIG_PATH_INFO'] ) ) {
-				$_SERVER['PATH_INFO'] = sanitize_text_field( wp_unslash( $_SERVER['ORIG_PATH_INFO'] ) );
+				$_SERVER['PATH_INFO'] = self::sanitize_request_uri_for_routing( $_SERVER['ORIG_PATH_INFO'] );
 			}
 		} else {
 			// This is the proper behavior, but it causes problems with WPML.
@@ -507,12 +507,41 @@ class Router {
 	}
 
 	/**
+	 * Prepares REQUEST_URI (or path) for routing. Do not use sanitize_text_field():
+	 * WordPress _sanitize_text_fields() strips percent-encoded octets (e.g. %20),
+	 * corrupting path segments (brick%20store becomes brickstore).
+	 *
+	 * @since 4.1.2
+	 *
+	 * @param string $uri Raw request URI or path fragment.
+	 * @return string
+	 */
+	public static function sanitize_request_uri_for_routing( $uri ) {
+		if ( ! is_string( $uri ) || $uri === '' ) {
+			return '';
+		}
+		$uri = wp_unslash( $uri );
+		$uri = wp_check_invalid_utf8( $uri );
+		if ( false === $uri || '' === $uri ) {
+			return '';
+		}
+		$uri = wp_strip_all_tags( $uri );
+		// Strip NUL bytes explicitly.
+		$uri = str_replace( "\0", '', $uri );
+		// Strip remaining ASCII control characters (including CR/LF) to avoid
+		// header or log injection issues when this value is reused.
+		$uri = preg_replace( '/[\x00-\x1F\x7F]+/u', '', $uri );
+
+		return $uri;
+	}
+
+	/**
 	 * Gets the querystring of the current request
 	 *
-	 * @return null|bool
+	 * @return string|null
 	 */
 	public function get_querystring() {
-		return isset( $_SERVER['QUERY_STRING'] ) ? sanitize_text_field( wp_unslash( $_SERVER['QUERY_STRING'] ) ) : null;
+		return isset( $_SERVER['QUERY_STRING'] ) ? self::sanitize_request_uri_for_routing( $_SERVER['QUERY_STRING'] ) : null;
 	}
 
 	/**
@@ -532,11 +561,11 @@ class Router {
 	 */
 	public function get_request_uri( $with_params = true ) {
 		if ( ! empty( $_SERVER['NGG_ORIG_REQUEST_URI'] ) ) {
-			$retval = sanitize_text_field( wp_unslash( $_SERVER['NGG_ORIG_REQUEST_URI'] ) );
+			$retval = self::sanitize_request_uri_for_routing( $_SERVER['NGG_ORIG_REQUEST_URI'] );
 		} elseif ( ! empty( $_SERVER['PATH_INFO'] ) ) {
-			$retval = sanitize_text_field( wp_unslash( $_SERVER['PATH_INFO'] ) );
+			$retval = self::sanitize_request_uri_for_routing( $_SERVER['PATH_INFO'] );
 		} else {
-			$retval = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+			$retval = isset( $_SERVER['REQUEST_URI'] ) ? self::sanitize_request_uri_for_routing( $_SERVER['REQUEST_URI'] ) : '';
 		}
 
 		// Remove the querystring.

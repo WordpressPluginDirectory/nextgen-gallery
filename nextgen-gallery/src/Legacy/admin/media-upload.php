@@ -284,6 +284,19 @@ function media_upload_nextgen_form( $errors ) {
 		{
 			display: none;
 		}
+
+		#media-items .media-item {
+			min-height: 77px;
+		}
+		/* 
+		* The .pinkynail class is added by WordPress core via the prepareMediaItem() JS function.
+		* Constrain its size to maintain consistent row height.
+		*/
+		#media-items .media-item img.pinkynail {
+			width: 70px;
+			height: 50px;
+			object-fit: cover;
+		}
 	</style>
 
 	<div id="media-items" class="ngg-from-<?php echo esc_attr( $from ); ?>">

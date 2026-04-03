@@ -152,7 +152,8 @@ class View {
 	 * @return string
 	 * @throws \RuntimeException If template is not valid or doesn't exist.
 	 */
-	public function get_template_abspath( string $template = null ): string {
+	// phpcs:ignore PHPCompatibility.FunctionDeclarations.NewNullableTypes -- Explicit nullable required for PHP 8.4.
+	public function get_template_abspath( ?string $template = null ): string {
 		if ( ! $template ) {
 			$template = $this->template;
 		}

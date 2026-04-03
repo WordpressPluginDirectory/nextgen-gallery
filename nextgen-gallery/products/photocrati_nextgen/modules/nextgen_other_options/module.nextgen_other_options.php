@@ -54,7 +54,7 @@ class M_NextGen_Other_Options extends C_Base_Module {
 			'watermarks'        => 'A_Watermarks_Form',
 		];
 
-		if ( is_super_admin() && ( ! is_multisite() || ( is_multisite() && \Imagely\NGG\Settings\Settings::get_instance()->get( 'wpmuRoles' ) ) ) ) {
+		if ( \Imagely\NGG\Admin\App::can_access_roles_settings() ) {
 			$forms['roles_and_capabilities'] = 'A_Roles_Form';
 		}
 

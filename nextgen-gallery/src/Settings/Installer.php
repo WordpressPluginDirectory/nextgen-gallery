@@ -168,8 +168,12 @@ class Installer {
 			// Admin table pagination.
 				'admin_table_per_page'              => 20, // Default number of items per page in admin tables (albums, galleries, tags, orders, etc.).
 			// Item details pagination.
-				'item_details_per_page'             => 50, // Default number of items per page in items details of gallery and album.
-			]
+			'item_details_per_page'              => 50, // Default number of items per page in items details of gallery and album.
+
+			// Admin table column visibility (Manage Albums / Manage Galleries). Empty = use frontend defaults.
+			'admin_albums_visible_columns'       => [],
+			'admin_galleries_visible_columns'    => [],
+		]
 		);
 
 		if ( \is_multisite() ) {

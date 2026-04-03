@@ -57,7 +57,7 @@
 						<p>
 						<?php
 						// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_kses() with allowed HTML tags provides safe output
-						print wp_kses( $gallery->galdesc, \Imagely\NGG\Display\I18N::get_kses_allowed_html() );
+						print wp_kses( $gallery->galdesc ?? '', \Imagely\NGG\Display\I18N::get_kses_allowed_html() );
 						?>
 						</p>
 						<?php if ( isset( $gallery->counter ) && $gallery->counter > 0 ) { ?>

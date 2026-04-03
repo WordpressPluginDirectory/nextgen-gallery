@@ -579,6 +579,9 @@ class RoutingApp {
 			// Handle array values (e.g., form settings arrays).
 			if ( is_array( $value ) ) {
 				$retval = $this->recursive_stripslashes( $value );
+			} elseif ( 'nggsearch' === $key ) {
+				// Preserve spaces in free-text search; sanitize_text_field can alter the string for display-type search.
+				$retval = $this->recursive_stripslashes( wp_strip_all_tags( $value ) );
 			} else {
 				$retval = $this->recursive_stripslashes( sanitize_text_field( $value ) );
 			}
@@ -586,14 +589,22 @@ class RoutingApp {
 
 		if ( ! $found && isset( $_SERVER['REQUEST_URI'] ) ) {
 			$params = [];
-			$parsed = wp_parse_url( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ), PHP_URL_QUERY );
+			$parsed = wp_parse_url( Router::sanitize_request_uri_for_routing( $_SERVER['REQUEST_URI'] ), PHP_URL_QUERY );
 			if ( is_string( $parsed ) ) {
 				parse_str( $parsed, $params );
 			}
 
 			if ( isset( $params[ $key ] ) ) {
 				// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- $params comes from parse_url/parse_str of sanitized REQUEST_URI
-				$retval = $this->recursive_stripslashes( $params[ $key ] );
+				$value = $params[ $key ];
+				if ( is_array( $value ) ) {
+					$retval = $this->recursive_stripslashes( $value );
+				} elseif ( 'nggsearch' === $key ) {
+					// Preserve free-text search; sanitize_request_uri_for_routing() already stripped tags/control chars from REQUEST_URI.
+					$retval = $this->recursive_stripslashes( $value );
+				} else {
+					$retval = $this->recursive_stripslashes( sanitize_text_field( $value ) );
+				}
 			}
 		}
 
@@ -753,7 +764,7 @@ class RoutingApp {
 	public function passthru() {
 		$router = Router::get_instance();
 
-		$_SERVER['NGG_ORIG_REQUEST_URI'] = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+		$_SERVER['NGG_ORIG_REQUEST_URI'] = isset( $_SERVER['REQUEST_URI'] ) ? Router::sanitize_request_uri_for_routing( $_SERVER['REQUEST_URI'] ) : '';
 		$base_parts                      = wp_parse_url( $router->get_base_url( 'root' ) );
 		$new_request_uri                 = $router->join_paths(
 			( ! empty( $base_parts['path'] ) ? $base_parts['path'] : '' ),
@@ -770,12 +781,12 @@ class RoutingApp {
 			$new_request_uri = implode( '/', $uri_array );
 		}
 
-		$request_uri                    = '/' . trailingslashit( sanitize_text_field( $new_request_uri ) );
+		$request_uri                    = '/' . trailingslashit( Router::sanitize_request_uri_for_routing( $new_request_uri ) );
 		$_SERVER['REQUEST_URI']         = $request_uri;
 		$_SERVER['HTTP_X_ORIGINAL_URL'] = $request_uri;
 		$_SERVER['UNENCODED_URL']       = $request_uri;
 		if ( isset( $_SERVER['PATH_INFO'] ) ) {
-			$_SERVER['ORIG_PATH_INFO'] = isset( $_SERVER['PATH_INFO'] ) ? sanitize_text_field( wp_unslash( $_SERVER['PATH_INFO'] ) ) : '';
+			$_SERVER['ORIG_PATH_INFO'] = isset( $_SERVER['PATH_INFO'] ) ? Router::sanitize_request_uri_for_routing( $_SERVER['PATH_INFO'] ) : '';
 			unset( $_SERVER['PATH_INFO'] );
 		}
 	}

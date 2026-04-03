@@ -28,7 +28,8 @@ abstract class Model {
 	 *
 	 * @param \stdClass|null $obj Optional object data to populate the model.
 	 */
-	public function __construct( \stdClass $obj = null ) {
+	// phpcs:ignore PHPCompatibility.FunctionDeclarations.NewNullableTypes -- Explicit nullable required for PHP 8.4.
+	public function __construct( ?\stdClass $obj = null ) {
 		if ( $obj ) {
 			foreach ( get_object_vars( $obj ) as $key => $value ) {
 				$this->$key = $value;

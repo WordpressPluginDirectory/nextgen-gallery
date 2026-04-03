@@ -702,7 +702,7 @@ class Controller {
 		if ( ! $origin_url
 		&& ! empty( $displayed_gallery->display_settings['original_display_type'] )
 		&& ! empty( $_SERVER['NGG_ORIG_REQUEST_URI'] ) ) {
-			$origin_url = sanitize_text_field( wp_unslash( $_SERVER['NGG_ORIG_REQUEST_URI'] ) );
+			$origin_url = Router::sanitize_request_uri_for_routing( $_SERVER['NGG_ORIG_REQUEST_URI'] );
 		}
 
 		$url = $origin_url ? $origin_url : $app->get_app_url( false, true );

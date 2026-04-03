@@ -40,7 +40,7 @@ $ngg_pro_key = get_option( 'photocrati_license_default', null );
 				printf(
 				// Translators: %s is the link to upgrade to PRO.
 					__( 'To unlock these features, <strong><a target="_blank" href="%s">Upgrade to PRO</a></strong> and enter your license key below', 'nggallery' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-					esc_url( 'https://imagely.com/lite/?utm_source=liteplugin&utm_medium=wizard&utm_campaign=wizard' )
+					esc_url( 'https://imagely.com/lite/?utm_source=liteplugin&utm_medium=wizard&utm_campaign=wizard&utm_content=' . \Imagely\NGG\Admin\App::get_utm_version() )
 				);
 				?>
 			</div>

@@ -283,7 +283,7 @@ class SharedController extends ParentController {
 					if ( is_array( $album->sortorder ) && in_array( $gallery_id, $album->sortorder ) ) {
 						$found[] = $album;
 						break;
-					} else {
+					} elseif ( is_array( $album->sortorder ) ) {
 						$found = $this->find_gallery_parent( (int) $gallery_id, $album->sortorder );
 						if ( $found ) {
 							$found[] = $album;

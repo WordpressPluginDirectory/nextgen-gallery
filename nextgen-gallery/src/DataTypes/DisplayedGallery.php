@@ -229,7 +229,8 @@ class DisplayedGallery extends Model {
 	// for NextGen Pro's galleria module in order to 'localize' the results of get_entities() to JSON.
 	protected static $_random_image_ids_cache = [];
 
-	public function __construct( \stdClass $obj = null ) {
+	// phpcs:ignore PHPCompatibility.FunctionDeclarations.NewNullableTypes -- Explicit nullable required for PHP 8.4.
+	public function __construct( ?\stdClass $obj = null ) {
 		parent::__construct( $obj );
 
 		// Apply the default display type settings.
@@ -242,7 +243,7 @@ class DisplayedGallery extends Model {
 			$mapper       = DisplayTypeMapper::get_instance();
 			$display_type = $mapper->find_by_name( $this->display_type );
 			if ( $display_type ) {
-				$this->display_settings = array_merge( $display_type->settings, $this->display_settings );
+				$this->display_settings = $this->merge_display_settings( $display_type );
 				$this->display_type     = $display_type->name;
 			}
 		}
@@ -261,6 +262,46 @@ class DisplayedGallery extends Model {
 		}
 
 		\do_action( 'ngg_displayed_gallery_construct', $this );
+	}
+
+	/**
+	 * Merges display type settings with per-gallery display settings.
+	 *
+	 * Uses the display type (global) settings as the base. Per-gallery values are applied only when
+	 * they represent an explicit user override (i.e., differ from the controller's original default).
+	 * This prevents stale defaults baked into galleries at creation time from overriding subsequent
+	 * changes to the global display type settings (e.g., "Maximum image width" for Masonry).
+	 *
+	 * Note: A limitation is that if a user explicitly sets a per-gallery value to match the
+	 * controller default (e.g., 240) and the admin later changes the global to 300, the gallery
+	 * will render with 300 since there is no way to distinguish "explicit default" from "stale copy."
+	 *
+	 * @param \Imagely\NGG\DataTypes\DisplayType $display_type The display type entity.
+	 * @return array The merged display settings.
+	 */
+	private function merge_display_settings( $display_type ) {
+		$base      = (array) $display_type->settings;
+		$overrides = is_array( $this->display_settings ) ? $this->display_settings : [];
+
+		// Get the controller's original defaults to detect explicit overrides.
+		$defaults = [];
+		if ( ControllerFactory::has_controller( $display_type->name ) ) {
+			$controller = ControllerFactory::get_controller( $display_type->name );
+			if ( method_exists( $controller, 'get_default_settings' ) ) {
+				$defaults = $controller->get_default_settings();
+			}
+		}
+
+		foreach ( $overrides as $key => $value ) {
+			// Only apply per-gallery value if it represents an explicit override
+			// (differs from the original default). Values matching the default were likely
+			// copied at gallery creation and should not override global display type changes.
+			if ( ! array_key_exists( $key, $defaults ) || (string) $defaults[ $key ] !== (string) $value ) {
+				$base[ $key ] = $value;
+			}
+		}
+
+		return $base;
 	}
 
 	public function get_mapper() {
@@ -296,7 +337,8 @@ class DisplayedGallery extends Model {
 				// Is this a gallery/album query?
 				$retval = $this->_get_album_and_gallery_entities( $source_obj, $limit, $offset, $id_only, $returns );
 			}
-		}       return $retval;
+		}
+		return $retval;
 	}
 
 	/**

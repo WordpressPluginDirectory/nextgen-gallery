@@ -173,7 +173,7 @@ class Thumbnails extends ParentController {
 			if ( $display_settings['use_imagebrowser_effect'] ) {
 				if ( ! empty( $displayed_gallery->display_settings['original_display_type'] )
 				&& ! empty( $_SERVER['NGG_ORIG_REQUEST_URI'] ) ) {
-					$origin_url = sanitize_text_field( wp_unslash( $_SERVER['NGG_ORIG_REQUEST_URI'] ) );
+					$origin_url = Router::sanitize_request_uri_for_routing( $_SERVER['NGG_ORIG_REQUEST_URI'] );
 				}
 
 				$app = $router->get_routed_app();

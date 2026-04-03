@@ -57,7 +57,7 @@
 					<?php $this->end_element(); ?>
 					<div class="ngg-description">
 						<p>
-							<?php print wp_kses( $gallery->galdesc, \Imagely\NGG\Display\I18N::get_kses_allowed_html() ); ?>
+							<?php print wp_kses( $gallery->galdesc ?? '', \Imagely\NGG\Display\I18N::get_kses_allowed_html() ); ?>
 						</p>
 						<?php if ( isset( $gallery->counter ) && $gallery->counter > 0 ) { ?>
 							<p class="ngg-album-gallery-image-counter"><strong><?php echo absint( $gallery->counter ); ?></strong>&nbsp;<?php esc_html_e( 'Photos', 'nggallery' ); ?></p>

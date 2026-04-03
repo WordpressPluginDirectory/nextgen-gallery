@@ -1041,7 +1041,7 @@ class nggManageGallery {
 
 					// Generate new slug if the alttext has changed.
 					if ( isset( $data['alttext'] ) && $image->alttext != $data['alttext'] ) {
-						$data['slug'] = null; // will cause a new slug to be generated.
+						$data['image_slug'] = null; // will cause a new slug to be generated.
 					}
 
 					// Update all fields.

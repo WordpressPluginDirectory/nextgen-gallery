@@ -238,10 +238,10 @@ HTML;
 	 * Get imagelyApp data for wp_localize_script.
 	 * Centralized method to ensure consistency across admin pages and blocks.
 	 *
-	 * @return array ImagelyApp data array (basic fields only)
+	 * @return array ImagelyApp data array (base fields, may be filtered/extended via 'ngg_imagely_app_data')
 	 */
 	public static function get_imagely_app_data() {
-		return [
+		$data = [
 			'nonce'                    => wp_create_nonce( 'imagely-admin' ),
 			'nonce_preview'            => wp_create_nonce( 'ngg_preview_shortcode' ),
 			'restURL'                  => esc_url_raw( rest_url() ),
@@ -251,6 +251,10 @@ HTML;
 			'pluginPath'               => NGG_PLUGIN_DIR,
 			'plugin_url'               => esc_url_raw( trailingslashit( plugins_url( '', NGG_PLUGIN_FILE ) ) ),
 			'debug'                    => self::is_debug(),
+			'version'                  => class_exists( '\Imagely\NGGPro\Bootloader' ) && ! empty( \Imagely\NGGPro\Bootloader::$plugin_version )
+				? \Imagely\NGGPro\Bootloader::$plugin_version
+				: ( defined( 'NGG_PLUGIN_VERSION' ) ? NGG_PLUGIN_VERSION : '' ),
+			'utmVersion'               => self::get_utm_version(),
 			'proTypeInstalled'         => self::get_pro_type_installed(),
 			'licenseData'              => self::get_license_data(),
 			'enviraCdnConfig'          => self::get_cdn_config(),
@@ -258,6 +262,8 @@ HTML;
 			'canAccessLicenseSettings' => self::can_access_license_settings(),
 			'legacyTemplates'          => self::get_legacy_templates(),
 		];
+
+		return apply_filters( 'ngg_imagely_app_data', $data );
 	}
 
 	/**
@@ -526,19 +532,23 @@ HTML;
 	/**
 	 * Check if current user can access roles and capabilities settings.
 	 *
+	 * Single site: same as before — allow when user is super admin (effectively administrator).
+	 * Multisite: super admin always; otherwise site admins only when network has
+	 * "Enable roles/capabilities" (wpmuRoles) and user has manage_options.
+	 *
 	 * @return bool
 	 */
 	public static function can_access_roles_settings() {
-		if ( ! is_super_admin() ) {
-			return false;
+		if ( ! is_multisite() ) {
+			return is_super_admin();
 		}
 
-		if ( ! is_multisite() ) {
+		if ( is_super_admin() ) {
 			return true;
 		}
 
-		$settings = \Imagely\NGG\Settings\Settings::get_instance();
-		return (bool) $settings->get( 'wpmuRoles' );
+		$wpmu_roles = (bool) \Imagely\NGG\Settings\GlobalSettings::get_instance()->get( 'wpmuRoles' );
+		return $wpmu_roles && current_user_can( 'manage_options' );
 	}
 
 	/**
@@ -616,7 +626,7 @@ HTML;
 	 */
 	public function add_cdn_menu_item() {
 		global $submenu;
-		$utm = '?utm_source=imagely&utm_medium=admin-menu&utm_campaign=imagely-cdn&utm_content=' . NGG_PLUGIN_VERSION;
+		$utm = '?utm_source=imagely&utm_medium=admin-menu&utm_campaign=imagely-cdn&utm_content=' . self::get_utm_version();
 		// Only add if the submenu exists.
 		if ( isset( $submenu['imagely'] ) ) {
 			$submenu['imagely'][] = [
@@ -672,6 +682,22 @@ HTML;
 	}
 
 	/**
+	 * Returns the utm_content version string formatted as {plan}_{version}.
+	 * Uses the installed Pro/Plus/Starter version when available, otherwise Lite.
+	 *
+	 * Examples: lite_4.0.6-0, plus_2.0.4-0, pro_3.0.0, starter_1.0.0
+	 *
+	 * @return string
+	 */
+	public static function get_utm_version(): string {
+		$pro_type = self::get_pro_type_installed();
+		if ( 'lite' !== $pro_type && class_exists( '\Imagely\NGGPro\Bootloader' ) && ! empty( \Imagely\NGGPro\Bootloader::$plugin_version ) ) {
+			return $pro_type . '_' . \Imagely\NGGPro\Bootloader::$plugin_version;
+		}
+		return 'lite_' . ( defined( 'NGG_PLUGIN_VERSION' ) ? NGG_PLUGIN_VERSION : '' );
+	}
+
+	/**
 	 * Get UTM link for marketing URLs.
 	 *
 	 * @since 3.6.0
@@ -679,9 +705,10 @@ HTML;
 	 * @param string $medium UTM medium parameter.
 	 * @param string $campaign UTM campaign parameter.
 	 * @param string $source UTM source parameter.
+	 * @param string $content UTM content parameter. Defaults to get_utm_version().
 	 * @return string URL with UTM parameters.
 	 */
-	private function get_utm_link( $url, $medium = 'default', $campaign = 'default', $source = 'ngg' ) {
+	private function get_utm_link( $url, $medium = 'default', $campaign = 'default', $source = 'ngg', $content = '' ) {
 		$params = apply_filters(
 			'ngg_marketing_parameters',
 			[
@@ -689,12 +716,16 @@ HTML;
 				'medium'   => $medium,
 				'campaign' => $campaign,
 				'source'   => $source,
+				'content'  => ! empty( $content ) ? $content : self::get_utm_version(),
 			]
 		);
 
 		$url .= '?utm_source=' . $params['source'];
 		$url .= '&utm_medium=' . $params['medium'];
 		$url .= '&utm_campaign=' . $params['campaign'];
+		if ( ! empty( $params['content'] ?? '' ) ) {
+			$url .= '&utm_content=' . $params['content'];
+		}
 
 		return $url;
 	}

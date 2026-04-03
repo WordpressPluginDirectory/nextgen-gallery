@@ -83,6 +83,13 @@ class DisplayType extends WPModel {
 	public $meta_id;
 
 	/**
+	 * Meta robots value (legacy field from older NGG installations).
+	 *
+	 * @var string|null
+	 */
+	public $meta_robots;
+
+	/**
 	 * Meta key.
 	 *
 	 * @var string

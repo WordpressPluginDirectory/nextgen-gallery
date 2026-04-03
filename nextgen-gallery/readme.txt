@@ -2,7 +2,7 @@
 Contributors: photocrati, imagely
 Tags: gallery, wordpress gallery plugin, photo gallery, image gallery, slideshow
 Requires at least: 5.5.4
-Stable tag: 4.1.1
+Stable tag: 4.1.2
 Tested up to: 6.9
 License: GPLv3
 Requires PHP: 7.4
@@ -196,6 +196,28 @@ For more information, feel free to visit the official website for the NextGEN Ga
 
 
 == Changelog ==
+
+= 4.1.2 - 04.02.2026 =
+* Added: Duplicate pricelists individually or in bulk from the Ecommerce tab with confirmation modal
+* Added: Column visibility on "Manage Galleries" and "Manage Albums" tables is now saved and restored when returning to the page
+* Added: Automatic EXIF-based JPEG rotation using ImageMagick/Imagick when available to keep uploads correctly oriented
+* Fixed: Gallery image counts now display correctly in the Albums edit page
+* Fixed: Image list in "Add Media > NextGEN Gallery" modal now displays with consistent row heights instead of overflowing thumbnails
+* Fixed: Block editor no longer reverts the preview to the saved gallery when choosing a different gallery with "Change" before inserting
+* Fixed: Block editor validation errors when Bluehost's WonderBlocks feature is enabled
+* Fixed: Pro Masonry "Maximum image width" and "Image padding" settings now save and apply correctly
+* Fixed: Display type settings in the Customize tab could appear stuck or out of sync after changing layout or saving settings
+* Fixed: Shutter Reloaded lightbox showing double the image count on Mosaic/Masonry and in the admin live preview
+* Fixed: PHP 8.4 deprecation notices for implicit nullable parameters and dynamic properties
+* Fixed: Image slug not regenerating when alt text is updated in the manage gallery screen
+* Fixed: Rapid price edits in pricelists sometimes not saving
+* Fixed: "Display link to license terms?" and "Allow free downloads from cart sidebar" checkboxes reverting after save
+* Fixed: Pricelist name and item fields sometimes not showing on load
+* Fixed: Order links in the eCommerce Orders admin view now point to the configured thank-you page instead of always using /thanks/
+* Fixed: Album pages crashing on PHP 8.x when a sub-album has no images
+* Fixed: Cases where JPEG uploads with EXIF rotation could appear as failed even though files were created successfully
+* Fixed: Multi-word tag search now works correctly by preserving full phrases before sanitization
+* Improved: JPEG upload handling to be more memory-aware on hosts with older GD libraries
 
 = 4.1.1 - 03.13.2025 =
 * Fixed: PNG and WEBP watermarks no longer lose transparency when applied to images

@@ -1,4 +1,5 @@
 jQuery(function($){
+	var initTimeout;
 	var callback = function(){
 		var selector = nextgen_lightbox_filter_selector($, $([]));
 		selector.addClass('shutterset');
@@ -106,7 +107,11 @@ jQuery(function($){
             shutterReloaded.ngg_tiktok_wrapped = true;
         }
 
-        shutterReloaded.Init();
+        // Debounce Init so ready + refreshed in quick succession (e.g. admin live preview) only run once
+        clearTimeout(initTimeout);
+        initTimeout = setTimeout(function() {
+            shutterReloaded.Init();
+        }, 80);
     };
 
     $(window).on('refreshed', callback);
