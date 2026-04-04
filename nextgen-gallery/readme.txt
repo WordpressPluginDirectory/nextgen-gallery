@@ -2,7 +2,7 @@
 Contributors: photocrati, imagely
 Tags: gallery, wordpress gallery plugin, photo gallery, image gallery, slideshow
 Requires at least: 5.5.4
-Stable tag: 4.1.2
+Stable tag: 4.1.3
 Tested up to: 6.9
 License: GPLv3
 Requires PHP: 7.4
@@ -196,6 +196,9 @@ For more information, feel free to visit the official website for the NextGEN Ga
 
 
 == Changelog ==
+
+= 4.1.3 - 04.03.2026 =
+* Fixed: Imagely admin no longer hammered the REST API with repeated settings requests when browsing Galleries and Albums (column visibility auto-save).
 
 = 4.1.2 - 04.02.2026 =
 * Added: Duplicate pricelists individually or in bulk from the Ecommerce tab with confirmation modal
