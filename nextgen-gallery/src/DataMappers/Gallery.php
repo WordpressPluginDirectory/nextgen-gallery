@@ -310,6 +310,7 @@ class Gallery extends TableDriver {
 				do_action( 'ngg_created_new_gallery', $entity->{$entity->id_field} );
 			}
 			Transient::flush( 'displayed_gallery_rendering' );
+			Transient::flush( 'rest_galleries' );
 		}
 
 		return $retval;
@@ -381,6 +382,7 @@ class Gallery extends TableDriver {
 			if ( $retval ) {
 				do_action( 'ngg_delete_gallery', $entity );
 				Transient::flush( 'displayed_gallery_rendering' );
+				Transient::flush( 'rest_galleries' );
 			}
 		}
 

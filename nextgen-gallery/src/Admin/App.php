@@ -601,7 +601,7 @@ HTML;
 			array_filter(
 				$submenu['imagely'],
 				static function ( $item ) {
-					return str_contains( $item[2], 'https://www.imagely.com/lite/' );
+					return isset( $item[2] ) && str_contains( (string) $item[2], 'https://www.imagely.com/lite/' );
 				}
 			)
 		);

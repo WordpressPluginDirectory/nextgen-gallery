@@ -102,7 +102,7 @@ class Album extends Model {
 	 *
 	 * @var string
 	 */
-	public $display_type = 'photocrati-nextgen_basic_thumbnails';
+	public $display_type = 'photocrati-nextgen_basic_compact_album';
 
 	/**
 	 * Settings for the display type.

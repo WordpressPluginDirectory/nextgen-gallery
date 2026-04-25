@@ -256,6 +256,23 @@ class Manager {
 	}
 
 	/**
+	 * Flushes the cache for the gallery that contains the given image.
+	 *
+	 * @param int|object $image Image ID or image object.
+	 */
+	public function flush_image_cache( $image ) {
+		if ( is_numeric( $image ) ) {
+			$image = $this->image_mapper->find( $image );
+		}
+
+		if ( ! $image ) {
+			return;
+		}
+
+		$this->flush_cache( $image->galleryid );
+	}
+
+	/**
 	 * Returns an array of dimensional properties (width, height, real_width, real_height) of a resulting clone image if and when generated
 	 *
 	 * @param object|int $image Image ID or an image object
@@ -1422,6 +1439,13 @@ class Manager {
 			$gallery_root = trailingslashit( NGG_GALLERY_ROOT_TYPE == 'site' ? site_url() : WP_CONTENT_URL );
 			$gallery_root = is_ssl() ? str_replace( 'http:', 'https:', $gallery_root ) : $gallery_root;
 			$retval       = $gallery_root . $image_uri;
+		}
+
+		// Append cache-busting query param so browsers refetch after image edits
+		// (rotate, crop, recover). The base URL is unchanged—only the ?t= changes
+		// when updated_at is bumped by ImageMapper::save_entity().
+		if ( $retval && is_object( $image ) && ! empty( $image->updated_at ) ) {
+			$retval = \add_query_arg( 't', $image->updated_at, $retval );
 		}
 
 		return $retval;
@@ -2674,6 +2698,13 @@ class Manager {
 					$retval                        = $url;
 				}
 			}
+		}
+
+		// Append cache-busting query param so browsers refetch after image edits
+		// (rotate, crop, recover). The base URL is unchanged—only the ?t= changes
+		// when updated_at is bumped by ImageMapper::save_entity().
+		if ( $retval && is_object( $image ) && ! empty( $image->updated_at ) ) {
+			$retval = \add_query_arg( 't', $image->updated_at, $retval );
 		}
 
 		return apply_filters( 'ngg_get_image_url', $retval, $image, $size );

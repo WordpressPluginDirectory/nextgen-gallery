@@ -62,7 +62,7 @@ class Album extends TableDriver {
 		$this->define_column( 'date_modified', 'DATETIME' );
 
 		// Add display type related columns
-		$this->define_column( 'display_type', 'VARCHAR(255)', 'photocrati-nextgen_basic_thumbnails' );
+		$this->define_column( 'display_type', 'VARCHAR(255)', 'photocrati-nextgen_basic_compact_album' );
 		$this->define_column( 'display_type_settings', 'MEDIUMTEXT' );
 
 		$this->add_serialized_column( 'sortorder' );
@@ -116,6 +116,24 @@ class Album extends TableDriver {
 		if ( $retval ) {
 			\do_action( 'ngg_album_updated', $entity );
 			Transient::flush( 'displayed_gallery_rendering' );
+			Transient::flush( 'rest_albums' );
+		}
+
+		return $retval;
+	}
+
+	/**
+	 * Destroys an album entity.
+	 *
+	 * @param int|\Imagely\NGG\DataTypes\Album $entity The album ID or entity to destroy.
+	 * @return bool True if successfully destroyed, false otherwise.
+	 */
+	public function destroy( $entity ) {
+		$retval = parent::destroy( $entity );
+
+		if ( $retval ) {
+			Transient::flush( 'displayed_gallery_rendering' );
+			Transient::flush( 'rest_albums' );
 		}
 
 		return $retval;

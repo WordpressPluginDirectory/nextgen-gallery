@@ -28,6 +28,7 @@ class AddonsREST {
 	public static $valid_addons = [
 		'dribbble',
 		'tiktok',
+		'google_analytics',
 		'instagram',
 	];
 
@@ -196,8 +197,10 @@ class AddonsREST {
 	 */
 	public static function get_toggle_message( $addon_id, $enabled ) {
 		$feature_display_names = [
-			'dribbble'  => 'Dribbble',
-			'tiktok'    => 'TikTok',
+			'dribbble'         => 'Dribbble',
+			'tiktok'           => 'TikTok',
+			'google_analytics' => 'Google Analytics',
+			'instagram'        => 'Instagram',
 		];
 		$display_name = isset( $feature_display_names[ $addon_id ] ) ? $feature_display_names[ $addon_id ] : $addon_id;
 		$noun         = __( 'Feature', 'nggallery' );

@@ -16,14 +16,32 @@
  * @var string $placeholder
  * @var string $thumbnail_link
  * @var string $thumbnail_link_text
- */
+ */ ?>
+<?php
+$_slide_gallery_id = null;
+if ( isset( $displayed_gallery->container_ids ) && ! empty( $displayed_gallery->container_ids ) ) {
+	$_slide_gallery_id = reset( $displayed_gallery->container_ids );
+}
+$_slide_data_gallery_id = $_slide_gallery_id ? $_slide_gallery_id : $displayed_gallery_id;
 
-?>
-<?php $this->start_element( 'nextgen_gallery.gallery_container', 'container', $displayed_gallery ); ?>
+$_slide_gallery_name = '';
+if ( isset( $gallery ) && ! empty( $gallery->title ) ) {
+	$_slide_gallery_name = $gallery->title;
+} elseif ( $_slide_gallery_id ) {
+	$_slide_ngg_gallery = \Imagely\NGG\DataMappers\Gallery::get_instance()->find( intval( $_slide_gallery_id ) );
+	if ( $_slide_ngg_gallery ) {
+		$_slide_gallery_name = $_slide_ngg_gallery->title;
+	}
+}
+$this->start_element( 'nextgen_gallery.gallery_container', 'container', $displayed_gallery ); ?>
 
 <div class="ngg-galleryoverview ngg-slideshow"
 	id="<?php echo esc_attr( $anchor ); ?>"
-	data-gallery-id="<?php print esc_attr( $displayed_gallery_id ); ?>"
+	data-nextgen-gallery-id="<?php echo esc_attr( $_slide_data_gallery_id ); ?>"
+	data-gallery-id="<?php echo esc_attr( $displayed_gallery_id ); ?>"
+	<?php if ( $_slide_gallery_name ) : ?>
+	data-gallery-name="<?php echo esc_attr( $_slide_gallery_name ); ?>"
+	<?php endif; ?>
 	style="max-width: <?php echo esc_attr( $gallery_width ); ?>px;
 			max-height: <?php echo esc_attr( $gallery_height ); ?>px;
 			display: none;">
@@ -53,6 +71,7 @@
 			data-src="<?php echo esc_attr( $storage->get_image_url( $image ) ); ?>"
 			data-thumbnail="<?php echo esc_attr( $storage->get_image_url( $image, 'thumb' ) ); ?>"
 			data-image-id="<?php echo esc_attr( $image->{$image->id_field} ); ?>"
+			data-image-name="<?php echo esc_attr( $image->filename ?? '' ); ?>"
 			data-title="<?php echo esc_attr( $image->alttext ); ?>"
 			data-description="<?php echo esc_attr( stripslashes( $image->description ?? '' ) ); ?>"
 			<?php if ( ! empty( $image->meta_data['imagely_tiktok_play_url'] ) ) : ?>

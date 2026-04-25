@@ -7,6 +7,7 @@ namespace Imagely\NGG\DataMapper;
  *
  * Provides common functionality for all data models in the NextGEN Gallery system.
  */
+#[\AllowDynamicProperties]
 abstract class Model {
 
 	use Validation;
@@ -32,7 +33,7 @@ abstract class Model {
 	public function __construct( ?\stdClass $obj = null ) {
 		if ( $obj ) {
 			foreach ( get_object_vars( $obj ) as $key => $value ) {
-				$this->$key = $value;
+					$this->$key = $value;
 			}
 		}
 

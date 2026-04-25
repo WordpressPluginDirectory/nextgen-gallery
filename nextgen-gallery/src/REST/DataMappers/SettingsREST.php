@@ -148,6 +148,23 @@ class SettingsREST {
 				'permission_callback' => [ self::class, 'check_read_permission' ],
 			]
 		);
+
+		// Check if gtag.js is loaded on the site frontend (for GA4 integration).
+		register_rest_route(
+			'imagely/v1',
+			'/settings/gtag-status',
+			[
+				'methods'             => 'GET',
+				'callback'            => [ self::class, 'get_gtag_status' ],
+				'permission_callback' => [ self::class, 'check_read_permission' ],
+				'args'                => [
+					'force' => [
+						'type'    => 'boolean',
+						'default' => false,
+					],
+				],
+			]
+		);
 	}
 
 	/**
@@ -247,6 +264,18 @@ class SettingsREST {
 		// Fields that should preserve newlines but strip HTML
 		if ( self::should_preserve_newlines( $key, $string_value ) ) {
 			return sanitize_textarea_field( $string_value );
+		}
+
+		// GA4 Measurement ID: must start with G- followed by alphanumeric characters (e.g. G-XXXXXXXXXX)
+		if ( 'ga4_measurement_id' === $key ) {
+			$trimmed = trim( $string_value );
+			if ( empty( $trimmed ) ) {
+				return '';
+			}
+			if ( preg_match( '/^G-[A-Za-z0-9_-]+$/', $trimmed ) ) {
+				return sanitize_text_field( $trimmed );
+			}
+			return '';
 		}
 
 		// Default: strip HTML and newlines for security
@@ -1025,6 +1054,76 @@ class SettingsREST {
 				[ 'status' => 500 ]
 			);
 		}
+	}
+
+	/**
+	 * Check if gtag.js is actually loaded on the site frontend by fetching the home page HTML.
+	 * This is the only reliable way to confirm gtag is present — a plugin being active does not
+	 * guarantee it outputs gtag.js (it must also be configured with a Measurement ID).
+	 *
+	 * Pass ?force=true to skip the transient cache and immediately re-check (used by the
+	 * "Refresh Status" button in the admin UI).
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return WP_REST_Response { detected: bool }
+	 */
+	public static function get_gtag_status( \WP_REST_Request $request ) {
+		$transient_key = 'ngg_gtag_status_detected';
+		$force         = (bool) $request->get_param( 'force' );
+
+		if ( $force ) {
+			delete_transient( $transient_key );
+		} else {
+			$cached = get_transient( $transient_key );
+			if ( false !== $cached ) {
+				return new WP_REST_Response( [ 'detected' => (bool) $cached ], 200 );
+			}
+		}
+
+		$home_url = home_url( '/' );
+		$args     = [
+			// 5s is safe here because cookies=>[] strips the admin session, preventing PHP-FPM self-deadlocks.
+			'timeout'    => 5,
+			'cookies'    => [],
+			'user-agent' => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . get_bloginfo( 'url' ),
+		];
+
+		// Allow self-signed certs for local/dev environments (Docker with HTTPS, etc.).
+		$host = wp_parse_url( $home_url, PHP_URL_HOST );
+		if ( $host && ( 'localhost' === $host || '127.0.0.1' === $host || 'host.docker.internal' === $host || false !== strpos( (string) $host, '.localhost' ) ) ) {
+			$args['sslverify'] = false;
+		}
+
+		$response = wp_remote_get( $home_url, $args );
+
+		if ( is_wp_error( $response ) ) {
+			// Cache the failure briefly so repeated admin page loads don't each trigger a fresh timeout.
+			set_transient( $transient_key, '0', 2 * MINUTE_IN_SECONDS );
+			return new WP_REST_Response( [ 'detected' => false ], 200 );
+		}
+
+		$body = wp_remote_retrieve_body( $response );
+		$code = wp_remote_retrieve_response_code( $response );
+
+		if ( 200 !== (int) $code || empty( $body ) ) {
+			// Same short-TTL cache for non-200 responses (e.g. maintenance mode, redirects).
+			set_transient( $transient_key, '0', 2 * MINUTE_IN_SECONDS );
+			return new WP_REST_Response( [ 'detected' => false ], 200 );
+		}
+
+		// Match any of the patterns that confirm gtag.js is actively loaded and configured.
+		$detected = (
+			false !== strpos( $body, 'googletagmanager.com/gtag/js' ) ||  // gtag.js script src
+			false !== strpos( $body, 'gtag("config"' ) ||                 // double-quote variant
+			false !== strpos( $body, "gtag('config'" ) ||                 // single-quote variant
+			false !== strpos( $body, "gtag(\"config\"" ) ||               // escaped double-quote
+			false !== strpos( $body, 'gtag/js?id=G-' )                    // GA4 Measurement ID in src
+		);
+
+		// Cache for 15 minutes — gtag.js installation status changes infrequently.
+		set_transient( $transient_key, $detected ? '1' : '0', 15 * MINUTE_IN_SECONDS );
+
+		return new WP_REST_Response( [ 'detected' => $detected ], 200 );
 	}
 
 	/**

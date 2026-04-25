@@ -39,7 +39,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<?php $i = 0; ?>
 		<?php foreach ( $images as $image ) : ?>
 
-	<div id="ngg-image-<?php echo esc_attr( $image->pid ); ?>" class="ngg-gallery-thumbnail-box" 
+	<div id="ngg-image-<?php echo esc_attr( $image->pid ); ?>" class="ngg-gallery-thumbnail-box"
 									<?php
 	// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $image->style contains safe CSS style attributes
 									echo $image->style;
@@ -64,7 +64,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- \Imagely\NGG\Util\Router::esc_url() provides safe URL escaping
 										echo \Imagely\NGG\Util\Router::esc_url( $image->thumbnailURL );
 										?>
-				" 
+				"
 					<?php
 				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $image->size contains safe HTML size attributes
 					echo $image->size;

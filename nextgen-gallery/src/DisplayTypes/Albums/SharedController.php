@@ -401,7 +401,10 @@ class SharedController extends ParentController {
 				if ( 'album' === $type ) {
 					$name = isset( $entity->name ) ? $entity->name : '';
 					if ( isset( $entity->pageid ) && $entity->pageid > 0 ) {
-						$link = get_page_link( $entity->pageid );
+						$page = get_post( $entity->pageid );
+						if ( $page && isset( $page->ID ) ) {
+							$link = get_page_link( $page->ID );
+						}
 					}
 					if ( empty( $link ) && $found_item !== $end ) {
 						$link = $app->get_routed_url();
@@ -966,8 +969,12 @@ class SharedController extends ParentController {
 			$id_field = $gallery->id_field;
 			if ( $gallery->is_album ) {
 				if ( $gallery->pageid > 0 ) {
-					$gallery->pagelink = get_page_link( $gallery->pageid );
-				} else {
+					$page = get_post( $gallery->pageid );
+					if ( $page && isset( $page->ID ) ) {
+						$gallery->pagelink = get_page_link( $page->ID );
+					}
+				}
+				if ( empty( $gallery->pagelink ) ) {
 					$pagelink          = $app->get_routed_url( true );
 					$pagelink          = $app->remove_parameter( 'album', null, $pagelink );
 					$pagelink          = $app->remove_parameter( 'gallery', null, $pagelink );
@@ -980,7 +987,10 @@ class SharedController extends ParentController {
 				// /nggallery/album--slug/gallery--slug.
 
 				if ( $gallery->pageid > 0 ) {
-					$gallery->pagelink = get_page_link( $gallery->pageid );
+					$page = get_post( $gallery->pageid );
+					if ( $page && isset( $page->ID ) ) {
+						$gallery->pagelink = get_page_link( $page->ID );
+					}
 				}
 
 				if ( empty( $gallery->pagelink ) ) {

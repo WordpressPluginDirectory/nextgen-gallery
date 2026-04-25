@@ -394,7 +394,7 @@ class M_Marketing extends C_Base_Module {
 			array_filter(
 				$submenu[ NGGFOLDER ],
 				static function ( $item ) {
-					return str_contains( $item[2], 'http://www.imagely.com/lite/' ) !== false;
+					return isset( $item[2] ) && str_contains( (string) $item[2], 'http://www.imagely.com/lite/' );
 				}
 			)
 		);

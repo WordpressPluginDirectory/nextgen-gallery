@@ -46,7 +46,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 					"/></a>
 				</div>
 				<div class="ngg-description">
-				<p><?php echo wp_kses_post( $gallery->galdesc ); ?></p>
+				<p><?php echo wp_kses_post( $gallery->galdesc ?? '' ); ?></p>
 				<?php // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 				if ( @$gallery->counter > 0 ) :
 					?>

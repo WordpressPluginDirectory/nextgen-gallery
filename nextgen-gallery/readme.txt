@@ -2,7 +2,7 @@
 Contributors: photocrati, imagely
 Tags: gallery, wordpress gallery plugin, photo gallery, image gallery, slideshow
 Requires at least: 5.5.4
-Stable tag: 4.1.3
+Stable tag: 4.2.0
 Tested up to: 6.9
 License: GPLv3
 Requires PHP: 7.4
@@ -196,6 +196,15 @@ For more information, feel free to visit the official website for the NextGEN Ga
 
 
 == Changelog ==
+
+= 4.2.0 - 04.23.2026 =
+* Fixed: Publishing galleries and albums from the Imagely Lightroom plugin could fail with a generic processing error after a recent update
+* Fixed: Albums created by Imagely Lightroom could appear empty on the front end with missing thumbnails and broken links
+* Fixed: Newly created galleries and albums sometimes did not appear in the admin list until cached data expired
+* Fixed: Upload error messages from the Imagely Lightroom plugin now include the underlying reason when a publish fails
+* Fixed: Edited images now refresh immediately in the admin without needing a manual page reload
+* Fixed: PHP warnings and notices no longer appear on the Albums edit screen related to display types
+* Fixed: PHP 8.2+ deprecation notices on admin pages and when gallery models are loaded
 
 = 4.1.3 - 04.03.2026 =
 * Fixed: Imagely admin no longer hammered the REST API with repeated settings requests when browsing Galleries and Albums (column visibility auto-save).

@@ -5,6 +5,17 @@ if ( isset( $displayed_gallery->container_ids ) && ! empty( $displayed_gallery->
 }
 $data_gallery_id = $gallery_id ? $gallery_id : $displayed_gallery_id;
 
+// Resolve gallery name for GA4 tracking.
+$data_gallery_name = '';
+if ( isset( $gallery ) && ! empty( $gallery->title ) ) {
+	$data_gallery_name = $gallery->title;
+} elseif ( $gallery_id ) {
+	$_ngg_gallery = \Imagely\NGG\DataMappers\Gallery::get_instance()->find( intval( $gallery_id ) );
+	if ( $_ngg_gallery ) {
+		$data_gallery_name = $_ngg_gallery->title;
+	}
+}
+
 $this->start_element( 'nextgen_gallery.gallery_container', 'container', $displayed_gallery );
 ?>
 <!-- default-view.php -->
@@ -16,7 +27,11 @@ $this->start_element( 'nextgen_gallery.gallery_container', 'container', $display
 	?>
 	"
 	id="ngg-gallery-<?php echo esc_attr( $displayed_gallery_id ); ?>-<?php echo esc_attr( $current_page ); ?>"
-	data-gallery-id="<?php echo esc_attr( (string) $data_gallery_id ); ?>">
+	data-nextgen-gallery-id="<?php echo esc_attr( (string) $data_gallery_id ); ?>"
+	data-gallery-id="<?php echo esc_attr( (string) $data_gallery_id ); ?>"
+	<?php if ( $data_gallery_name ) : ?>
+	data-gallery-name="<?php echo esc_attr( $data_gallery_name ); ?>"
+	<?php endif; ?>>
 
 	<?php
 
@@ -73,14 +88,15 @@ $this->start_element( 'nextgen_gallery.gallery_container', 'container', $display
 
 				?>
 		<div class="ngg-gallery-thumbnail">
-			<a href="<?php echo esc_attr( $storage->get_image_url( $image, 'full', true ) ); ?>"
-				title="<?php echo esc_attr( $image->description ); ?>"
-				data-src="<?php echo esc_attr( $storage->get_image_url( $image ) ); ?>"
-				data-thumbnail="<?php echo esc_attr( $storage->get_image_url( $image, 'thumb' ) ); ?>"
-				data-image-id="<?php echo esc_attr( $image->{$image->id_field} ); ?>"
-				data-title="<?php echo esc_attr( $image->alttext ); ?>"
-				data-description="<?php echo esc_attr( stripslashes( $image->description ?? '' ) ); ?>"
-				data-image-slug="<?php echo esc_attr( $image->image_slug ); ?>"
+		<a href="<?php echo esc_attr( $storage->get_image_url( $image, 'full', true ) ); ?>"
+			title="<?php echo esc_attr( $image->description ); ?>"
+			data-src="<?php echo esc_attr( $storage->get_image_url( $image ) ); ?>"
+			data-thumbnail="<?php echo esc_attr( $storage->get_image_url( $image, 'thumb' ) ); ?>"
+			data-image-id="<?php echo esc_attr( $image->{$image->id_field} ); ?>"
+			data-image-name="<?php echo esc_attr( $image->filename ?? '' ); ?>"
+			data-title="<?php echo esc_attr( $image->alttext ); ?>"
+			data-description="<?php echo esc_attr( stripslashes( $image->description ?? '' ) ); ?>"
+			data-image-slug="<?php echo esc_attr( $image->image_slug ); ?>"
 				<?php if ( ! empty( $image->meta_data['imagely_tiktok_play_url'] ) ) : ?>
 					data-tiktok-play-url="<?php echo esc_attr( $image->meta_data['imagely_tiktok_play_url'] ); ?>"
 				<?php endif; ?>

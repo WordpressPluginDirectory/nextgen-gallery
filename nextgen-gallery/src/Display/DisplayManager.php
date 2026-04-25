@@ -54,6 +54,7 @@ class DisplayManager {
 		add_action( 'wp_print_styles', [ $self, 'fix_nextgen_custom_css_order' ], PHP_INT_MAX - 1 );
 
 		add_action( 'wp_enqueue_scripts', [ $self, 'enqueue_frontend_resources' ] );
+		add_action( 'wp_enqueue_scripts', [ $self, 'maybe_enqueue_ga4_tracking' ], 20 );
 	}
 
 	/**
@@ -214,12 +215,13 @@ class DisplayManager {
 				return false;
 			}
 
-			// Set the display type - provide backward compatibility with default
-			if ( ! empty( $album->display_type ) ) {
-				$display_params['display_type'] = $album->display_type;
+			// photocrati-nextgen_basic_thumbnails was an incorrect column default in the Album data mapper.
+			// Treat it as absent and fall back to the compact album display type.
+			$stored_display_type = ! empty( $album->display_type ) ? $album->display_type : '';
+			if ( empty( $stored_display_type ) || NGG_BASIC_THUMBNAILS === $stored_display_type ) {
+				$display_params['display_type'] = NGG_BASIC_COMPACT_ALBUM;
 			} else {
-				// Default display type for backward compatibility with old albums
-				$display_params['display_type'] = 'photocrati-nextgen_basic_compact_album';
+				$display_params['display_type'] = $stored_display_type;
 			}
 
 			// Merge in the display type settings if they exist
@@ -650,6 +652,60 @@ class DisplayManager {
 		];
 
 		\wp_localize_script( 'photocrati_ajax', 'photocrati_ajax', $vars );
+
+		// GA4 tracking - loads when addon enabled and measurement ID set.
+		\wp_register_script(
+			'ngg_ga4_tracking',
+			StaticAssets::get_url( 'Integrations/nextgen-ga4-tracking.js' ),
+			[],
+			NGG_SCRIPT_VERSION,
+			true
+		);
+	}
+
+	/**
+	 * Enqueue GA4 tracking script when Pro/Plus/Starter is active, addon is enabled, and Measurement ID is configured.
+	 * Assumes gtag.js is already on the page (MonsterInsights, Site Kit, or manual install).
+	 */
+	public function maybe_enqueue_ga4_tracking() {
+		if ( is_admin() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+			return;
+		}
+		if ( ( defined( 'NGG_SKIP_LOAD_SCRIPTS' ) && NGG_SKIP_LOAD_SCRIPTS ) || $this->is_rest_request() ) {
+			return;
+		}
+		// Google Analytics is a Pro feature - only load when Pro/Plus/Starter is active.
+		if ( 'lite' === \Imagely\NGG\Admin\App::get_pro_type_installed() ) {
+			return;
+		}
+		if ( ! AddonsREST::is_addon_enabled( 'google_analytics' ) ) {
+			return;
+		}
+
+		$settings         = Settings::get_instance();
+		$measurement_id   = $settings->get( 'ga4_measurement_id', '' );
+		$measurement_id   = is_string( $measurement_id ) ? trim( $measurement_id ) : '';
+		if ( empty( $measurement_id ) ) {
+			return;
+		}
+
+		$track = [
+			'gallery_view'   => (bool) $settings->get( 'ga4_track_gallery_views', false ),
+			'image_click'    => (bool) $settings->get( 'ga4_track_image_clicks', false ),
+			'image_download' => (bool) $settings->get( 'ga4_track_image_downloads', false ),
+			'add_to_cart'    => (bool) $settings->get( 'ga4_track_add_to_cart', false ),
+			'purchase'       => (bool) $settings->get( 'ga4_track_purchases', false ),
+		];
+
+		wp_enqueue_script( 'ngg_ga4_tracking' );
+		wp_localize_script(
+			'ngg_ga4_tracking',
+			'ngg_ga4_config',
+			[
+				'measurement_id' => $measurement_id,
+				'track'          => $track,
+			]
+		);
 	}
 
 	/**
@@ -874,13 +930,13 @@ class DisplayManager {
 		// Start with the album's display type settings
 		$display_params = [];
 
-		// Set the display type - provide backward compatibility with default
-		if ( ! empty( $album->display_type ) ) {
-			$display_params['display_type'] = $album->display_type;
+		// photocrati-nextgen_basic_thumbnails was an incorrect column default in the Album data mapper.
+		// Treat it as absent and fall back to the compact album display type.
+		$stored_display_type = ! empty( $album->display_type ) ? $album->display_type : '';
+		if ( empty( $stored_display_type ) || NGG_BASIC_THUMBNAILS === $stored_display_type ) {
+			$display_params['display_type'] = NGG_BASIC_COMPACT_ALBUM;
 		} else {
-			// Default display type for backward compatibility with old albums
-			// Use the same default as defined in the Album data mapper
-			$display_params['display_type'] = 'photocrati-nextgen_basic_thumbnails';
+			$display_params['display_type'] = $stored_display_type;
 		}
 
 		// Merge in the display type settings if they exist

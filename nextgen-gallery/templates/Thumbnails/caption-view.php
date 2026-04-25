@@ -1,6 +1,22 @@
 <?php
 use Imagely\NGG\Display\I18N;
 
+$_caption_gallery_id = null;
+if ( isset( $displayed_gallery->container_ids ) && ! empty( $displayed_gallery->container_ids ) ) {
+	$_caption_gallery_id = reset( $displayed_gallery->container_ids );
+}
+$_caption_data_gallery_id = $_caption_gallery_id ? $_caption_gallery_id : $displayed_gallery_id;
+
+$_caption_gallery_name = '';
+if ( isset( $gallery ) && ! empty( $gallery->title ) ) {
+	$_caption_gallery_name = $gallery->title;
+} elseif ( $_caption_gallery_id ) {
+	$_ngg_caption_gallery = \Imagely\NGG\DataMappers\Gallery::get_instance()->find( intval( $_caption_gallery_id ) );
+	if ( $_ngg_caption_gallery ) {
+		$_caption_gallery_name = $_ngg_caption_gallery->title;
+	}
+}
+
 $this->start_element( 'nextgen_gallery.gallery_container', 'container', $displayed_gallery ); ?>
 
 <div class="ngg-galleryoverview caption-view
@@ -9,7 +25,12 @@ if ( ! intval( $ajax_pagination ) ) {
 	echo esc_attr( ' ngg-ajax-pagination-none' );}
 ?>
 "
-	id="ngg-gallery-<?php echo esc_attr( $displayed_gallery_id ); ?>-<?php echo esc_attr( $current_page ); ?>">
+	id="ngg-gallery-<?php echo esc_attr( $displayed_gallery_id ); ?>-<?php echo esc_attr( $current_page ); ?>"
+	data-nextgen-gallery-id="<?php echo esc_attr( $_caption_data_gallery_id ); ?>"
+	data-gallery-id="<?php echo esc_attr( $_caption_data_gallery_id ); ?>"
+	<?php if ( $_caption_gallery_name ) : ?>
+	data-gallery-name="<?php echo esc_attr( $_caption_gallery_name ); ?>"
+	<?php endif; ?>>
 
 	<div class="ngg-caption-view-wrapper">
 		<?php $this->start_element( 'nextgen_gallery.image_list_container', 'container', $images ); ?>
@@ -53,6 +74,7 @@ if ( ! intval( $ajax_pagination ) ) {
 									data-src="<?php echo esc_attr( $storage->get_image_url( $image ) ); ?>"
 									data-thumbnail="<?php echo esc_attr( $storage->get_image_url( $image, 'thumb' ) ); ?>"
 									data-image-id="<?php echo esc_attr( $image->{$image->id_field} ); ?>"
+									data-image-name="<?php echo esc_attr( $image->filename ?? '' ); ?>"
 									data-title="<?php echo esc_attr( $image->alttext ); ?>"
 									data-description="<?php echo esc_attr( stripslashes( $image->description ?? '' ) ); ?>"
 									data-image-slug="<?php echo esc_attr( $image->image_slug ); ?>"

@@ -1,3 +1,20 @@
+<?php
+$_carousel_gallery_id = null;
+if ( isset( $displayed_gallery->container_ids ) && ! empty( $displayed_gallery->container_ids ) ) {
+	$_carousel_gallery_id = reset( $displayed_gallery->container_ids );
+}
+$_carousel_data_gallery_id = $_carousel_gallery_id ? $_carousel_gallery_id : $displayed_gallery_id;
+
+$_carousel_gallery_name = '';
+if ( isset( $gallery ) && ! empty( $gallery->title ) ) {
+	$_carousel_gallery_name = $gallery->title;
+} elseif ( $_carousel_gallery_id ) {
+	$_ngg_carousel_gallery = \Imagely\NGG\DataMappers\Gallery::get_instance()->find( intval( $_carousel_gallery_id ) );
+	if ( $_ngg_carousel_gallery ) {
+		$_carousel_gallery_name = $_ngg_carousel_gallery->title;
+	}
+}
+?>
 <?php $this->start_element( 'nextgen_gallery.gallery_container', 'container', $displayed_gallery ); ?>
 
 <div class="ngg-galleryoverview carousel-view
@@ -6,7 +23,12 @@ if ( ! intval( $ajax_pagination ) ) {
 	echo esc_attr( ' ngg-ajax-pagination-none' );}
 ?>
 "
-	id="ngg-gallery-<?php echo esc_attr( $displayed_gallery_id ); ?>-<?php echo esc_attr( $current_page ); ?>">
+	id="ngg-gallery-<?php echo esc_attr( $displayed_gallery_id ); ?>-<?php echo esc_attr( $current_page ); ?>"
+	data-nextgen-gallery-id="<?php echo esc_attr( $_carousel_data_gallery_id ); ?>"
+	data-gallery-id="<?php echo esc_attr( $_carousel_data_gallery_id ); ?>"
+	<?php if ( $_carousel_gallery_name ) : ?>
+	data-gallery-name="<?php echo esc_attr( $_carousel_gallery_name ); ?>"
+	<?php endif; ?>>
 
 	<div class="ngg-basic-thumbnails-carousel">
 		<?php
@@ -22,10 +44,11 @@ if ( ! intval( $ajax_pagination ) ) {
 			title="<?php echo esc_attr( $current_image->description ); ?>"
 			data-src="<?php echo esc_attr( $storage->get_image_url( $current_image ) ); ?>"
 			data-thumbnail="<?php echo esc_attr( $storage->get_image_url( $current_image, 'thumb' ) ); ?>"
-			data-current_image-id="<?php echo esc_attr( $current_image->{$current_image->id_field} ); ?>"
+			data-image-id="<?php echo esc_attr( $current_image->{$current_image->id_field} ); ?>"
+			data-image-name="<?php echo esc_attr( $current_image->filename ?? '' ); ?>"
 			data-title="<?php echo esc_attr( $current_image->alttext ); ?>"
 			data-description="<?php echo esc_attr( stripslashes( $current_image->description ?? '' ) ); ?>"
-			data-current_image-slug="<?php echo esc_attr( $current_image->image_slug ); ?>"
+			data-image-slug="<?php echo esc_attr( $current_image->image_slug ); ?>"
 			<?php if ( ! empty( $current_image->meta_data['imagely_tiktok_play_url'] ) ) : ?>
 				data-tiktok-play-url="<?php echo esc_attr( $current_image->meta_data['imagely_tiktok_play_url'] ); ?>"
 			<?php endif; ?>
@@ -87,13 +110,16 @@ if ( ! intval( $ajax_pagination ) ) {
 						>
 						<?php $this->start_element( 'nextgen_gallery.image', 'item', $image ); ?>
 						<?php $href = $controller->set_param_for( $application->get_routed_url( true ), 'pid', $image->image_slug ); ?>
-							<div class="ngg-gallery-thumbnail">
-								<a href="<?php echo esc_attr( $href ); ?>"
-									title="<?php echo esc_attr( $image->description ); ?>">
-									<?php if ( $show_tiktok_play_button || ! empty( $image->meta_data['video_link'] ) ) { ?>
-										<span class="ngg-video-play-overlay" aria-hidden="true"></span>
-									<?php } ?>
-									<img title="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->alttext ) ); ?>"
+						<div class="ngg-gallery-thumbnail">
+							<a href="<?php echo esc_attr( $href ); ?>"
+								title="<?php echo esc_attr( $image->description ); ?>"
+								data-image-id="<?php echo esc_attr( $image->{$image->id_field} ); ?>"
+								data-image-name="<?php echo esc_attr( $image->filename ?? '' ); ?>"
+								data-title="<?php echo esc_attr( $image->alttext ); ?>">
+								<?php if ( $show_tiktok_play_button || ! empty( $image->meta_data['video_link'] ) ) { ?>
+									<span class="ngg-video-play-overlay" aria-hidden="true"></span>
+								<?php } ?>
+								<img title="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->alttext ) ); ?>"
 										alt="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->alttext ) ); ?>"
 										src="<?php echo esc_attr( $storage->get_image_url( $image, $thumbnail_size_name ) ); ?>"
 										width="<?php echo esc_attr( $thumb_size['width'] ); ?>"

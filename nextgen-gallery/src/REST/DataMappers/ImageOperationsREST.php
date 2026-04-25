@@ -493,6 +493,8 @@ class ImageOperationsREST {
 			$result = $storage->generate_thumbnail( $image_id, $params );
 
 			if ( $result ) {
+				$storage->flush_image_cache( $image_id );
+
 				return new WP_REST_Response(
 					[
 						'message' => __( 'Thumbnail created successfully', 'nggallery' ),
@@ -544,8 +546,10 @@ class ImageOperationsREST {
 			}
 
 			if ( $result ) {
-				// Recreate the thumbnail after rotation
 				\nggAdmin::create_thumbnail( $image_id );
+
+				$storage = StorageManager::get_instance();
+				$storage->flush_image_cache( $image_id );
 
 				return new WP_REST_Response(
 					[
@@ -648,6 +652,9 @@ class ImageOperationsREST {
 			$result = \nggAdmin::resize_image( $image_id );
 
 			if ( $result ) {
+				$storage = StorageManager::get_instance();
+				$storage->flush_image_cache( $image_id );
+
 				return new WP_REST_Response(
 					[
 						'message' => __( 'Image resized successfully', 'nggallery' ),
@@ -682,6 +689,9 @@ class ImageOperationsREST {
 			$result = \nggAdmin::set_watermark( $image_id );
 
 			if ( $result ) {
+				$storage = StorageManager::get_instance();
+				$storage->flush_image_cache( $image_id );
+
 				return new WP_REST_Response(
 					[
 						'message' => __( 'Watermark applied successfully', 'nggallery' ),
@@ -716,6 +726,9 @@ class ImageOperationsREST {
 			$result = \nggAdmin::recover_image( $image_id );
 
 			if ( $result ) {
+				$storage = StorageManager::get_instance();
+				$storage->flush_image_cache( $image_id );
+
 				return new WP_REST_Response(
 					[
 						'message' => __( 'Image recovered successfully', 'nggallery' ),
@@ -881,6 +894,9 @@ class ImageOperationsREST {
 				$result = \nggAdmin::resize_image( $image_id, $resize_width, $resize_height );
 
 				if ( '1' === $result ) {
+					$storage = StorageManager::get_instance();
+					$storage->flush_image_cache( $image_id );
+
 					$successful_resizes[] = [
 						'id'      => $image_id,
 						'width'   => $resize_width,
@@ -1023,6 +1039,8 @@ class ImageOperationsREST {
 				}
 				$storage->generate_image( $image_id, $params, $size );
 			}
+
+			$storage->flush_image_cache( $image_id );
 
 			return new WP_REST_Response(
 				[

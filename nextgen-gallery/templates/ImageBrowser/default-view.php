@@ -29,13 +29,25 @@ $gallery_id      = null;
 if ( isset( $displayed_gallery->container_ids ) && ! empty( $displayed_gallery->container_ids ) ) {
 	$gallery_id = reset( $displayed_gallery->container_ids );
 }
-$data_gallery_id = $gallery_id ? $gallery_id : $displayed_gallery->id();
+$data_gallery_id   = $gallery_id ? $gallery_id : $displayed_gallery->id();
+$data_gallery_name = '';
+if ( isset( $gallery ) && ! empty( $gallery->title ) ) {
+	$data_gallery_name = $gallery->title;
+} elseif ( $gallery_id ) {
+	$_ngg_ib_gallery = \Imagely\NGG\DataMappers\Gallery::get_instance()->find( intval( $gallery_id ) );
+	if ( $_ngg_ib_gallery ) {
+		$data_gallery_name = $_ngg_ib_gallery->title;
+	}
+}
 ?>
 <?php $this->start_element( 'nextgen_gallery.gallery_container', 'container', $displayed_gallery ); ?>
 	<div class='ngg-imagebrowser default-view'
 		id='<?php print esc_attr( $anchor ); ?>'
-		data-nextgen-gallery-id="<?php print esc_attr( (string) $displayed_gallery->id() ); ?>"
-		data-gallery-id="<?php print esc_attr( (string) $data_gallery_id ); ?>">
+		data-nextgen-gallery-id="<?php echo esc_attr( $data_gallery_id ); ?>"
+		data-gallery-id="<?php echo esc_attr( $data_gallery_id ); ?>"
+		<?php if ( $data_gallery_name ) : ?>
+		data-gallery-name="<?php echo esc_attr( $data_gallery_name ); ?>"
+		<?php endif; ?>>
 
 		<h3><?php print \Imagely\NGG\Display\I18N::ngg_decode_sanitized_html_content( $image->alttext ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></h3>
 
@@ -54,6 +66,7 @@ $data_gallery_id = $gallery_id ? $gallery_id : $displayed_gallery->id();
 			data-src="<?php print esc_attr( $storage->get_image_url( $image ) ); ?>"
 			data-thumbnail="<?php print esc_attr( $storage->get_image_url( $image, 'thumb' ) ); ?>"
 			data-image-id="<?php print esc_attr( $image->{$image->id_field} ); ?>"
+			data-image-name="<?php print esc_attr( $image->filename ?? '' ); ?>"
 			data-title="<?php print esc_attr( $image->alttext ); ?>"
 			data-description="<?php print esc_attr( stripslashes( $image->description ?? '' ) ); ?>"
 			<?php if ( ! empty( $image->meta_data['imagely_tiktok_play_url'] ) ) : ?>

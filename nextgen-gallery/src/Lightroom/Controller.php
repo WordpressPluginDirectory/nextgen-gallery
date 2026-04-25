@@ -91,6 +91,33 @@ class Controller {
 	}
 
 	/**
+	 * Gets a JSON parameter value, undoes WordPress magic-quoting, and decodes it.
+	 *
+	 * Unlike param(), this method calls wp_unslash() exactly once (to undo WordPress's
+	 * wp_magic_quotes() which runs addslashes() on $_REQUEST at startup), but does NOT
+	 * call recursive_stripslashes() a second time. That second call in param() corrupts
+	 * JSON-encoded Windows paths: C:\\Users\\ becomes C:\Users\, leaving invalid JSON
+	 * escape sequences (\U, \A, etc.) that cause json_decode() to return null.
+	 *
+	 * @param string $key
+	 * @return mixed Decoded value, or null if the parameter is absent or not valid JSON.
+	 */
+	public function param_json( $key ) {
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$raw = isset( $_REQUEST[ $key ] ) ? $_REQUEST[ $key ] : null;
+		if ( is_string( $raw ) ) {
+			// WordPress's wp_magic_quotes() applies addslashes() to $_REQUEST at startup,
+			// escaping all " to \" and \ to \\. We must call wp_unslash() once to undo
+			// that and restore valid JSON. We must NOT call recursive_stripslashes() a
+			// second time (as param() does), because that strips the path backslashes again
+			// (C:\\Users\\ -> C:\Users\), leaving invalid escape sequences (\U, \A, etc.)
+			// that cause json_decode() to return null on Windows paths.
+			return json_decode( wp_unslash( $raw ), true );
+		}
+		return $raw;
+	}
+
+	/**
 	 * Recursively calls stripslashes() on strings, arrays, and objects
 	 *
 	 * Copied here from RoutingApp to maintain compatibility with Lightroom
@@ -127,21 +154,12 @@ class Controller {
 
 		if ( $user_obj != null && ! is_a( $user_obj, 'WP_Error' ) ) {
 			wp_set_current_user( $user_obj->ID );
-			$app_config = $this->param( 'app_config' );
-			$task_list  = $this->param( 'task_list' );
-			$extra_data = $this->param( 'extra_data' );
-
-			if ( is_string( $app_config ) ) {
-				$app_config = json_decode( $app_config, true );
-			}
-
-			if ( is_string( $task_list ) ) {
-				$task_list = json_decode( $task_list, true );
-			}
-
-			if ( is_string( $extra_data ) ) {
-				$extra_data = json_decode( $extra_data, true );
-			}
+			// Use param_json() instead of param() for JSON fields: param() applies wp_unslash()/
+			// stripslashes() which converts \\ to \ in JSON strings, leaving invalid escape
+			// sequences (e.g. \U, \J) that cause json_decode() to return null on Windows paths.
+			$app_config = $this->param_json( 'app_config' );
+			$task_list  = $this->param_json( 'task_list' );
+			$extra_data = $this->param_json( 'extra_data' ) ?? [];
 
 			foreach ( $_FILES as $key => $file ) {
 				if ( substr( $key, 0, strlen( 'file_data_' ) ) == 'file_data_' ) {
@@ -299,14 +317,10 @@ class Controller {
 			$this->start_locked_execute();
 
 			try {
-				$extra_data    = $this->param( 'extra_data' );
+				$extra_data    = $this->param_json( 'extra_data' ) ?? [];
 				$job_count     = count( $job_list );
 				$done_count    = 0;
 				$client_result = [];
-
-				if ( is_string( $extra_data ) ) {
-					$extra_data = json_decode( $extra_data, true );
-				}
 
 				foreach ( $_FILES as $key => $file ) {
 					if ( substr( $key, 0, strlen( 'file_data_' ) ) == 'file_data_' ) {
@@ -1460,7 +1474,8 @@ class API {
 													$image_error = __( 'No space available for image (%1$s).', 'nggallery' );
 												} catch ( \E_UploadException $e ) {
 													/* translators: %1$s: image filename */
-													$image_error = $e->getMessage . __( ' (%1$s).', 'nggallery' );
+													$upload_error_message = str_replace( '%', '%%', $e->getMessage() );
+													$image_error          = $upload_error_message . __( ' (%1$s).', 'nggallery' );
 												} catch ( \E_No_Image_Library_Exception $e ) {
 													/* translators: %1$s: image filename */
 													$image_error = __( 'No image library present, image uploads will fail (%1$s).', 'nggallery' );
@@ -1517,7 +1532,13 @@ class API {
 								}
 
 								if ( ! $gallery->save() ) {
-									if ( $error == null ) {
+									// wpdb->update() returns 0 (falsy) when no columns changed,
+									// even though the save succeeded. Only treat as error when
+									// validation failed (array) or a real DB error occurred.
+									// flush_query_cache() after save_entity() clears only a PHP
+									// array, so $wpdb->last_error still reflects the DB result.
+									global $wpdb;
+									if ( $error == null && ( is_array( $gallery->validation() ) || ! empty( $wpdb->last_error ) ) ) {
 										$gal_errors = '[' . wp_json_encode( $gallery->validation() ) . ']';
 										/* translators: %1$s: gallery ID */
 										$error = __( 'Failed to save modified gallery (%1$s). ', 'nggallery' ) . $gal_errors;
@@ -1527,7 +1548,7 @@ class API {
 						} else {
 							/* translators: %1$s: gallery ID */
 							$error = __( 'Could not find gallery (%1$s).', 'nggallery' );
-						}                       // XXX workaround for $gallery->save() returning false even if successful.
+						}
 						if ( isset( $task_result['image_list'] ) && $gallery != null ) {
 							$task_result['object_id'] = $gallery->id();
 						}

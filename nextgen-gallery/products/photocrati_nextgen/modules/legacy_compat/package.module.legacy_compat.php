@@ -2752,10 +2752,14 @@ class C_Gallery_Storage extends C_Component
      * Gets the absolute path where the image is stored. Can optionally return the path for a particular sized image.
      *
      * @param int|object $image
-     * @param string     $size (optional) Default = full
-     * @return string
+     * @param string     $size            (optional) Default = full
+     * @param bool       $check_existance Whether to verify that the computed path exists on disk.
+     *                                    Note: the parameter name contains a historical typo retained for
+     *                                    backward compatibility with existing named-argument callers.
+     *
+     * @return string|null
      */
-    private function _get_computed_image_abspath($image, $size = 'full', $check_existance = false)
+    public function _get_computed_image_abspath($image, $size = 'full', $check_existance = false)
     {
         $retval = null;
         // If we have the id, get the actual image entity
@@ -2959,7 +2963,18 @@ class C_Gallery_Storage extends C_Component
         }
         return $retval;
     }
-    private function _get_computed_image_url($image, $size = 'full')
+    /**
+     * Computes the URL for a given image at the specified size.
+     *
+     * This will generate a dynamic thumbnail if required and allowed, and then
+     * translate the resulting file path into a public URL.
+     *
+     * @param mixed  $image Image identifier or object for which to compute the URL.
+     * @param string $size  Image size identifier (e.g. 'thumbnail', 'full').
+     *
+     * @return string|null The computed image URL, or null if it cannot be determined.
+     */
+    public function _get_computed_image_url($image, $size = 'full')
     {
         $retval = null;
         $dynthumbs = C_Dynamic_Thumbnails_Manager::get_instance();
