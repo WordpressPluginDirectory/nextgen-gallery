@@ -2,7 +2,7 @@
 Contributors: photocrati, imagely
 Tags: gallery, wordpress gallery plugin, photo gallery, image gallery, slideshow
 Requires at least: 5.5.4
-Stable tag: 4.2.0
+Stable tag: 4.2.1
 Tested up to: 6.9
 License: GPLv3
 Requires PHP: 7.4
@@ -196,6 +196,11 @@ For more information, feel free to visit the official website for the NextGEN Ga
 
 
 == Changelog ==
+
+= 4.2.1 - 05.15.2026 =
+* Fixed: Security hardening across the plugin to better protect site data and reinforce permission checks. We recommend updating.
+* Fixed: Edit Image crop tool now uses the correct aspect ratio from your gallery's thumbnail settings and no longer briefly flickers when opening crop mode.
+* Fixed: Additional PHP 8.2+ deprecation notices on admin screens.
 
 = 4.2.0 - 04.23.2026 =
 * Fixed: Publishing galleries and albums from the Imagely Lightroom plugin could fail with a generic processing error after a recent update

@@ -649,6 +649,13 @@ class nggManageGallery {
 							$id = sanitize_text_field( wp_unslash( $id ) );
 
 							$gallery = $mapper->find( $id );
+							if ( ! $gallery ) {
+								continue;
+							}
+							// Per-row ownership: can_manage_this_gallery() returns true for the gallery author or for users holding 'NextGEN Manage others gallery'.
+							if ( ! nggAdmin::can_manage_this_gallery( $gallery->author ) ) {
+								continue;
+							}
 							if ( $gallery->path == '../' || false !== strpos( $gallery->path, '/../' ) ) {
 								/* translators: %s: gallery ID */
 								nggGallery::show_message( sprintf( __( 'One or more "../" in Gallery paths could be unsafe and NextGen Gallery will not delete gallery %s automatically', 'nggallery' ), $gallery->{$gallery->id_field} ) );
@@ -912,17 +919,26 @@ class nggManageGallery {
 				}
 
 				if ( $this->gallery ) {
-					$excludes = [ '_wpnonce', '_wp_http_referer', 'nggpage' ];
-					foreach ( $_POST as $key => $value ) {
-						// Yet another IIS hack: gallery paths can be mangled into \\wp-content\\blah\\ which causes
-						// later errors when validating the gallery path: just automatically replace \\ with / here.
-						if ( $key === 'path' ) {
-							$value = str_replace( '\\\\', '/', $value );
+					// Allowlist matches the editable inputs in templates/manage_gallery/gallery_*_field.php.
+					// Iterating $_POST blindly would let columns like author/gid/extras_post_id/slug be set.
+					$editable_gallery_fields = [ 'title', 'galdesc', 'previewpic', 'path', 'pageid' ];
+
+					foreach ( $editable_gallery_fields as $field ) {
+						if ( ! isset( $_POST[ $field ] ) ) {
+							continue;
 						}
 
-						if ( ! in_array( $key, $excludes, true ) ) {
-							$this->gallery->$key = $value;
+						if ( $field === 'path' ) {
+							// IIS hack: gallery paths can be mangled into \\wp-content\\blah\\ which causes later errors when validating the gallery path.
+							$value = str_replace( '\\\\', '/', sanitize_text_field( wp_unslash( $_POST[ $field ] ) ) );
+						} elseif ( $field === 'previewpic' || $field === 'pageid' ) {
+							$value = (int) wp_unslash( $_POST[ $field ] );
+						} else {
+							// title/galdesc are pre-sanitized higher in this branch (sanitize_text_field + strip_tags allowlist) and written back into $_POST; read that processed value.
+							$value = wp_unslash( $_POST[ $field ] );
 						}
+
+						$this->gallery->$field = $value;
 					}
 
 					$mapper->save( $this->gallery );
@@ -951,6 +967,11 @@ class nggManageGallery {
 		// Rescan folder.
 		if ( isset( $_POST['scanfolder'] ) ) {
 
+			// Outer nonce + page-level cap is not enough; folder import targets a specific gallery row.
+			if ( ! $this->can_user_manage_gallery() ) {
+				return;
+			}
+
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
 			$gallerypath = $wpdb->get_var(
 				$wpdb->prepare(
@@ -967,8 +988,17 @@ class nggManageGallery {
 		// Add a new page.
 		if ( isset( $_POST['addnewpage'] ) ) {
 
-			$parent_id     = isset( $_POST['parent_id'] ) ? esc_attr( sanitize_text_field( wp_unslash( $_POST['parent_id'] ) ) ) : '';
-			$gallery_title = isset( $_POST['title'] ) ? esc_attr( sanitize_text_field( wp_unslash( $_POST['title'] ) ) ) : '';
+			// Branch mutates a specific gallery and publishes a page — gate on gallery ownership and on publish_pages
+			// because wp_insert_post() does not enforce capabilities when called directly.
+			if ( ! $this->can_user_manage_gallery() ) {
+				return;
+			}
+			if ( ! current_user_can( 'publish_pages' ) ) {
+				return;
+			}
+
+			$parent_id     = isset( $_POST['parent_id'] ) ? (int) wp_unslash( $_POST['parent_id'] ) : 0;
+			$gallery_title = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
 			$mapper        = GalleryMapper::get_instance();
 			$gallery       = $mapper->find( $this->gid );
 			$gallery_name  = $gallery->name;
@@ -1021,6 +1051,7 @@ class nggManageGallery {
 			$image_mapper = ImageMapper::get_instance();
 
 			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- wp_unslash only removes slashes, values are sanitized on line 976 and later
+			$current_gallery_id = isset( $this->gallery->{$this->gallery->id_field} ) ? (int) $this->gallery->{$this->gallery->id_field} : 0;
 			foreach ( wp_unslash( $_POST['images'] ) as $pid => $data ) {
 				$pid = sanitize_text_field( wp_unslash( $pid ) );
 				if ( ! isset( $data['exclude'] ) ) {
@@ -1028,6 +1059,13 @@ class nggManageGallery {
 				}
 				$image = $image_mapper->find( $pid );
 				if ( $image ) {
+					// Cross-gallery IDOR guard: $_POST['images'] is keyed by raw pid from the form payload;
+					// reject any image whose galleryid does not match the gallery the form was rendered for.
+					// can_user_manage_gallery() above only verifies ownership of $this->gallery, so without this
+					// check a user managing gallery A could rewrite fields on images in gallery B.
+					if ( 0 === $current_gallery_id || (int) $image->galleryid !== $current_gallery_id ) {
+						continue;
+					}
 					// Strip slashes from title/description/alttext fields.
 					if ( isset( $data['description'] ) ) {
 						$data['description'] = \Imagely\NGG\Display\I18N::ngg_sanitize_text_alt_title_desc( $data['description'] );
@@ -1044,9 +1082,14 @@ class nggManageGallery {
 						$data['image_slug'] = null; // will cause a new slug to be generated.
 					}
 
-					// Update all fields.
-					foreach ( $data as $key => $value ) {
-						$image->$key = $value;
+					// image_slug is included because the alttext-change branch above sets it to null to trigger regeneration.
+					// Iterating $data blindly would allow columns like galleryid/meta_data/post_id/extras_post_id/imagedate to be overwritten via crafted images[<pid>][...] POST.
+					$editable_image_fields = [ 'alttext', 'description', 'title', 'exclude', 'tags', 'image_slug' ];
+
+					foreach ( $editable_image_fields as $field ) {
+						if ( array_key_exists( $field, $data ) ) {
+							$image->$field = $data[ $field ];
+						}
 					}
 					if ( $image_mapper->save( $image ) ) {
 						++$updated;

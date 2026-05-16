@@ -377,12 +377,70 @@ class AlbumREST {
 	}
 
 	/**
-	 * Check if user has permission to edit albums
+	 * Check if user has permission to edit albums.
 	 *
+	 * Per-album ownership gate: holders of 'NextGEN Edit album' may create albums, but PUT/DELETE
+	 * on `/albums/{id}` additionally require the user to own the album or hold the cross-author cap.
+	 * Mirrors the ownership pattern PR #805 applied on `ImageREST` so authors cannot mutate albums
+	 * belonging to other authors (IDOR).
+	 *
+	 * @param \WP_REST_Request|null $request The REST request (passed by WP for permission_callback).
 	 * @return bool
 	 */
-	public static function check_edit_permission() {
-		return Security::is_allowed( 'NextGEN Edit album' );
+	public static function check_edit_permission( $request = null ) {
+		if ( ! Security::is_allowed( 'NextGEN Edit album' ) ) {
+			return false;
+		}
+
+		// Cross-author cap holders may manage any album.
+		if ( Security::is_allowed( 'nextgen_edit_gallery_unowned' ) ) {
+			return true;
+		}
+
+		if ( ! $request instanceof WP_REST_Request ) {
+			return true;
+		}
+
+		$url_params = $request->get_url_params();
+		$album_id   = isset( $url_params['id'] ) ? (int) $url_params['id'] : 0;
+		if ( $album_id <= 0 ) {
+			// POST /albums (create) — no per-album id, base cap is sufficient.
+			return true;
+		}
+
+		return self::current_user_can_manage_album( $album_id );
+	}
+
+	/**
+	 * Determine whether the current user owns (or can manage) a specific album.
+	 *
+	 * The `ngg_album` table has no `author` column; album ownership is derived from the
+	 * linked `extras_post_id` row in `wp_posts` (post_author). When no extras post exists yet
+	 * (orphan), fall back to the cross-author cap so unattributed albums can still be cleaned up.
+	 *
+	 * @param int $album_id Album primary key.
+	 * @return bool
+	 */
+	protected static function current_user_can_manage_album( $album_id ) {
+		$mapper = AlbumMapper::get_instance();
+		$album  = $mapper->find( $album_id );
+		if ( ! $album ) {
+			// Unknown id — let downstream return 404 via validate_id. Don't grant access here.
+			return false;
+		}
+
+		$extras_post_id = isset( $album->extras_post_id ) ? (int) $album->extras_post_id : 0;
+		if ( $extras_post_id <= 0 ) {
+			// No backing post — only cross-author cap holders may manage.
+			return Security::is_allowed( 'nextgen_edit_gallery_unowned' );
+		}
+
+		$post = get_post( $extras_post_id );
+		if ( ! $post ) {
+			return Security::is_allowed( 'nextgen_edit_gallery_unowned' );
+		}
+
+		return (int) $post->post_author === (int) get_current_user_id();
 	}
 
 	/**
@@ -396,8 +454,11 @@ class AlbumREST {
 		$mapper = AlbumMapper::get_instance();
 
 		// Get and validate order parameters.
-		$orderby = $request->get_param( 'orderby' ) ?? 'id';
-		$order   = strtoupper( $request->get_param( 'order' ) ?? 'ASC' );
+		// Security fix (SQLi): normalize orderby input via sanitize_key before mapping so only safe identifier chars are considered.
+		$orderby = sanitize_key( (string) ( $request->get_param( 'orderby' ) ?? 'id' ) );
+		// Security fix (SQLi): restrict order direction to ASC/DESC; anything else defaults to ASC.
+		$order = strtoupper( (string) ( $request->get_param( 'order' ) ?? 'ASC' ) );
+		$order = in_array( $order, [ 'ASC', 'DESC' ], true ) ? $order : 'ASC';
 
 		// Map frontend column names to database column names
 		$column_mapping = [
@@ -409,9 +470,11 @@ class AlbumREST {
 			'previewpic' => 'previewpic',
 		];
 
-		// Map the orderby parameter to the actual database column
+		// Security fix (SQLi): require orderby to be a known mapping key; unmapped values fall back to 'id' instead of passing through raw (previously missing else allowed ORDER BY injection).
 		if ( isset( $column_mapping[ $orderby ] ) ) {
 			$orderby = $column_mapping[ $orderby ];
+		} else {
+			$orderby = 'id';
 		}
 
 		// Get pagination parameters.

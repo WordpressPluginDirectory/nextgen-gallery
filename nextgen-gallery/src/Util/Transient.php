@@ -95,6 +95,12 @@ class Transient {
 			$this->_groups = [];
 		}
 
+		// Ensure the counter exists; the stored option may have been reset or cleared
+		// (e.g. after manually deleting transients) without the default counter key.
+		if ( ! isset( $this->_groups['__counter'] ) ) {
+			$this->_groups['__counter'] = 1;
+		}
+
 		foreach ( $groups as $group ) {
 			if ( ! isset( $this->_groups[ $group ] ) ) {
 				$id                      = $this->_groups['__counter'] += 1;

@@ -163,16 +163,29 @@ class TableDriver extends DriverBase {
 		// We treat the rand() function as an exception.
 		if ( preg_match( '/rand\(\s*\)/', $order_by ) ) {
 			$order = 'rand()';
+		} elseif ( preg_match( "/^FIELD\\(\\s*[`']?([A-Za-z_][A-Za-z0-9_]*)[`']?\\s*,\\s*([0-9,\\s]+)\\)$/", (string) $order_by, $m ) ) {
+			// Security fix (SQLi): allow the legacy FIELD(<ident>, <int-list>) form used for preserving IN() result order. Both identifier and integer list are strictly validated so no user-controlled string can reach SQL here.
+			$ident   = $m[1];
+			$ints    = array_filter( array_map( 'intval', preg_split( '/\s*,\s*/', trim( $m[2] ) ) ) );
+			$int_csv = implode( ',', $ints );
+			$order   = "FIELD(`{$ident}`, {$int_csv})";
 		} else {
+			// Security fix (SQLi): identifier whitelist via _clean_column leaves only [A-Za-z0-9_], safe to inline in ORDER BY without requiring has_column() (aliased SELECT columns like 'new_sortorder'/'ordered_by' are legitimate but not in _table_columns).
 			$order_by = $this->_clean_column( $order_by );
-
-			// If the order by clause is a column, then it should be backticked.
+			if ( '' === $order_by ) {
+				// Empty after sanitization — refuse to build clause to avoid SQL error and potential open-ORDER-BY.
+				return $this;
+			}
 			if ( $this->has_column( $order_by ) ) {
 				$order_by = "`{$order_by}`";
 			}
 
-			$direction = $this->_clean_column( $direction );
-			$order     = "{$order_by} {$direction}";
+			// Security fix (SQLi): strict whitelist for direction; default to ASC if not exactly ASC/DESC.
+			$direction = strtoupper( $this->_clean_column( $direction ) );
+			if ( 'ASC' !== $direction && 'DESC' !== $direction ) {
+				$direction = 'ASC';
+			}
+			$order = "{$order_by} {$direction}";
 		}
 
 		$this->order_clauses[] = $order;
@@ -234,25 +247,56 @@ class TableDriver extends DriverBase {
 	public function add_where_clause( $where_clauses, $join ) {
 		$clauses = [];
 
+		// Security fix (SQLi defense-in-depth): allowlist of comparators. Anything outside this list is
+		// coerced to '=' so caller-supplied $compare cannot inject query-shape-changing fragments.
+		$allowed_compares = [ '=', '!=', '<>', '<', '<=', '>', '>=', 'IN', 'NOT IN', 'BETWEEN', 'LIKE', 'NOT LIKE', 'IS', 'IS NOT' ];
+
 		foreach ( $where_clauses as $clause ) {
-			extract( $clause );
+			// Replaced extract() with explicit reads: extract() on a structured array is a foot-gun and would clobber locals if upstream schema gains new keys.
+			$column  = isset( $clause['column'] ) ? $clause['column'] : '';
+			$value   = isset( $clause['value'] ) ? $clause['value'] : '';
+			$compare = isset( $clause['compare'] ) ? $clause['compare'] : '=';
+			$type    = isset( $clause['type'] ) ? $clause['type'] : 'string';
+
+			// Security fix (SQLi defense-in-depth): identifier hardening for $column. Schema-defined
+			// columns are backticked as before; everything else is forced through the same identifier
+			// allowlist used by order_by() ([A-Za-z0-9_]). Empty result drops the clause rather than
+			// concatenating raw caller input into SQL.
 			if ( $this->has_column( $column ) ) {
 				$column = "`{$column}`";
+			} else {
+				$column = $this->_clean_column( (string) $column );
+				if ( '' === $column ) {
+					continue;
+				}
+				$column = "`{$column}`";
 			}
+
+			// Security fix (SQLi defense-in-depth): strict comparator allowlist (was: any string passed
+			// through). Normalize to upper-case + trim before lookup so 'in' / ' IN ' still match.
+			$compare = strtoupper( trim( (string) $compare ) );
+			if ( ! in_array( $compare, $allowed_compares, true ) ) {
+				$compare = '=';
+			}
+
 			if ( ! is_array( $value ) ) {
 				$value = [ $value ];
 			}
 
 			foreach ( $value as $index => $v ) {
-				$v               = $clause['type'] == 'numeric' ? $v : "'{$v}'";
+				// esc_sql + single-quote wrap for string values; raw cast for numeric. Prevents SQLi when callers pass user-influenced strings.
+				$v               = ( 'numeric' === $type ) ? (float) $v : "'" . esc_sql( $v ) . "'";
 				$value[ $index ] = $v;
 			}
 
-			if ( $compare == 'BETWEEN' ) {
+			if ( 'BETWEEN' === $compare ) {
 				$value = "{$value[0]} AND {$value[1]}";
 			} else {
 				$value = implode( ', ', $value );
-				if ( strpos( $compare, 'IN' ) !== false ) {
+				// Exact match on the comparator string (not substring) so values like 'INFO' / 'INSERT'
+				// never sneak through into IN-style parenthesization. After normalization above the
+				// only IN-family entries are 'IN' and 'NOT IN'.
+				if ( 'IN' === $compare || 'NOT IN' === $compare ) {
 					$value = "({$value})";
 				}
 			}

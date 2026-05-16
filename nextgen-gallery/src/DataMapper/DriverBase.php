@@ -201,7 +201,8 @@ abstract class DriverBase {
 	 * @return string
 	 */
 	public function _clean_column( $val ) {
-		return str_replace( [ ';', "'", '"', '`' ], [ '' ], $val );
+		// Security fix (SQLi): replace blacklist with identifier whitelist. Only allow [A-Za-z0-9_] to prevent injection into ORDER BY/column contexts.
+		return preg_replace( '/[^A-Za-z0-9_]/', '', (string) $val );
 	}
 
 	/**

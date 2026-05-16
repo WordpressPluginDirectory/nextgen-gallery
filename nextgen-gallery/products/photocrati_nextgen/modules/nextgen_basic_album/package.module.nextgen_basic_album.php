@@ -316,7 +316,8 @@ class A_NextGen_Album_Child_Entities extends Mixin
             $dg = $gallery->displayed_gallery;
             $id = $dg->id();
             $retval .= 'galleries.gallery_' . $id . ' = ' . wp_json_encode($dg->get_entity()) . ';';
-            $retval .= 'galleries.gallery_' . $id . '.wordpress_page_root = "' . get_permalink() . '";';
+            $retval .= 'galleries.gallery_' . $id . '.wordpress_page_root = ' . wp_json_encode((string) get_permalink()) . ';';
+            // wp_json_encode — JS-string context; raw permalink could contain ", \ breaking literal.
         }
         $retval .= '}, false);</script>';
         return $retval;

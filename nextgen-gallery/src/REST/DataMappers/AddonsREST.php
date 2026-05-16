@@ -202,8 +202,8 @@ class AddonsREST {
 			'google_analytics' => 'Google Analytics',
 			'instagram'        => 'Instagram',
 		];
-		$display_name = isset( $feature_display_names[ $addon_id ] ) ? $feature_display_names[ $addon_id ] : $addon_id;
-		$noun         = __( 'Feature', 'nggallery' );
+		$display_name          = isset( $feature_display_names[ $addon_id ] ) ? $feature_display_names[ $addon_id ] : $addon_id;
+		$noun                  = __( 'Feature', 'nggallery' );
 		if ( $enabled ) {
 			return sprintf(
 				/* translators: 1: Feature, 2: display name (e.g. Dribbble, TikTok) */

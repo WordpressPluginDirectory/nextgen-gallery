@@ -143,13 +143,20 @@ function media_upload_nextgen_form( $errors ) {
 
 	// Get the images.
 	if ( $galleryID != 0 ) {
+		// SQLi hardening: allowlist sort column + direction read from plugin options before interpolating into ORDER BY.
+		$allowed_sort_cols = [ 'pid', 'sortorder', 'imagedate', 'filename', 'alttext', 'galleryid' ];
+		$gal_sort          = isset( $ngg->options['galSort'] ) ? (string) $ngg->options['galSort'] : 'sortorder';
+		$gal_sort          = in_array( $gal_sort, $allowed_sort_cols, true ) ? $gal_sort : 'sortorder';
+		$gal_sort_dir      = ( isset( $ngg->options['galSortDir'] ) && 'DESC' === strtoupper( (string) $ngg->options['galSortDir'] ) ) ? 'DESC' : 'ASC';
+		$start_int         = absint( $start ); // Cast LIMIT offset to int to block injection via $start.
+
 		// Using %i in $wpdb->prepare() to signify column identifiers was only added in WP 6.2
 		//
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$picarray = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT DISTINCT `pid` FROM {$wpdb->nggpictures} WHERE `galleryid` = %d AND `exclude` != 1 ORDER BY {$ngg->options['galSort']}, `pid` {$ngg->options['galSortDir']} LIMIT {$start}, 10",
+				"SELECT DISTINCT `pid` FROM {$wpdb->nggpictures} WHERE `galleryid` = %d AND `exclude` != 1 ORDER BY `{$gal_sort}`, `pid` {$gal_sort_dir} LIMIT {$start_int}, 10",
 				[
 					$galleryID,
 				]
@@ -369,8 +376,9 @@ function media_upload_nextgen_form( $errors ) {
 								$ajax_nonce = wp_create_nonce( "set_post_thumbnail-$calling_post_id" );
 							}
 								$second_nonce = wp_create_nonce( 'ngg_set_post_thumbnails' );
-								// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Complex HTML structure with onclick handler for WordPress media functionality
-								echo "<a class='ngg-post-thumbnail' id='ngg-post-thumbnail-" . $picid . "' href='#' onclick='NGGSetAsThumbnail(\"$picid\", \"$ajax_nonce\", \"$second_nonce\"); return false;'>" . esc_html__( 'Use as featured image', 'nggallery' ) . '</a>';
+								$picid_int    = (int) $picid; // Cast to int — id used in HTML attr and JS args, int eliminates quote/backslash injection.
+								$onclick_args = wp_json_encode( $picid_int ) . ',' . wp_json_encode( $ajax_nonce ) . ',' . wp_json_encode( $second_nonce ); // wp_json_encode — correct JS-context escape for string/int literals, replaces raw concat.
+								echo "<a class='ngg-post-thumbnail' id='ngg-post-thumbnail-" . esc_attr( $picid_int ) . "' href='#' onclick='" . esc_attr( 'NGGSetAsThumbnail(' . $onclick_args . '); return false;' ) . "'>" . esc_html__( 'Use as featured image', 'nggallery' ) . '</a>'; // esc_attr wraps onclick value — HTML-attr context around JS payload.
 								echo "<a class='ngg-post-thumbnail-standin' href='#' style='display:none;'></a>";
 							?>
 							<button type="submit" id="ngg-mlitp-<?php echo esc_attr( $picid ); ?>" class="button ngg-mlitp" value="1" name="send[<?php echo esc_attr( $picid ); ?>]"><?php esc_html_e( 'Insert into Post', 'nggallery' ); ?></button>

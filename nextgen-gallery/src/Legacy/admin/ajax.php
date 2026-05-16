@@ -2,6 +2,46 @@
 add_action( 'wp_ajax_ngg_ajax_operation', 'ngg_ajax_operation' );
 
 /**
+ * Resolve an NGG image id to its parent gallery's author and check current user can edit.
+ *
+ * Owner of the parent gallery, or holder of 'NextGEN Manage others gallery', passes.
+ * Missing image returns true so the caller emits its own not-found response shape.
+ *
+ * @param int $image_id NGG picture id (pid).
+ * @return bool
+ */
+function ngg_ajax_user_can_edit_image( $image_id ) {
+	$image_id = (int) $image_id;
+	if ( $image_id <= 0 ) {
+		return false;
+	}
+
+	$image = nggdb::find_image( $image_id );
+	if ( ! $image ) {
+		return true;
+	}
+
+	$gallery_id = isset( $image->galleryid ) ? (int) $image->galleryid : 0;
+	if ( $gallery_id <= 0 ) {
+		// phpcs:ignore WordPress.WP.Capabilities.Unknown
+		return current_user_can( 'NextGEN Manage others gallery' );
+	}
+
+	$gallery = \Imagely\NGG\DataMappers\Gallery::get_instance()->find( $gallery_id );
+	if ( ! $gallery ) {
+		// phpcs:ignore WordPress.WP.Capabilities.Unknown
+		return current_user_can( 'NextGEN Manage others gallery' );
+	}
+
+	if ( get_current_user_id() === (int) $gallery->author ) {
+		return true;
+	}
+
+	// phpcs:ignore WordPress.WP.Capabilities.Unknown
+	return current_user_can( 'NextGEN Manage others gallery' );
+}
+
+/**
  * Image edit functions via AJAX
  *
  * @author Alex Rabe
@@ -35,11 +75,23 @@ function ngg_ajax_operation() {
 	// Get the image id.
 	if ( isset( $_POST['image'] ) ) {
 		$id = (int) sanitize_text_field( wp_unslash( $_POST['image'] ) );
+
+		if ( ! ngg_ajax_user_can_edit_image( $id ) ) {
+			die( '-1' );
+		}
+
 		// let's get the image data.
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- $_POST['image'] is sanitized on line 36
 		$picture = nggdb::find_image( $id );
 		// what do you want to do ?
 		$operation = isset( $_POST['operation'] ) ? sanitize_text_field( wp_unslash( $_POST['operation'] ) ) : '';
+
+		// Bounds the dynamic ngg_ajax_<operation> hook to addon-registered op names.
+		$allowed_dynamic_operations = (array) apply_filters(
+			'ngg_ajax_operation_allowlist',
+			[]
+		);
+
 		switch ( $operation ) {
 			case 'create_thumbnail':
 				$result = nggAdmin::create_thumbnail( $picture );
@@ -87,7 +139,9 @@ function ngg_ajax_operation() {
 				$result = '1';
 				break;
 			default:
-				do_action( 'ngg_ajax_' . $operation );
+				if ( $operation !== '' && in_array( $operation, $allowed_dynamic_operations, true ) ) {
+					do_action( 'ngg_ajax_' . $operation, $id );
+				}
 				die( '-1' );
 		}
 		// A success should return a '1'.
@@ -117,6 +171,10 @@ function createNewThumb() {
 	}
 
 	$id = (int) ( isset( $_POST['id'] ) ? sanitize_text_field( wp_unslash( $_POST['id'] ) ) : 0 );
+
+	if ( ! ngg_ajax_user_can_edit_image( $id ) ) {
+		die( '-1' );
+	}
 
 	$x          = round( ( isset( $_POST['x'] ) ? floatval( sanitize_text_field( wp_unslash( $_POST['x'] ) ) ) : 0 ) * ( isset( $_POST['rr'] ) ? floatval( sanitize_text_field( wp_unslash( $_POST['rr'] ) ) ) : 1 ), 0 );
 	$y          = round( ( isset( $_POST['y'] ) ? floatval( sanitize_text_field( wp_unslash( $_POST['y'] ) ) ) : 0 ) * ( isset( $_POST['rr'] ) ? floatval( sanitize_text_field( wp_unslash( $_POST['rr'] ) ) ) : 1 ), 0 );
@@ -174,7 +232,12 @@ function ngg_rotateImage() {
 	// include the ngg function.
 	include_once __DIR__ . '/functions.php';
 
-	$id     = (int) ( isset( $_POST['id'] ) ? sanitize_text_field( wp_unslash( $_POST['id'] ) ) : 0 );
+	$id = (int) ( isset( $_POST['id'] ) ? sanitize_text_field( wp_unslash( $_POST['id'] ) ) : 0 );
+
+	if ( ! ngg_ajax_user_can_edit_image( $id ) ) {
+		die( '-1' );
+	}
+
 	$result = '-1';
 
 	$ra = isset( $_POST['ra'] ) ? sanitize_text_field( wp_unslash( $_POST['ra'] ) ) : '';

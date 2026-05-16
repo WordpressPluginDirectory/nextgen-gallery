@@ -350,8 +350,13 @@ class GalleryREST {
 		$mapper = GalleryMapper::get_instance();
 
 		// Get and validate order parameters.
-		$orderby = $request->get_param( 'orderby' ) ?? 'gid';
-		$order   = strtoupper( $request->get_param( 'order' ) ?? 'ASC' );
+		// Security fix (SQLi): whitelist orderby against the same enum declared in register_rest_route() args for this endpoint; unknown input falls back to 'gid' to block ORDER BY injection even if the REST enum check is bypassed.
+		$allowed_orderby   = [ 'gid', 'title', 'author', 'is_ecommerce_enabled', 'is_private', 'date_created', 'date_modified' ];
+		$requested_orderby = sanitize_key( (string) ( $request->get_param( 'orderby' ) ?? 'gid' ) );
+		$orderby           = in_array( $requested_orderby, $allowed_orderby, true ) ? $requested_orderby : 'gid';
+		// Security fix (SQLi): restrict order direction to ASC/DESC; anything else defaults to ASC.
+		$order = strtoupper( (string) ( $request->get_param( 'order' ) ?? 'ASC' ) );
+		$order = in_array( $order, [ 'ASC', 'DESC' ], true ) ? $order : 'ASC';
 
 		// Get pagination parameters.
 		$per_page_param = (int) $request->get_param( 'per_page' );
@@ -367,8 +372,18 @@ class GalleryREST {
 		// Build filter conditions from request.
 		$filters = self::build_filter_conditions( $request );
 
+		// Author scope: callers without 'nextgen_edit_gallery_unowned' see only their own galleries (matches get_gallery / get_galleries_batch).
+		$current_user_id   = get_current_user_id();
+		$author_scope_user = Security::is_allowed( 'nextgen_edit_gallery_unowned' ) ? 0 : (int) $current_user_id;
+		if ( $author_scope_user > 0 ) {
+			$filters['conditions'][]    = [ 'author = %d', $author_scope_user ];
+			$filters['where_clauses'][] = 'author = %d';
+			$filters['params'][]        = $author_scope_user;
+		}
+
 		$cache_params  = [
-			get_current_user_id(),
+			$current_user_id,
+			$author_scope_user, // Distinct cache slot per scope to avoid leaking unowned-cap responses to non-cap callers.
 			$orderby,
 			$order,
 			$per_page_param,
@@ -1088,28 +1103,70 @@ class GalleryREST {
 			return [];
 		}
 
-		$sanitized = [];
-		foreach ( $settings as $key => $value ) {
-			$key = sanitize_text_field( $key );
+		$allowed_types         = [ 'video', 'tiktok', 'instagram', 'dribbble', 'youtube' ];
+		$allowed_settings_mode = [ 'default', 'custom', 'global' ];
 
-			switch ( gettype( $value ) ) {
-				case 'boolean':
+		// Flat keys (cast rule).
+		$schema = [
+			'type'                     => 'string',
+			'settings_mode'            => 'string',
+			'show_video_controls'      => 'bool',
+			'show_play_pause_controls' => 'bool',
+			'autoplay_videos'          => 'bool',
+		];
+
+		// Per-integration prefixed keys — one rule per field, applied to each
+		// allowed addon prefix (tiktok/instagram/dribbble).
+		$per_type_fields = [
+			'_account'          => 'string',
+			'_number'           => 'int',
+			'_link'             => 'url',
+			'_link_target'      => 'int_bool',
+			'_image_size'       => 'string',
+			'_caption'          => 'int_bool',
+			'_caption_length'   => 'int',
+			'_cache'            => 'int_bool',
+			'_show_play_button' => 'int_bool',
+		];
+		foreach ( [ 'tiktok', 'instagram', 'dribbble' ] as $prefix ) {
+			foreach ( $per_type_fields as $suffix => $cast ) {
+				$schema[ $prefix . $suffix ] = $cast;
+			}
+		}
+
+		$filtered  = array_intersect_key( $settings, $schema );
+		$sanitized = [];
+
+		foreach ( $schema as $key => $cast ) {
+			if ( ! array_key_exists( $key, $filtered ) ) {
+				continue;
+			}
+			$value = $filtered[ $key ];
+
+			switch ( $cast ) {
+				case 'bool':
 					$sanitized[ $key ] = (bool) $value;
 					break;
-				case 'integer':
+				case 'int':
 					$sanitized[ $key ] = (int) $value;
 					break;
-				case 'double':
-					$sanitized[ $key ] = (float) $value;
+				case 'int_bool':
+					$sanitized[ $key ] = ( (int) $value ) ? 1 : 0;
+					break;
+				case 'url':
+					$sanitized[ $key ] = esc_url_raw( (string) $value );
 					break;
 				case 'string':
-					$sanitized[ $key ] = wp_kses_post( $value );
-					break;
-				case 'array':
-					$sanitized[ $key ] = array_map( 'sanitize_text_field', $value );
-					break;
 				default:
-					$sanitized[ $key ] = null;
+					$clean = sanitize_text_field( (string) $value );
+					if ( 'type' === $key && '' !== $clean && ! in_array( $clean, $allowed_types, true ) ) {
+						break;
+					}
+					if ( 'settings_mode' === $key && ! in_array( $clean, $allowed_settings_mode, true ) ) {
+						break;
+					}
+					$sanitized[ $key ] = $clean;
+					break;
 			}
 		}
 

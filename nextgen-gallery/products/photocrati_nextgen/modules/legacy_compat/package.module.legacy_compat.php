@@ -722,8 +722,10 @@ class C_Displayed_Gallery extends C_DataMapper_Model
                     $total = $wpdb->get_var("SELECT COUNT(`pid`) FROM {$wpdb->nggpictures} {$old_where_sql}");
                     $image_ids = [];
                     if ($total <= $limit) {
+                        $total_int = (int) $total;
+                        // SQLi hardening: cast COUNT() result to int before LIMIT interpolation.
                         // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
-                        $image_ids = $wpdb->get_col("SELECT `pictures`.`pid` FROM {$wpdb->nggpictures} `pictures` {$old_where_sql} LIMIT {$total}");
+                        $image_ids = $wpdb->get_col("SELECT `pictures`.`pid` FROM {$wpdb->nggpictures} `pictures` {$old_where_sql} LIMIT {$total_int}");
                     } else {
                         // Start retrieving random ID from the DB and hope they exist; continue looping until our count is full.
                         $segments = ceil($limit / 4);
@@ -744,12 +746,21 @@ class C_Displayed_Gallery extends C_DataMapper_Model
                     // in the same images being retrieved for the duration of that page execution.
                     self::$_random_image_ids_cache[$id] = $image_ids;
                 }
-                $image_ids = implode(',', $image_ids);
-                // Replace the existing WHERE clause with one where aready retrieved "random" PID are included.
-                $mapper->_where_clauses = [" {$noExtras} `{$image_key}` IN ({$image_ids}) {$noExtras}"];
+                // SQLi hardening: force every PID to int before IN() interpolation — prepare() cannot parameterize a comma-joined list.
+                $int_ids = array_filter(array_map('intval', (array) $image_ids));
+                if (empty($int_ids)) {
+                    // Guard against invalid SQL from an empty IN() list.
+                    $mapper->_where_clauses = [' 1=0'];
+                } else {
+                    $image_ids = implode(',', $int_ids);
+                    // Replace the existing WHERE clause with one where aready retrieved "random" PID are included.
+                    $mapper->_where_clauses = [" {$noExtras} `{$image_key}` IN ({$image_ids}) {$noExtras}"];
+                }
             } else {
+                $limit_int = (int) $limit;
+                // SQLi hardening: cast LIMIT to int; callers may pass shortcode/REST maximum_entity_count.
                 // Replace the existing WHERE clause with one that selects from a sub-query that is randomly ordered.
-                $sub_where = "SELECT `{$image_key}` FROM `{$table_name}` i {$old_where_sql} ORDER BY RAND() LIMIT {$limit}";
+                $sub_where = "SELECT `{$image_key}` FROM `{$table_name}` i {$old_where_sql} ORDER BY RAND() LIMIT {$limit_int}";
                 $mapper->_where_clauses = [" {$noExtras} `{$image_key}` IN (SELECT `{$image_key}` FROM ({$sub_where}) o) {$noExtras}"];
             }
         }
@@ -790,6 +801,8 @@ class C_Displayed_Gallery extends C_DataMapper_Model
     {
         global $wpdb;
         $mod = wp_rand(3, 9);
+        $limit_int = (int) $limit;
+        // SQLi hardening: cast LIMIT to int — callers may pass derived user input.
         if (empty($where_sql)) {
             $where_sql = 'WHERE 1=1';
         }
@@ -797,7 +810,7 @@ class C_Displayed_Gallery extends C_DataMapper_Model
         //
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
-        return $wpdb->get_col("SELECT `pictures`.`pid` from {$wpdb->nggpictures} `pictures`\n                    JOIN (SELECT CEIL(MAX(`pid`) * RAND()) AS `pid` FROM {$wpdb->nggpictures}) AS `x` ON `pictures`.`pid` >= `x`.`pid`\n                    {$where_sql}\n                    AND `pictures`.`pid` MOD {$mod} = 0\n                    LIMIT {$limit}");
+        return $wpdb->get_col("SELECT `pictures`.`pid` from {$wpdb->nggpictures} `pictures`\n                    JOIN (SELECT CEIL(MAX(`pid`) * RAND()) AS `pid` FROM {$wpdb->nggpictures}) AS `x` ON `pictures`.`pid` >= `x`.`pid`\n                    {$where_sql}\n                    AND `pictures`.`pid` MOD {$mod} = 0\n                    LIMIT {$limit_int}");
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }
     /**

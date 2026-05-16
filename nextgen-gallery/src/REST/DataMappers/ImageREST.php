@@ -10,6 +10,7 @@ namespace Imagely\NGG\REST\DataMappers;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
+use Imagely\NGG\DataMappers\Gallery as GalleryMapper;
 use Imagely\NGG\DataMappers\Image as ImageMapper;
 use Imagely\NGG\DataTypes\Image;
 use Imagely\NGG\Util\Security;
@@ -96,7 +97,7 @@ class ImageREST {
 			[
 				'methods'             => 'PUT',
 				'callback'            => [ self::class, 'update_image' ],
-				'permission_callback' => [ self::class, 'check_edit_permission' ],
+				'permission_callback' => [ self::class, 'check_image_edit_permission' ],
 				'args'                => [
 					'id'           => [
 						'required'          => true,
@@ -314,19 +315,140 @@ class ImageREST {
 	/**
 	 * Check if user has permission to edit images
 	 *
+	 * @param \WP_REST_Request|null $request Optional REST request — when supplied, per-gallery ownership is enforced.
 	 * @return bool
 	 */
-	public static function check_edit_permission() {
-		return Security::is_allowed( 'NextGEN Manage gallery' );
+	public static function check_edit_permission( $request = null ) {
+		if ( ! Security::is_allowed( 'NextGEN Manage gallery' ) ) {
+			return false;
+		}
+
+		if ( null === $request ) {
+			return true;
+		}
+
+		// Upload/import routes: verify the user owns (or can manage) the target gallery.
+		// Authorization is gallery-level: ownership of the destination, not the images.
+		$gallery_id = (int) $request->get_param( 'gallery_id' );
+		if ( $gallery_id > 0 ) {
+			return self::current_user_can_manage_gallery( $gallery_id );
+		}
+
+		// Bulk endpoints have no single id; per-row ownership is enforced inside the handler.
+		return true;
+	}
+
+	/**
+	 * Check if user has permission to edit a specific image (single PUT).
+	 * Resolves image_id from URL params only and verifies gallery ownership.
+	 *
+	 * @param WP_REST_Request $request The REST request object.
+	 * @return bool|\WP_Error
+	 */
+	public static function check_image_edit_permission( WP_REST_Request $request ) {
+		if ( ! Security::is_allowed( 'NextGEN Manage gallery' ) ) {
+			return false;
+		}
+
+		$url_params = $request->get_url_params();
+		$image_id   = isset( $url_params['id'] ) ? (int) $url_params['id'] : 0;
+		if ( $image_id <= 0 ) {
+			return false;
+		}
+
+		return self::current_user_can_manage_image( $image_id );
 	}
 
 	/**
 	 * Check if user has permission to delete images
 	 *
+	 * @param WP_REST_Request $request The REST request object.
 	 * @return bool
 	 */
-	public static function check_delete_permission() {
-		return Security::is_allowed( 'NextGEN Manage gallery' );
+	public static function check_delete_permission( WP_REST_Request $request ) {
+		if ( ! Security::is_allowed( 'NextGEN Manage gallery' ) ) {
+			return false;
+		}
+
+		$url_params = $request->get_url_params();
+		$image_id   = isset( $url_params['id'] ) ? (int) $url_params['id'] : 0;
+		if ( $image_id <= 0 ) {
+			return false;
+		}
+
+		return self::current_user_can_manage_image( $image_id );
+	}
+
+	/**
+	 * Check if the current user can manage the gallery that contains a given image.
+	 * Users can manage an image if they own its gallery or have "NextGEN Manage others gallery".
+	 *
+	 * @param int $image_id The image ID.
+	 * @return bool|\WP_Error
+	 */
+	public static function current_user_can_manage_image( int $image_id ) {
+		$image = ImageMapper::get_instance()->find( $image_id );
+		if ( ! $image ) {
+			return new \WP_Error( 'rest_image_not_found', __( 'Image not found.', 'nggallery' ), [ 'status' => 404 ] );
+		}
+
+		$gallery = GalleryMapper::get_instance()->find( $image->galleryid );
+		if ( ! $gallery ) {
+			// Orphaned image: deny unless the user has explicit cross-gallery capability.
+			return Security::is_allowed( 'NextGEN Manage others gallery' );
+		}
+
+		return ( (int) get_current_user_id() === (int) $gallery->author )
+			|| Security::is_allowed( 'NextGEN Manage others gallery' );
+	}
+
+	/**
+	 * Check if the current user can manage a specific gallery.
+	 * Used to authorize upload/import operations targeting an existing gallery.
+	 *
+	 * @param int $gallery_id The gallery ID.
+	 * @return bool
+	 */
+	public static function current_user_can_manage_gallery( int $gallery_id ) {
+		$gallery = GalleryMapper::get_instance()->find( $gallery_id );
+		if ( ! $gallery ) {
+			return false;
+		}
+
+		return ( (int) get_current_user_id() === (int) $gallery->author )
+			|| Security::is_allowed( 'NextGEN Manage others gallery' );
+	}
+
+	/**
+	 * Resolve an image id to its parent gallery's author and verify the current user may edit it.
+	 *
+	 * Returns true when the user owns the parent gallery or holds 'NextGEN Manage others gallery'.
+	 * Missing image returns true so the handler can emit a 404 instead of a 403.
+	 *
+	 * @param int $image_id NGG image id (pid).
+	 * @return bool
+	 */
+	protected static function current_user_owns_image( $image_id ) {
+		$image = ImageMapper::get_instance()->find( $image_id );
+		if ( ! $image ) {
+			return true;
+		}
+
+		$gallery_id = isset( $image->galleryid ) ? (int) $image->galleryid : 0;
+		if ( $gallery_id <= 0 ) {
+			return Security::is_allowed( 'NextGEN Manage others gallery' );
+		}
+
+		$gallery = GalleryMapper::get_instance()->find( $gallery_id );
+		if ( ! $gallery ) {
+			return Security::is_allowed( 'NextGEN Manage others gallery' );
+		}
+
+		if ( get_current_user_id() === (int) $gallery->author ) {
+			return true;
+		}
+
+		return Security::is_allowed( 'NextGEN Manage others gallery' );
 	}
 
 	/**
@@ -566,6 +688,13 @@ class ImageREST {
 		$errors      = [];
 
 		foreach ( $images_data as $image_data ) {
+			$can_manage = self::current_user_can_manage_image( (int) $image_data['id'] );
+			if ( is_wp_error( $can_manage ) || ! $can_manage ) {
+				// translators: %d is the image ID.
+				$errors[] = sprintf( __( 'Permission denied for image ID %d', 'nggallery' ), $image_data['id'] );
+				continue;
+			}
+
 			$image = $mapper->find( $image_data['id'] );
 			if ( ! $image ) {
 				// translators: %d is the image ID.
@@ -926,8 +1055,17 @@ class ImageREST {
 			return new WP_REST_Response( $retval, 404 );
 		}
 
-		// Security: ensure path is within root.
-		if ( false === strpos( realpath( $browse_path ), realpath( $root ) ) ) {
+		// Security: ensure path is within root using true prefix match; reject when realpath() fails (non-existent or symlink outside root).
+		$real_browse = realpath( $browse_path );
+		$real_root   = realpath( $root );
+		if (
+			false === $real_browse
+			|| false === $real_root
+			|| 0 !== strpos(
+				trailingslashit( wp_normalize_path( $real_browse ) ),
+				trailingslashit( wp_normalize_path( $real_root ) )
+			)
+		) {
 			$retval['error'] = __( 'No permissions to browse folders. Try refreshing the page or ensuring that your user account has sufficient roles/privileges.', 'nggallery' );
 				return new WP_REST_Response( $retval, 403 );
 		}
@@ -1025,8 +1163,17 @@ class ImageREST {
 			);
 		}
 
-		// Check if the folder is within the allowed root path.
-		if ( strpos( realpath( $import_path ), realpath( $root ) ) === false ) {
+		// Check if the folder is within the allowed root path (true prefix match; reject when realpath() fails to prevent traversal).
+		$real_import = realpath( $import_path );
+		$real_root   = realpath( $root );
+		if (
+			false === $real_import
+			|| false === $real_root
+			|| 0 !== strpos(
+				trailingslashit( wp_normalize_path( $real_import ) ),
+				trailingslashit( wp_normalize_path( $real_root ) )
+			)
+		) {
 			return new WP_REST_Response(
 				[
 					'error' => sprintf(

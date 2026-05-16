@@ -44,8 +44,8 @@ $preview_image = $storage->get_image_url( $id, 'full' );
 ?>
 
 <script type='text/javascript'>
-	var selectedImage = "thumb<?php echo esc_js( $id ); ?>";
-	var rotateImageNonce = '<?php print esc_attr( wp_create_nonce( 'ngg-rotate-image' ) ); ?>';
+	var selectedImage = "thumb<?php echo (int) $id; ?>"; // (int) cast — $id appended in JS string, numeric guarantee prevents break.
+	var rotateImageNonce = <?php echo wp_json_encode( wp_create_nonce( 'ngg-rotate-image' ) ); ?>; // wp_json_encode — JS-string context; esc_attr was HTML-entity encode, wrong context.
 
 	function rotateImage() {
 
@@ -57,7 +57,7 @@ $preview_image = $storage->get_image_url( $id, 'full' );
 			data:  {
 				action: 'rotateImage',
 				nonce: rotateImageNonce,
-				id: <?php print esc_attr( $id ); ?>,
+				id: <?php echo (int) $id; ?>, // (int) cast — bare JS numeric literal; esc_attr returned HTML entities, not safe in JS context.
 				ra: rotate_angle
 			},
 			cache: false,

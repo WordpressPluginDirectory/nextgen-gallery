@@ -11,6 +11,7 @@ use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
 use Imagely\NGG\DataMappers\Image as ImageMapper;
+use Imagely\NGG\DataMappers\Gallery as GalleryMapper;
 use Imagely\NGG\DataTypes\Image;
 use Imagely\NGG\Util\Security;
 use Imagely\NGG\DataStorage\Manager as StorageManager;
@@ -50,7 +51,7 @@ class ImageOperationsREST {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ self::class, 'create_new_thumbnail' ],
-				'permission_callback' => [ self::class, 'check_edit_permission' ],
+				'permission_callback' => [ self::class, 'check_image_edit_permission' ],
 				'args'                => [
 					'id' => [
 						'required'          => true,
@@ -93,7 +94,7 @@ class ImageOperationsREST {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ self::class, 'rotate_image' ],
-				'permission_callback' => [ self::class, 'check_edit_permission' ],
+				'permission_callback' => [ self::class, 'check_image_edit_permission' ],
 				'args'                => [
 					'id'       => [
 						'required'          => true,
@@ -116,7 +117,7 @@ class ImageOperationsREST {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ self::class, 'create_thumbnail' ],
-				'permission_callback' => [ self::class, 'check_edit_permission' ],
+				'permission_callback' => [ self::class, 'check_image_edit_permission' ],
 				'args'                => [
 					'id'            => [
 						'required'          => true,
@@ -151,7 +152,7 @@ class ImageOperationsREST {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ self::class, 'resize_image' ],
-				'permission_callback' => [ self::class, 'check_edit_permission' ],
+				'permission_callback' => [ self::class, 'check_image_edit_permission' ],
 				'args'                => [
 					'id' => [
 						'required'          => true,
@@ -169,7 +170,7 @@ class ImageOperationsREST {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ self::class, 'set_watermark' ],
-				'permission_callback' => [ self::class, 'check_edit_permission' ],
+				'permission_callback' => [ self::class, 'check_image_edit_permission' ],
 				'args'                => [
 					'id' => [
 						'required'          => true,
@@ -187,7 +188,7 @@ class ImageOperationsREST {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ self::class, 'recover_image' ],
-				'permission_callback' => [ self::class, 'check_edit_permission' ],
+				'permission_callback' => [ self::class, 'check_image_edit_permission' ],
 				'args'                => [
 					'id' => [
 						'required'          => true,
@@ -205,7 +206,7 @@ class ImageOperationsREST {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ self::class, 'import_metadata' ],
-				'permission_callback' => [ self::class, 'check_edit_permission' ],
+				'permission_callback' => [ self::class, 'check_image_edit_permission' ],
 				'args'                => [
 					'id' => [
 						'required'          => true,
@@ -223,7 +224,7 @@ class ImageOperationsREST {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ self::class, 'strip_orientation_tag' ],
-				'permission_callback' => [ self::class, 'check_edit_permission' ],
+				'permission_callback' => [ self::class, 'check_image_edit_permission' ],
 				'args'                => [
 					'id' => [
 						'required'          => true,
@@ -351,7 +352,7 @@ class ImageOperationsREST {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ self::class, 'crop_image' ],
-				'permission_callback' => [ self::class, 'check_edit_permission' ],
+				'permission_callback' => [ self::class, 'check_image_edit_permission' ],
 				'args'                => [
 					'id' => [
 						'required'          => true,
@@ -444,12 +445,79 @@ class ImageOperationsREST {
 	}
 
 	/**
+	 * Check if user has permission to edit a specific image (single-image operation routes).
+	 *
+	 * @param WP_REST_Request $request The REST request object.
+	 * @return bool|\WP_Error
+	 */
+	public static function check_image_edit_permission( WP_REST_Request $request ) {
+		if ( ! Security::is_allowed( 'NextGEN Manage gallery' ) ) {
+			return false;
+		}
+
+		$url_params = $request->get_url_params();
+		$image_id   = isset( $url_params['id'] ) ? (int) $url_params['id'] : 0;
+		if ( $image_id <= 0 ) {
+			return false;
+		}
+
+		return ImageREST::current_user_can_manage_image( $image_id );
+	}
+
+	/**
 	 * Check if user has permission to edit images
 	 *
+	 * @param \WP_REST_Request|null $request Optional REST request — when supplied with an `id`, per-image ownership is enforced.
 	 * @return bool
 	 */
-	public static function check_edit_permission() {
-		return Security::is_allowed( 'NextGEN Manage gallery' );
+	public static function check_edit_permission( $request = null ) {
+		if ( ! Security::is_allowed( 'NextGEN Manage gallery' ) ) {
+			return false;
+		}
+
+		if ( null === $request ) {
+			return true;
+		}
+
+		$image_id = $request->get_param( 'id' );
+		if ( $image_id ) {
+			return self::current_user_owns_image( (int) $image_id );
+		}
+
+		// Bulk endpoints accept arrays of image ids; per-row ownership is enforced inside the handler.
+		return true;
+	}
+
+	/**
+	 * Resolve an image id to its parent gallery's author and verify the current user may edit it.
+	 *
+	 * Returns true when the user owns the parent gallery or holds 'NextGEN Manage others gallery'.
+	 * Missing image returns true so the handler can emit a 404 instead of a 403.
+	 *
+	 * @param int $image_id NGG image id (pid).
+	 * @return bool
+	 */
+	public static function current_user_owns_image( $image_id ) {
+		$image = ImageMapper::get_instance()->find( $image_id );
+		if ( ! $image ) {
+			return true;
+		}
+
+		$gallery_id = isset( $image->galleryid ) ? (int) $image->galleryid : 0;
+		if ( $gallery_id <= 0 ) {
+			return Security::is_allowed( 'NextGEN Manage others gallery' );
+		}
+
+		$gallery = GalleryMapper::get_instance()->find( $gallery_id );
+		if ( ! $gallery ) {
+			return Security::is_allowed( 'NextGEN Manage others gallery' );
+		}
+
+		if ( get_current_user_id() === (int) $gallery->author ) {
+			return true;
+		}
+
+		return Security::is_allowed( 'NextGEN Manage others gallery' );
 	}
 
 	/**
@@ -852,10 +920,12 @@ class ImageOperationsREST {
 		$resize_width  = $width > 0 ? $width : $settings->get( 'imgWidth' );
 		$resize_height = $height > 0 ? $height : $settings->get( 'imgHeight' );
 
-		// TODO This is temp
-		// Update global settings if custom dimensions were provided
+		// Snapshot the option so a per-request width/height override is restored after this call instead of persisting as the site default.
+		$original_ngg_options    = null;
+		$ngg_options_was_changed = false;
 		if ( $width > 0 || $height > 0 ) {
-			$ngg_options = get_option( 'ngg_options', [] );
+			$original_ngg_options = get_option( 'ngg_options', [] );
+			$ngg_options          = is_array( $original_ngg_options ) ? $original_ngg_options : [];
 			if ( $width > 0 ) {
 				$ngg_options['imgWidth'] = $resize_width;
 			}
@@ -863,6 +933,7 @@ class ImageOperationsREST {
 				$ngg_options['imgHeight'] = $resize_height;
 			}
 			update_option( 'ngg_options', $ngg_options );
+			$ngg_options_was_changed = true;
 		}
 
 		try {
@@ -878,6 +949,14 @@ class ImageOperationsREST {
 					continue;
 				}
 
+				if ( ! self::current_user_owns_image( $image_id ) ) {
+					$failed_resizes[] = [
+						'id'    => $image_id,
+						'error' => __( 'You are not allowed to edit this image', 'nggallery' ),
+					];
+					continue;
+				}
+
 				// Verify image exists
 				$image_mapper = ImageMapper::get_instance();
 				$image        = $image_mapper->find( $image_id );
@@ -886,6 +965,16 @@ class ImageOperationsREST {
 					$failed_resizes[] = [
 						'id'    => $image_id,
 						'error' => __( 'Image not found', 'nggallery' ),
+					];
+					continue;
+				}
+
+				// Verify user can manage this image.
+				$can_manage = ImageREST::current_user_can_manage_image( $image_id );
+				if ( is_wp_error( $can_manage ) || ! $can_manage ) {
+					$failed_resizes[] = [
+						'id'    => $image_id,
+						'error' => __( 'Permission denied', 'nggallery' ),
 					];
 					continue;
 				}
@@ -939,9 +1028,18 @@ class ImageOperationsREST {
 				$status = 500; // Complete failure
 			}
 
+			if ( $ngg_options_was_changed ) {
+				update_option( 'ngg_options', $original_ngg_options );
+			}
+
 			return new WP_REST_Response( $response_data, $status );
 
 		} catch ( \Exception $e ) {
+			// Mirror the success-path restore so a mid-loop failure does not leave the site default overwritten.
+			if ( $ngg_options_was_changed ) {
+				update_option( 'ngg_options', $original_ngg_options );
+			}
+
 			return new WP_Error(
 				'bulk_resize_failed',
 				sprintf(
@@ -1094,6 +1192,14 @@ class ImageOperationsREST {
 					continue;
 				}
 
+				if ( ! self::current_user_owns_image( $image_id ) ) {
+					$failed_imports[] = [
+						'id'    => $image_id,
+						'error' => __( 'You are not allowed to edit this image', 'nggallery' ),
+					];
+					continue;
+				}
+
 				// Verify image exists
 				$image_mapper = ImageMapper::get_instance();
 				$image        = $image_mapper->find( $image_id );
@@ -1102,6 +1208,16 @@ class ImageOperationsREST {
 					$failed_imports[] = [
 						'id'    => $image_id,
 						'error' => __( 'Image not found', 'nggallery' ),
+					];
+					continue;
+				}
+
+				// Verify user can manage this image.
+				$can_manage = ImageREST::current_user_can_manage_image( $image_id );
+				if ( is_wp_error( $can_manage ) || ! $can_manage ) {
+					$failed_imports[] = [
+						'id'    => $image_id,
+						'error' => __( 'Permission denied', 'nggallery' ),
 					];
 					continue;
 				}
@@ -1191,6 +1307,12 @@ class ImageOperationsREST {
 			);
 		}
 
+		// Verify user can manage the destination gallery.
+		$can_manage_dest = ImageREST::current_user_can_manage_gallery( $destination_gallery_id );
+		if ( is_wp_error( $can_manage_dest ) || ! $can_manage_dest ) {
+			return new WP_Error( 'rest_forbidden', __( 'You do not have permission to add images to this gallery.', 'nggallery' ), [ 'status' => 403 ] );
+		}
+
 		try {
 			// Initialize counters
 			$successful_copies = [];
@@ -1211,6 +1333,14 @@ class ImageOperationsREST {
 					continue;
 				}
 
+				if ( ! self::current_user_owns_image( $image_id ) ) {
+					$failed_copies[] = [
+						'id'    => $image_id,
+						'error' => __( 'You are not allowed to access this image', 'nggallery' ),
+					];
+					continue;
+				}
+
 				// Verify image exists
 				$image = $image_mapper->find( $image_id );
 
@@ -1218,6 +1348,16 @@ class ImageOperationsREST {
 					$failed_copies[] = [
 						'id'    => $image_id,
 						'error' => __( 'Image not found', 'nggallery' ),
+					];
+					continue;
+				}
+
+				// Verify user can manage the source image.
+				$can_manage = ImageREST::current_user_can_manage_image( $image_id );
+				if ( is_wp_error( $can_manage ) || ! $can_manage ) {
+					$failed_copies[] = [
+						'id'    => $image_id,
+						'error' => __( 'Permission denied', 'nggallery' ),
 					];
 					continue;
 				}
@@ -1318,6 +1458,12 @@ class ImageOperationsREST {
 			);
 		}
 
+		// Verify user can manage the destination gallery.
+		$can_manage_dest = ImageREST::current_user_can_manage_gallery( $destination_gallery_id );
+		if ( is_wp_error( $can_manage_dest ) || ! $can_manage_dest ) {
+			return new WP_Error( 'rest_forbidden', __( 'You do not have permission to add images to this gallery.', 'nggallery' ), [ 'status' => 403 ] );
+		}
+
 		try {
 			// Initialize counters
 			$successful_moves = [];
@@ -1338,6 +1484,14 @@ class ImageOperationsREST {
 					continue;
 				}
 
+				if ( ! self::current_user_owns_image( $image_id ) ) {
+					$failed_moves[] = [
+						'id'    => $image_id,
+						'error' => __( 'You are not allowed to move this image', 'nggallery' ),
+					];
+					continue;
+				}
+
 				// Verify image exists
 				$image = $image_mapper->find( $image_id );
 
@@ -1345,6 +1499,16 @@ class ImageOperationsREST {
 					$failed_moves[] = [
 						'id'    => $image_id,
 						'error' => __( 'Image not found', 'nggallery' ),
+					];
+					continue;
+				}
+
+				// Verify user can manage the source image.
+				$can_manage = ImageREST::current_user_can_manage_image( $image_id );
+				if ( is_wp_error( $can_manage ) || ! $can_manage ) {
+					$failed_moves[] = [
+						'id'    => $image_id,
+						'error' => __( 'Permission denied', 'nggallery' ),
 					];
 					continue;
 				}
@@ -1442,6 +1606,28 @@ class ImageOperationsREST {
 			);
 		}
 
+		// Force each tag to a sanitized scalar string; blocks array/object injection into wp_set_object_terms and strips control chars.
+		$tags = array_values(
+			array_filter(
+				array_map(
+					static function ( $t ) {
+						return is_scalar( $t ) ? sanitize_text_field( (string) $t ) : '';
+					},
+					$tags
+				),
+				static function ( $t ) {
+					return '' !== $t;
+				}
+			)
+		);
+		if ( empty( $tags ) ) {
+			return new WP_Error(
+				'invalid_tags',
+				__( 'Invalid or empty tags array', 'nggallery' ),
+				[ 'status' => 400 ]
+			);
+		}
+
 		try {
 			// Initialize counters
 			$successful_additions = [];
@@ -1459,6 +1645,14 @@ class ImageOperationsREST {
 					continue;
 				}
 
+				if ( ! self::current_user_owns_image( $image_id ) ) {
+					$failed_additions[] = [
+						'id'    => $image_id,
+						'error' => __( 'You are not allowed to edit this image', 'nggallery' ),
+					];
+					continue;
+				}
+
 				// Verify image exists
 				$image_mapper = ImageMapper::get_instance();
 				$image        = $image_mapper->find( $image_id );
@@ -1467,6 +1661,16 @@ class ImageOperationsREST {
 					$failed_additions[] = [
 						'id'    => $image_id,
 						'error' => __( 'Image not found', 'nggallery' ),
+					];
+					continue;
+				}
+
+				// Verify user can manage this image.
+				$can_manage = ImageREST::current_user_can_manage_image( $image_id );
+				if ( is_wp_error( $can_manage ) || ! $can_manage ) {
+					$failed_additions[] = [
+						'id'    => $image_id,
+						'error' => __( 'Permission denied', 'nggallery' ),
 					];
 					continue;
 				}
@@ -1561,6 +1765,14 @@ class ImageOperationsREST {
 					continue;
 				}
 
+				if ( ! self::current_user_owns_image( $image_id ) ) {
+					$failed_removals[] = [
+						'id'    => $image_id,
+						'error' => __( 'You are not allowed to edit this image', 'nggallery' ),
+					];
+					continue;
+				}
+
 				// Verify image exists
 				$image_mapper = ImageMapper::get_instance();
 				$image        = $image_mapper->find( $image_id );
@@ -1569,6 +1781,16 @@ class ImageOperationsREST {
 					$failed_removals[] = [
 						'id'    => $image_id,
 						'error' => __( 'Image not found', 'nggallery' ),
+					];
+					continue;
+				}
+
+				// Verify user can manage this image.
+				$can_manage = ImageREST::current_user_can_manage_image( $image_id );
+				if ( is_wp_error( $can_manage ) || ! $can_manage ) {
+					$failed_removals[] = [
+						'id'    => $image_id,
+						'error' => __( 'Permission denied', 'nggallery' ),
 					];
 					continue;
 				}

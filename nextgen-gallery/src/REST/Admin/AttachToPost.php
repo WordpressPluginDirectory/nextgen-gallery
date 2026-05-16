@@ -122,23 +122,73 @@ class AttachToPost extends \WP_REST_Controller {
 	}
 
 	public function get_images( $request ) {
-		global $wpdb;
-
 		$response = [];
 
 		$params = $request->get_param( 'displayed_gallery' );
+		if ( ! is_array( $params ) ) {
+			$params = [];
+		}
 
 		$storage      = StorageManager::get_instance();
 		$image_mapper = ImageMapper::get_instance();
 
 		$displayed_gallery = new DisplayedGallery();
 
-		foreach ( $params as $key => $value ) {
-			$key = $wpdb->_escape( $key );
-   // phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
-			if ( ! in_array( $key, [ 'container_ids', 'entity_ids', 'sortorder' ] ) ) {
-				$value = esc_sql( $value );
+		// Per-property allowlist + type cast for DisplayedGallery params arriving from the REST body.
+		// Anything outside the allowlist is silently dropped; values are cast per group rather than
+		// piped through esc_sql() (which is not a substitute for $wpdb->prepare()).
+		$id_array_props = [ 'container_ids', 'entity_ids', 'excluded_container_ids', 'gallery_ids', 'image_ids', 'tag_ids', 'album_ids', 'ids', 'exclusions' ];
+		$string_props   = [ 'display_type', 'order_by', 'order_direction', 'returns', 'source', 'src', 'slug', 'sortorder', 'transient_id' ];
+		$int_props      = [ 'ID', 'id', 'maximum_entity_count', 'images_list_count' ];
+		$bool_props     = [ 'is_album_gallery', 'skip_excluding_globally_excluded_images', 'tagcloud' ];
+		$assoc_props    = [ 'display_settings' ];
+		$text_props     = [ 'effect_code', 'inner_content', 'display' ];
+
+		foreach ( $params as $raw_key => $raw_value ) {
+			if ( ! is_string( $raw_key ) ) {
+				continue;
 			}
+			$key = sanitize_key( $raw_key );
+			if ( '' === $key ) {
+				continue;
+			}
+
+			if ( in_array( $key, $id_array_props, true ) ) {
+				if ( is_array( $raw_value ) ) {
+					$value = array_values( array_filter( array_map( 'absint', $raw_value ) ) );
+				} elseif ( is_string( $raw_value ) ) {
+					$value = array_values(
+						array_filter(
+							array_map(
+								'absint',
+								array_map( 'trim', explode( ',', $raw_value ) )
+							)
+						)
+					);
+				} else {
+					$value = [];
+				}
+			} elseif ( in_array( $key, $string_props, true ) ) {
+				$value = is_scalar( $raw_value ) ? sanitize_text_field( (string) $raw_value ) : '';
+			} elseif ( in_array( $key, $int_props, true ) ) {
+				$value = is_scalar( $raw_value ) ? (int) $raw_value : 0;
+			} elseif ( in_array( $key, $bool_props, true ) ) {
+				$value = (bool) $raw_value;
+			} elseif ( in_array( $key, $assoc_props, true ) ) {
+				if ( is_array( $raw_value ) ) {
+					$value = $raw_value;
+				} elseif ( is_string( $raw_value ) ) {
+					$decoded = json_decode( $raw_value, true );
+					$value   = is_array( $decoded ) ? $decoded : [];
+				} else {
+					$value = [];
+				}
+			} elseif ( in_array( $key, $text_props, true ) ) {
+				$value = is_scalar( $raw_value ) ? wp_kses_post( (string) $raw_value ) : '';
+			} else {
+				continue;
+			}
+
 			$displayed_gallery->$key = $value;
 		}
 
