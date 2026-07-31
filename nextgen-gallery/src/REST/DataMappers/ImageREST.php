@@ -13,6 +13,7 @@ use WP_Error;
 use Imagely\NGG\DataMappers\Gallery as GalleryMapper;
 use Imagely\NGG\DataMappers\Image as ImageMapper;
 use Imagely\NGG\DataTypes\Image;
+use Imagely\NGG\Settings\GlobalSettings;
 use Imagely\NGG\Util\Security;
 use Imagely\NGG\Util\Transient;
 
@@ -158,6 +159,45 @@ class ImageREST {
 			]
 		);
 
+		// Move an image to a new sortorder slot (cross-page or in-page).
+		register_rest_route(
+			'imagely/v1',
+			'/images/(?P<id>\d+)/move',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ self::class, 'move_image' ],
+				'permission_callback' => [ self::class, 'check_edit_permission' ],
+				'args'                => [
+					'id'          => [
+						'required'          => true,
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
+					],
+					'gallery_id'  => [
+						'required'          => true,
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
+					],
+					'after_pid'   => [
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
+					],
+					'before_pid'  => [
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
+					],
+					'target_page' => [
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
+					],
+					'per_page'    => [
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
+					],
+				],
+			]
+		);
+
 		// Bulk update images.
 		register_rest_route(
 			'imagely/v1',
@@ -264,7 +304,7 @@ class ImageREST {
 			[
 				'methods'             => 'GET',
 				'callback'            => [ self::class, 'browse_folder' ],
-				'permission_callback' => [ self::class, 'check_edit_permission' ],
+				'permission_callback' => [ self::class, 'check_folder_import_permission' ],
 				'args'                => [
 					'dir' => [
 						'type'              => 'string',
@@ -282,7 +322,7 @@ class ImageREST {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ self::class, 'import_folder' ],
-				'permission_callback' => [ self::class, 'check_edit_permission' ],
+				'permission_callback' => [ self::class, 'check_folder_import_permission' ],
 				'args'                => [
 					'folder'        => [
 						'type'              => 'string',
@@ -357,6 +397,28 @@ class ImageREST {
 		}
 
 		return self::current_user_can_manage_image( $image_id );
+	}
+
+	/**
+	 * Folder browse/import: NextGEN Manage gallery, multisite wpmuImportFolder when applicable,
+	 * and legacy nggGallery::current_user_can( 'NextGEN Import image folder' ) (cap may be unregistered → allowed).
+	 *
+	 * @return bool
+	 */
+	public static function check_folder_import_permission() {
+		if ( ! self::check_edit_permission() ) {
+			return false;
+		}
+		if ( is_multisite() && ! GlobalSettings::get_instance()->get( 'wpmuImportFolder', false ) ) {
+			return false;
+		}
+		if ( class_exists( 'nggGallery', false ) ) {
+			return \nggGallery::current_user_can( 'NextGEN Import image folder' );
+		}
+		// nggGallery should always be loaded; if it isn't, fall back to the
+		// management-cap gate already passed above rather than denying on an
+		// unregistered capability.
+		return true;
 	}
 
 	/**
@@ -490,8 +552,14 @@ class ImageREST {
 		}
 		$total_items = count( $count_query->run_query( false, false, true ) );
 
-		// Add ordering and pagination
+		// Add ordering and pagination. Append a deterministic pid tiebreaker so the
+		// displayed order matches the order ensure_sequential_sortorders() renumbers in
+		// (sortorder ASC, pid ASC). Without it, healing tied sortorders could reshuffle
+		// rows relative to what the user saw, landing a drag-drop on the wrong side.
 		$query->order_by( $orderby, $order );
+		if ( 'pid' !== $orderby ) {
+			$query->order_by( 'pid', 'ASC' );
+		}
 		if ( -1 !== $per_page_param ) {
 			$query->limit( $per_page, $offset );
 		}
@@ -585,6 +653,304 @@ class ImageREST {
 		} catch ( \Exception $e ) {
 			return new WP_Error( 'update_failed', $e->getMessage(), [ 'status' => 500 ] );
 		}
+	}
+
+	/**
+	 * Move an image to a new sortorder slot via a single range-shift.
+	 *
+	 * Accepts one of three target modes in the request body:
+	 *   - after_pid: place the moved image immediately after another image.
+	 *   - before_pid: place it immediately before another image.
+	 *   - target_page (+ per_page): place it at the end of the given page,
+	 *     clamped to the end of the gallery if the page is beyond the total.
+	 *
+	 * Executes at most two SQL statements: a range UPDATE that shifts every
+	 * affected row's sortorder by ±1, then a single UPDATE that positions the
+	 * moved row. Both rely on InnoDB row locks for concurrency safety.
+	 *
+	 * @param WP_REST_Request $request The request carrying the move parameters.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function move_image( WP_REST_Request $request ) {
+		global $wpdb;
+
+		$pid        = (int) $request->get_param( 'id' );
+		$gallery_id = (int) $request->get_param( 'gallery_id' );
+
+		$mapper = ImageMapper::get_instance();
+		$image  = $mapper->find( $pid );
+		if ( ! $image || (int) $image->galleryid !== $gallery_id ) {
+			return new WP_Error(
+				'ngg_image_not_found',
+				__( 'Image not found in this gallery', 'nggallery' ),
+				[ 'status' => 404 ]
+			);
+		}
+
+		$table = $mapper->get_table_name();
+
+		// Heal galleries whose sortorders default to 0; only refetch when the heal actually ran.
+		$healed = self::ensure_sequential_sortorders( $gallery_id, $table );
+		if ( is_wp_error( $healed ) ) {
+			return $healed;
+		}
+		if ( $healed ) {
+			$mapper->flush_query_cache();
+			Transient::flush( 'displayed_gallery_rendering' );
+
+			$image = $mapper->find( $pid );
+		}
+
+		$current_sortorder = (int) $image->sortorder;
+		$target_sortorder  = self::resolve_target_sortorder( $request, $gallery_id, $current_sortorder );
+		if ( is_wp_error( $target_sortorder ) ) {
+			return $target_sortorder;
+		}
+
+		if ( $target_sortorder === $current_sortorder ) {
+			return new WP_REST_Response( self::prepare_image_for_response( $image ), 200 );
+		}
+
+		// Atomic: roll back the shift if the final positional update fails.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			return new WP_Error(
+				'ngg_move_failed',
+				__( 'Failed to start transaction', 'nggallery' ),
+				[ 'status' => 500 ]
+			);
+		}
+
+		if ( $current_sortorder < $target_sortorder ) {
+			// Forward move: pull rows in (S, N] down by 1 to close the gap left
+			// by the moved row, then drop the moved row into N.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$shift_result = $wpdb->query(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"UPDATE {$table} SET sortorder = sortorder - 1 WHERE galleryid = %d AND sortorder > %d AND sortorder <= %d",
+					$gallery_id,
+					$current_sortorder,
+					$target_sortorder
+				)
+			);
+		} else {
+			// Backward move: push rows in [N, S) up by 1, then drop the moved row into N.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$shift_result = $wpdb->query(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"UPDATE {$table} SET sortorder = sortorder + 1 WHERE galleryid = %d AND sortorder >= %d AND sortorder < %d",
+					$gallery_id,
+					$target_sortorder,
+					$current_sortorder
+				)
+			);
+		}
+
+		if ( false === $shift_result ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->query( 'ROLLBACK' );
+			return new WP_Error(
+				'ngg_move_failed',
+				__( 'Failed to reorder images', 'nggallery' ),
+				[ 'status' => 500 ]
+			);
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$update_result = $wpdb->update( $table, [ 'sortorder' => $target_sortorder ], [ 'pid' => $pid ] );
+
+		if ( false === $update_result ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->query( 'ROLLBACK' );
+			return new WP_Error(
+				'ngg_move_failed',
+				__( 'Failed to reorder images', 'nggallery' ),
+				[ 'status' => 500 ]
+			);
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		if ( false === $wpdb->query( 'COMMIT' ) ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->query( 'ROLLBACK' );
+			return new WP_Error(
+				'ngg_move_failed',
+				__( 'Failed to commit transaction', 'nggallery' ),
+				[ 'status' => 500 ]
+			);
+		}
+
+		$mapper->flush_query_cache();
+		Transient::flush( 'displayed_gallery_rendering' );
+
+		$fresh = $mapper->find( $pid );
+		return new WP_REST_Response( self::prepare_image_for_response( $fresh ), 200 );
+	}
+
+	/**
+	 * Resolve the target sortorder for a move based on which mode the request used.
+	 *
+	 * @param WP_REST_Request $request           The request carrying after_pid / before_pid / target_page.
+	 * @param int             $gallery_id        ID of the gallery the move is scoped to.
+	 * @param int             $current_sortorder Sortorder of the image being moved.
+	 * @return int|WP_Error Target sortorder, or WP_Error on invalid input.
+	 */
+	private static function resolve_target_sortorder( WP_REST_Request $request, $gallery_id, $current_sortorder ) {
+		global $wpdb;
+
+		$mapper = ImageMapper::get_instance();
+		$table  = $mapper->get_table_name();
+
+		$after  = (int) $request->get_param( 'after_pid' );
+		$before = (int) $request->get_param( 'before_pid' );
+		$page   = (int) $request->get_param( 'target_page' );
+
+		// Require exactly one target mode; reject ambiguous combinations.
+		$mode_count = ( $after > 0 ? 1 : 0 ) + ( $before > 0 ? 1 : 0 ) + ( $page > 0 ? 1 : 0 );
+		if ( $mode_count > 1 ) {
+			return new WP_Error(
+				'ngg_conflicting_target',
+				__( 'Provide exactly one of after_pid, before_pid, or target_page', 'nggallery' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( $after > 0 || $before > 0 ) {
+			$reference_pid = $after > 0 ? $after : $before;
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$row = $wpdb->get_row(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT sortorder FROM {$table} WHERE pid = %d AND galleryid = %d",
+					$reference_pid,
+					$gallery_id
+				)
+			);
+			if ( ! $row ) {
+				return new WP_Error(
+					'ngg_reference_not_found',
+					__( 'Reference image is not in this gallery', 'nggallery' ),
+					[ 'status' => 400 ]
+				);
+			}
+			$neighbor       = (int) $row->sortorder;
+			$moving_forward = $current_sortorder < $neighbor;
+			// The range-shift in move_image() vacates one neighboring slot, so the
+			// target lands on the neighbor itself in the "shift-toward" direction
+			// and on the next/prev slot in the "shift-away" direction.
+			if ( $after > 0 ) {
+				return $moving_forward ? $neighbor : $neighbor + 1;
+			}
+			return $moving_forward ? $neighbor - 1 : $neighbor;
+		}
+
+		if ( $page > 0 ) {
+			$per_page = (int) $request->get_param( 'per_page' );
+			if ( $per_page < 1 ) {
+				$per_page = 50;
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$max_row = $wpdb->get_row(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT COALESCE(MAX(sortorder), 0) AS max_sort FROM {$table} WHERE galleryid = %d",
+					$gallery_id
+				)
+			);
+			$end_of_page    = $page * $per_page;
+			$end_of_gallery = (int) $max_row->max_sort;
+			return min( $end_of_page, $end_of_gallery );
+		}
+
+		return new WP_Error(
+			'ngg_missing_target',
+			__( 'Must provide after_pid, before_pid, or target_page', 'nggallery' ),
+			[ 'status' => 400 ]
+		);
+	}
+
+	/**
+	 * Renumber a gallery's sortorders to 1..N when they are not unique.
+	 *
+	 * The range-shift in move_image() shifts a contiguous band of sortorder values
+	 * by ±1, so its one hard requirement is that sortorders are UNIQUE — on ties the
+	 * shift collapses two rows onto the same slot. Gaps and a non-1 start are harmless
+	 * to the shift, so we deliberately do NOT renumber for those: doing so would rewrite
+	 * the entire gallery on the first move after any delete (which leaves a gap) for no
+	 * benefit. We only heal duplicates — e.g. freshly-uploaded images that all default
+	 * to sortorder 0 — renumbering in display order (sortorder, then pid as tie-breaker).
+	 *
+	 * @param int    $gallery_id ID of the gallery to renumber.
+	 * @param string $table      Fully-qualified images table name.
+	 * @return bool|WP_Error True if renumbered, false if already unique, WP_Error on write failure.
+	 */
+	private static function ensure_sequential_sortorders( $gallery_id, $table ) {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$stats = $wpdb->get_row(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT COUNT(*) AS cnt, COUNT(DISTINCT sortorder) AS distinct_cnt FROM {$table} WHERE galleryid = %d",
+				$gallery_id
+			)
+		);
+		if ( ! $stats ) {
+			return false;
+		}
+		$cnt = (int) $stats->cnt;
+		if ( $cnt === 0 ) {
+			return false;
+		}
+		// Sortorders are already safe for the range-shift as long as they are unique.
+		// Only a duplicate (distinct count below the row count) forces a renumber.
+		if ( $cnt === (int) $stats->distinct_cnt ) {
+			return false;
+		}
+
+		// Prefetch + per-row update: MySQL forbids ORDER BY on multi-table UPDATE,
+		// and user-defined vars in UPDATE are deprecated in 8.0+.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT pid FROM {$table} WHERE galleryid = %d ORDER BY sortorder ASC, pid ASC",
+				$gallery_id
+			)
+		);
+		if ( empty( $rows ) ) {
+			return false;
+		}
+
+		// Wrap the per-row renumber in its own transaction: a mid-loop write failure
+		// must not leave the gallery half-renumbered (a worse, possibly newly-duplicated
+		// state). This is separate from the move's own transaction, which has not started
+		// yet at the call site.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( 'START TRANSACTION' );
+
+		$sortorder = 1;
+		foreach ( $rows as $row ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$update_result = $wpdb->update( $table, [ 'sortorder' => $sortorder ], [ 'pid' => (int) $row->pid ] );
+			if ( false === $update_result ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->query( 'ROLLBACK' );
+				return new WP_Error(
+					'ngg_renumber_failed',
+					__( 'Failed to renumber gallery sortorders', 'nggallery' ),
+					[ 'status' => 500 ]
+				);
+			}
+			++$sortorder;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( 'COMMIT' );
+
+		return true;
 	}
 
 	/**

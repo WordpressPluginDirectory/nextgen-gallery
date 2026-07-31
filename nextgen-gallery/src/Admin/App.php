@@ -110,14 +110,28 @@ class App {
 		];
 
 		foreach ( $sub_menus as $sub_menu ) {
+			$callback = ( "$menu-addons" === $sub_menu['menu_slug'] )
+				? [ $this, 'render_addons_page' ]
+				: [ $this, 'render_settings_page' ];
 			$this->hook_suffixes[] = add_submenu_page(
 				$menu,
 				$sub_menu['name'],
 				$sub_menu['name'],
 				$sub_menu['capability'],
 				$sub_menu['menu_slug'],
-				[ $this, 'render_settings_page' ]
+				$callback
 			);
+		}
+
+		// Single "Integrations" menu item → direct link to Settings > Integrations tab.
+		global $submenu;
+		if ( isset( $submenu['imagely'] ) && current_user_can( 'NextGEN Change options' ) ) { // phpcs:ignore WordPress.WP.Capabilities.Unknown
+			$submenu['imagely'][] = [
+				__( 'Integrations', 'nggallery' ),
+				'NextGEN Change options',
+				admin_url( 'admin.php?page=imagely-settings&tab=integrations' ),
+				__( 'Integrations', 'nggallery' ),
+			];
 		}
 
 		// Hide the "Edit Gallery" menu item from the sidebar (but keep it registered)
@@ -208,6 +222,13 @@ class App {
 		wp_deregister_style( 'forms-css' );
 	}
 
+	/**
+	 * Render the Addons page (same app container as other Imagely pages).
+	 */
+	public function render_addons_page() {
+		$this->render_settings_page();
+	}
+
 	public function render_settings_page() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only GET parameter for display mode
 		$embed     = isset( $_GET['embed'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['embed'] ) );
@@ -260,6 +281,15 @@ HTML;
 			'enviraCdnConfig'          => self::get_cdn_config(),
 			'canAccessRolesSettings'   => self::can_access_roles_settings(),
 			'canAccessLicenseSettings' => self::can_access_license_settings(),
+			// Integers survive wp_localize_script better than booleans. canEditGalleryPath is authoritative in JS.
+			'is_multisite'              => is_multisite() ? 1 : 0,
+			'is_main_site'              => ( ! is_multisite() || is_main_site() ) ? 1 : 0,
+			'is_super_admin'            => is_super_admin() ? 1 : 0,
+			'canEditGalleryPath'        => ( ! is_multisite() || is_main_site() || is_super_admin() ) ? 1 : 0,
+			'canImportFolderFromServer' => (
+				! is_multisite()
+				|| (bool) \Imagely\NGG\Settings\GlobalSettings::get_instance()->get( 'wpmuImportFolder', false )
+			) ? 1 : 0,
 			'legacyTemplates'          => self::get_legacy_templates(),
 		];
 

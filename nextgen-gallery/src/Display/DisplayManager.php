@@ -18,6 +18,7 @@ use Imagely\NGG\Util\Router;
 use Imagely\NGG\DataMappers\Gallery as GalleryMapper;
 use Imagely\NGG\DataMappers\Album as AlbumMapper;
 use Imagely\NGG\REST\DataMappers\AddonsREST;
+use Imagely\NGG\Display\GalleryDetector;
 
 /**
  * Display Manager class for NextGEN Gallery
@@ -75,9 +76,23 @@ class DisplayManager {
 			return;
 		}
 
-		$posts = $wp_query->posts;
+		$posts           = $wp_query->posts;
+		$shortcode_tags  = array_keys( Shortcodes::get_instance()->get_shortcodes() );
+
 		foreach ( $posts as $post ) {
 			if ( empty( $post->post_content ) ) {
+				continue;
+			}
+
+			// Skip expensive regex + DataMapper processing when no registered NGG shortcode is present.
+			$has_shortcode = false;
+			foreach ( $shortcode_tags as $tag ) {
+				if ( false !== strpos( $post->post_content, '[' . $tag ) ) {
+					$has_shortcode = true;
+					break;
+				}
+			}
+			if ( ! $has_shortcode ) {
 				continue;
 			}
 
@@ -322,7 +337,8 @@ class DisplayManager {
 	}
 
 	/**
-	 * Enqueues FontAwesome library
+	 * Enqueues FontAwesome subset CSS (43 icons used by NGG; ~84% smaller than all.min.css).
+	 * JS approach removed — no FA JS API used. Webfonts served from plugin static dir.
 	 *
 	 * @return void
 	 */
@@ -337,59 +353,14 @@ class DisplayManager {
 			return;
 		}
 
-		// phpcs:ignore WordPress.WP.EnqueuedResourceParameters.NotInFooter
-		wp_register_script(
-			'fontawesome_v4_shim',
-			StaticAssets::get_url( 'FontAwesome/js/v4-shims.min.js' ),
-			[],
-			'5.3.1'
-		);
-		if ( ! wp_script_is( 'fontawesome', 'registered' ) ) {
-			add_filter(
-				'script_loader_tag',
-				[ '\Imagely\NGG\Display\DisplayManager', 'fix_fontawesome_script_tag' ],
-				10,
-				2
-			);
-			// phpcs:ignore WordPress.WP.EnqueuedResourceParameters.NotInFooter
-			wp_enqueue_script(
-				'fontawesome',
-				StaticAssets::get_url( 'FontAwesome/js/all.min.js' ),
-				[ 'fontawesome_v4_shim' ],
-				'5.3.1'
-			);
-		}
-
 		if ( ! wp_style_is( 'fontawesome', 'registered' ) ) {
 			wp_enqueue_style(
-				'fontawesome_v4_shim_style',
-				StaticAssets::get_url( 'FontAwesome/css/v4-shims.min.css' ),
-				[],
-				NGG_SCRIPT_VERSION
-			);
-			wp_enqueue_style(
 				'fontawesome',
-				StaticAssets::get_url( 'FontAwesome/css/all.min.css' ),
+				StaticAssets::get_url( 'FontAwesome/css/ngg-icons.min.css' ),
 				[],
 				NGG_SCRIPT_VERSION
 			);
-		}       wp_enqueue_script( 'fontawesome_v4_shim' );
-		wp_enqueue_script( 'fontawesome' );
-	}
-
-	/**
-	 * WP doesn't allow an easy way to set the defer, crossorign, or integrity attributes on our <script>
-	 *
-	 * @param string $tag The script tag HTML.
-	 * @param string $handle The script handle.
-	 * @return string Modified script tag.
-	 */
-	public static function fix_fontawesome_script_tag( $tag, $handle ) {
-		if ( 'fontawesome' !== $handle ) {
-			return $tag;
 		}
-
-		return str_replace( ' src', ' defer crossorigin="anonymous" data-auto-replace-svg="false" data-keep-original-source="false" data-search-pseudo-elements src', $tag );
 	}
 
 	/**
@@ -682,10 +653,16 @@ class DisplayManager {
 			return;
 		}
 
-		$settings         = Settings::get_instance();
-		$measurement_id   = $settings->get( 'ga4_measurement_id', '' );
-		$measurement_id   = is_string( $measurement_id ) ? trim( $measurement_id ) : '';
+		$settings       = Settings::get_instance();
+		$measurement_id = $settings->get( 'ga4_measurement_id', '' );
+		$measurement_id = is_string( $measurement_id ) ? trim( $measurement_id ) : '';
 		if ( empty( $measurement_id ) ) {
+			return;
+		}
+
+		// Gate to gallery pages; Pro Commerce hooks this filter to also include ecommerce pages
+		// (purchase event fires on the Thanks page which has no gallery shortcode).
+		if ( ! GalleryDetector::has_gallery() && ! apply_filters( 'nextgen_ga4_load_on_page', false ) ) {
 			return;
 		}
 

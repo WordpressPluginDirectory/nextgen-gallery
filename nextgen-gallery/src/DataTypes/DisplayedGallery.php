@@ -387,17 +387,26 @@ class DisplayedGallery extends Model {
 		// and excluded entity ids, and mark specifically which entities are excluded.
 		if ( $returns == 'both' ) {
 			// We need to add two dynamic columns, one called "sortorder" and the other called "exclude".
-			$if_true      = 1;
-			$if_false     = 0;
-			$excluded_set = $this->entity_ids;
+			$entity_ids_provided = ! empty( $this->entity_ids );
 
-			if ( ! $excluded_set ) {
+			if ( $entity_ids_provided ) {
+				$if_true      = 1;
+				$if_false     = 0;
+				$excluded_set = $this->entity_ids;
+			} else {
 				$if_true      = 0;
 				$if_false     = 1;
 				$excluded_set = $this->exclusions;
 			}
 
-			$sortorder_set = $this->sortorder ? $this->sortorder : $excluded_set;
+			// Only an explicit entity_ids list represents an ordered "include these in this order" payload
+			// and is valid as an implicit sortorder. exclusions is a "hide these" list; using it as sortorder
+			// produces non-zero FIND_IN_SET values only for excluded images while everything else lands at 0,
+			// so the reversed-direction ORDER BY below pushes excluded images to the top of the result
+			// (visible in the legacy block's "Sort or Exclude Images" tab after reopening the modal).
+			$sortorder_set = $this->sortorder
+				? $this->sortorder
+				: ( $entity_ids_provided ? $this->entity_ids : null );
 
 			// Add sortorder column.
 			if ( $sortorder_set ) {

@@ -125,7 +125,7 @@
         var closeElement = document.createElement("span");
 
         // This line modified 2020-10-07 by Benjamin Owens to not use an emoji UTF8
-        closeElement.innerHTML = "<i class='fa fa-close'></i>";
+        closeElement.innerHTML = "<i class='fas fa-xmark'></i>";
 
         closeElement.className = "toast-close";
 

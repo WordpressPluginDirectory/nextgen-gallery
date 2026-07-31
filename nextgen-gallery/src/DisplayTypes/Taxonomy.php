@@ -44,6 +44,11 @@ class Taxonomy extends ParentController {
 		$display_type = $mapper->find_by_name( NGG_BASIC_TAGCLOUD );
 		$display_type = ! empty( $display_type->settings['gallery_display_type'] ) ? $display_type->settings['gallery_display_type'] : NGG_BASIC_THUMBNAILS;
 
+		// $tag crosses into a shortcode-attribute context here, so it must be escaped for
+		// that context specifically: esc_attr() neutralizes quotes, and encoding the
+		// shortcode delimiters stops do_shortcode() from parsing an injected tag out of it.
+		$tag = str_replace( array( '[', ']' ), array( '&#91;', '&#93;' ), esc_attr( $tag ) );
+
 		return "[ngg source='tags' container_ids='{$tag}' slug='{$tag}' display_type='{$display_type}']";
 	}
 
@@ -67,6 +72,14 @@ class Taxonomy extends ParentController {
 		// This appears to be necessary for multisite installations, but I can't imagine why. More hackery..
 		$tag = \urldecode( \get_query_var( 'ngg_tag' ) ? \get_query_var( 'ngg_tag' ) : \get_query_var( 'name' ) );
 		$tag = \stripslashes( Sanitizer::strip_html( $tag ) ); // Tags may not include HTML.
+
+		// A real tag is always a sanitize_title() slug (see Legacy/lib/tags.php, where
+		// tags are created/renamed via the same function) — normalize to that slug
+		// rather than reject, since sanitize_title() percent-encodes non-ASCII input
+		// (e.g. Cyrillic/CJK), so raw UTF-8 tags would otherwise never match and
+		// legitimate non-ASCII tag pages would 404. Its output alphabet still has
+		// no quotes/brackets/HTML, so the #856 injection payloads still die.
+		$tag = \sanitize_title( $tag );
 
 		if ( ! $this->ngg_tag_detection_has_run // don't run more than once; necessary for certain themes.
 		&& ! \is_admin() // will destroy 'view all posts' page without this.
@@ -105,8 +118,17 @@ class Taxonomy extends ParentController {
 	}
 
 	public function create_ngg_tag_post( $tag ) {
+		// $tag is a sanitize_title() slug (percent-encoded for non-ASCII input), which is
+		// correct for the shortcode/lookup sinks but unreadable as a display title, so the
+		// title sink shows the native term name instead when the term exists.
+		$term         = \get_term_by( 'slug', $tag, 'ngg_tag' );
+		$display_name = $term ? $term->name : $tag;
+
+		// post_title is a separate output sink from the shortcode-attribute one in
+		// render_tag(): themes may print get_the_title() raw or inside an HTML
+		// attribute, so $display_name needs HTML-attribute escaping here too.
 		/* translators: %s: tag name */
-		$title = sprintf( __( 'Images tagged &quot;%s&quot;', 'nggallery' ), $tag );
+		$title = sprintf( __( 'Images tagged &quot;%s&quot;', 'nggallery' ), esc_html( $display_name ) );
 		$title = \apply_filters( 'ngg_basic_tagcloud_title', $title, $tag );
 
 		$post                 = new \stdClass();

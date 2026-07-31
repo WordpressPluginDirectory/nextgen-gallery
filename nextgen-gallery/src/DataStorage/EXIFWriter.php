@@ -160,6 +160,10 @@ class EXIFWriter {
 			error_log( "Could not write data to {$filename}" );
 			error_log( print_r( $exception, true ) );
 			return false;
+		} catch ( \Exception $exception ) {
+			// Best-effort metadata copy must never abort generation (e.g. PEL "Offset -1" on a JPEG missing its EOI marker).
+			error_log( "Could not write metadata to {$filename}: " . $exception->getMessage() );
+			return false;
 		}
 
 		// This should never happen, but this line satisfies phpstan.

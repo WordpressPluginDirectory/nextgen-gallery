@@ -515,7 +515,7 @@ class Onboarding_Wizard {
 
 			$updated = update_option( 'ngg_onboarding_data', $onboarding_data );
 
-			wp_send_json_success( 'Addons saved successfully' );
+			wp_send_json_success( 'Features saved successfully' );
 			wp_die();
 		}
 

@@ -59,14 +59,8 @@ $this->start_element( 'nextgen_gallery.gallery_container', 'container', $display
 			);
 		}
 
-		$style        = isset( $image->style ) ? $image->style : null;
 		$column_class = 'ngg-' . $number_of_columns . '-columns';
-
-		if ( isset( $image->hidden ) && $image->hidden ) {
-			$style = 'style="display: none;"';
-		} else {
-			$style = null;
-		}
+		$style        = ( isset( $image->hidden ) && $image->hidden ) ? 'display: none;' : null;
 
 			$this->start_element( 'nextgen_gallery.image_panel', 'item', $image );
 
@@ -79,7 +73,7 @@ $this->start_element( 'nextgen_gallery.gallery_container', 'container', $display
 			"
 			<?php
 			if ( $style ) {
-						echo esc_attr( $style );}
+						echo ' style="' . esc_attr( $style ) . '"';}
 			?>
 >
 				<?php
@@ -137,8 +131,6 @@ $this->start_element( 'nextgen_gallery.gallery_container', 'container', $display
 
 	<?php endfor ?>
 
-	<br style="clear: both" />
-
 	<?php
 
 	$this->end_element();
@@ -154,8 +146,6 @@ $this->start_element( 'nextgen_gallery.gallery_container', 'container', $display
 	<?php if ( $pagination ) : ?>
 	<!-- Pagination -->
 		<?php echo wp_kses_post( $pagination ); ?>
-	<?php else : ?>
-	<div class="ngg-clear"></div>
 	<?php endif ?>
 </div>
 <?php $this->end_element(); ?>

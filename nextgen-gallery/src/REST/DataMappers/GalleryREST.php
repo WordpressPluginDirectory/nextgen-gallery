@@ -1103,7 +1103,7 @@ class GalleryREST {
 			return [];
 		}
 
-		$allowed_types         = [ 'video', 'tiktok', 'instagram', 'dribbble', 'youtube' ];
+		$allowed_types         = [ 'video', 'tiktok', 'instagram', 'dribbble', 'youtube', 'google_photos', 'dropbox' ];
 		$allowed_settings_mode = [ 'default', 'custom', 'global' ];
 
 		// Flat keys (cast rule).
@@ -1113,6 +1113,7 @@ class GalleryREST {
 			'show_video_controls'      => 'bool',
 			'show_play_pause_controls' => 'bool',
 			'autoplay_videos'          => 'bool',
+			'google_photos_account'    => 'int',
 		];
 
 		// Per-integration prefixed keys — one rule per field, applied to each

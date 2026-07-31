@@ -15,7 +15,7 @@
                     pauseOnHover: Number(settings.pauseonhover) ? true : false
                 });
                 $('.ngg-galleryoverview.ngg-slideshow[data-gallery-id="' + gallery.ID + '"]').css({
-                    display: 'block'
+                    visibility: 'visible'
                 });
             }
         });

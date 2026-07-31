@@ -1040,7 +1040,18 @@ class nggManageGallery {
 	public function update_pictures() {
 		$updated = 0;
 
-		if ( ! $this->can_user_manage_gallery() ) {
+		// $this->gid is set from (int) $_GET['gid'] in the constructor and is the authoritative
+		// gallery ID. It is 0 (falsy) in search-results mode where no single gallery is selected.
+		$current_gallery_id = (int) $this->gid;
+
+		if ( $current_gallery_id ) {
+			// Normal gallery-edit mode: verify the current user can manage this specific gallery.
+			if ( ! $this->can_user_manage_gallery() ) {
+				return $updated;
+			}
+		} elseif ( ! Security::is_allowed( 'nextgen_edit_gallery' ) ) {
+			// Search-results mode (no gallery context): require at least basic gallery-management
+			// capability as a first gate. Per-image ownership is enforced inside the loop below.
 			return $updated;
 		}
 
@@ -1050,8 +1061,12 @@ class nggManageGallery {
 			&& wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ), 'ngg_updategallery' ) ) {
 			$image_mapper = ImageMapper::get_instance();
 
+			// Memoize gallery lookups for the search-results branch: a search can return images from many
+			// distinct galleries, and GalleryMapper::find() hits the DB on every call. Cache by galleryid
+			// so each gallery is loaded at most once per request.
+			$gallery_cache = [];
+
 			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- wp_unslash only removes slashes, values are sanitized on line 976 and later
-			$current_gallery_id = isset( $this->gallery->{$this->gallery->id_field} ) ? (int) $this->gallery->{$this->gallery->id_field} : 0;
 			foreach ( wp_unslash( $_POST['images'] ) as $pid => $data ) {
 				$pid = sanitize_text_field( wp_unslash( $pid ) );
 				if ( ! isset( $data['exclude'] ) ) {
@@ -1059,12 +1074,25 @@ class nggManageGallery {
 				}
 				$image = $image_mapper->find( $pid );
 				if ( $image ) {
-					// Cross-gallery IDOR guard: $_POST['images'] is keyed by raw pid from the form payload;
-					// reject any image whose galleryid does not match the gallery the form was rendered for.
-					// can_user_manage_gallery() above only verifies ownership of $this->gallery, so without this
-					// check a user managing gallery A could rewrite fields on images in gallery B.
-					if ( 0 === $current_gallery_id || (int) $image->galleryid !== $current_gallery_id ) {
-						continue;
+					if ( $current_gallery_id ) {
+						// Normal gallery-edit mode: cross-gallery IDOR guard.
+						// can_user_manage_gallery() verifies ownership of $this->gallery, but without
+						// this check a user managing gallery A could craft images[<pid>][...] entries
+						// that rewrite fields on images belonging to gallery B.
+						if ( (int) $image->galleryid !== $current_gallery_id ) {
+							continue;
+						}
+					} else {
+						// Search-results mode: no single gallery context — verify per-image that the
+						// current user can manage the gallery this image belongs to.
+						$image_gallery_id = (int) $image->galleryid;
+						if ( ! array_key_exists( $image_gallery_id, $gallery_cache ) ) {
+							$gallery_cache[ $image_gallery_id ] = GalleryMapper::get_instance()->find( $image_gallery_id );
+						}
+						$image_gallery = $gallery_cache[ $image_gallery_id ];
+						if ( ! $image_gallery || ! nggAdmin::can_manage_this_gallery( $image_gallery->author ) ) {
+							continue;
+						}
 					}
 					// Strip slashes from title/description/alttext fields.
 					if ( isset( $data['description'] ) ) {

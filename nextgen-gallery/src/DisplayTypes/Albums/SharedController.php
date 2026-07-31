@@ -508,6 +508,11 @@ class SharedController extends ParentController {
 				'original_album_entities' => $parent_albums,
 			];
 
+			if ( $result && ! empty( $result->is_ecommerce_enabled ) ) {
+				$gallery_params['is_ecommerce_enabled']                    = 1;
+				$gallery_params['original_settings']['is_ecommerce_enabled'] = 1;
+			}
+
 			if ( ! empty( $display_settings['gallery_display_template'] ) ) {
 				$gallery_params['template'] = $display_settings['gallery_display_template'];
 			}
@@ -845,6 +850,15 @@ class SharedController extends ParentController {
 	 * @return object
 	 */
 	public function make_child_displayed_gallery( \stdClass $gallery, array $display_settings ) {
+		if ( ! empty( $gallery->is_ecommerce_enabled ) ) {
+			$display_settings['is_ecommerce_enabled'] = 1;
+			// Album display types set ngg_triggers_display='never'; override so eCommerce trigger icons
+			// are shown for this individual gallery (not suppressed by the album context).
+			if ( ! isset( $display_settings['ngg_triggers_display'] ) || 'never' === $display_settings['ngg_triggers_display'] ) {
+				$display_settings['ngg_triggers_display'] = 'always';
+			}
+		}
+
 		$gallery->displayed_gallery                    = new DisplayedGallery();
 		$gallery->displayed_gallery->container_ids     = [ $gallery->{$gallery->id_field} ];
 		$gallery->displayed_gallery->display_settings  = $display_settings;

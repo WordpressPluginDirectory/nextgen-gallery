@@ -885,11 +885,8 @@ class _NGG_Images_List_Table extends WP_List_Table {
 }
 
 function wpmu_enable_function( $value ) {
-	if ( is_multisite() ) {
-		$ngg_options = get_site_option( 'ngg_options' );
-		return $ngg_options[ $value ];
+	if ( ! is_multisite() ) {
+		return true;
 	}
-
-	// if this is not WPMU, enable it !
-	return true;
+	return (bool) \Imagely\NGG\Settings\GlobalSettings::get_instance()->get( $value, false );
 }

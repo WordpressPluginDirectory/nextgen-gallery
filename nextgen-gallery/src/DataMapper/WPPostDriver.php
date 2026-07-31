@@ -581,6 +581,10 @@ class WPPostDriver extends DriverBase {
 			}
 		}
 
+		if ( $retval ) {
+			$this->flush_query_cache();
+		}
+
 		return $retval;
 	}
 
@@ -615,7 +619,7 @@ class WPPostDriver extends DriverBase {
 			$entity->$primary_key = $post_id;
 
 			// Clean cache.
-			$this->cache = [];
+			$this->flush_query_cache();
 		}
 		$entity->id_field = $primary_key;
 

@@ -98,7 +98,7 @@ if ( isset( $gallery ) && ! empty( $gallery->title ) ) {
 				<a class='ngg-browser-prev'
 					id='ngg-prev-<?php print esc_attr( $previous_pid ); ?>'
 					href='<?php print esc_url( $previous_image_link ); ?>'>
-					<i class="fa fa-chevron-left" aria-hidden="true"></i>
+					<i class="fas fa-chevron-left" aria-hidden="true"></i>
 				</a>
 			</div>
 
@@ -106,7 +106,7 @@ if ( isset( $gallery ) && ! empty( $gallery->title ) ) {
 				<a class='ngg-browser-next'
 					id='ngg-next-<?php print esc_attr( $next_pid ); ?>'
 					href='<?php print esc_url( $next_image_link ); ?>'>
-					<i class="fa fa-chevron-right" aria-hidden="true"></i>
+					<i class="fas fa-chevron-right" aria-hidden="true"></i>
 				</a>
 			</div>
 

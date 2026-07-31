@@ -55,13 +55,7 @@ $this->start_element( 'nextgen_gallery.gallery_container', 'container', $display
 			! empty( $image->meta_data['imagely_tiktok_id'] ) &&
 			! empty( $image->meta_data['imagely_tiktok_show_play_button'] )
 		);
-		$style                   = isset( $image->style ) ? $image->style : null;
-
-		if ( isset( $image->hidden ) && $image->hidden ) {
-			$style = 'style="display: none;"';
-		} else {
-			$style = null;
-		}
+		$style = ( isset( $image->hidden ) && $image->hidden ) ? 'display: none;' : null;
 
 			$this->start_element( 'nextgen_gallery.image_panel', 'item', $image );
 
@@ -69,7 +63,7 @@ $this->start_element( 'nextgen_gallery.gallery_container', 'container', $display
 			<div id="<?php echo esc_attr( 'ngg-image-' . $i ); ?>" class="ngg-gallery-thumbnail-box"
 								<?php
 								if ( $style ) {
-									echo esc_attr( $style );}
+									echo ' style="' . esc_attr( $style ) . '"';}
 								?>
 			>
 				<?php

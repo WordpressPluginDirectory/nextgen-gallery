@@ -2,8 +2,8 @@
 Contributors: photocrati, imagely
 Tags: gallery, wordpress gallery plugin, photo gallery, image gallery, slideshow
 Requires at least: 5.5.4
-Stable tag: 4.2.1
-Tested up to: 6.9
+Stable tag: 4.2.4
+Tested up to: 7.0
 License: GPLv3
 Requires PHP: 7.4
 
@@ -197,6 +197,30 @@ For more information, feel free to visit the official website for the NextGEN Ga
 
 == Changelog ==
 
+= 4.2.4 - 07.30.2026 =
+* Fixed: Security hardening on gallery tag pages to better protect your site. We recommend updating.
+* Fixed: Gallery tag pages for tags containing non-Latin characters (Cyrillic, Greek, CJK, and similar) now resolve to the correct tag instead of showing an empty page.
+* Fixed: The "Images tagged ..." heading on a tag page now shows the tag's name as it is saved in your gallery tags.
+
+= 4.2.3 - 06.30.2026 =
+* Added: Drag gallery images to a different page within the same gallery — a floating page strip appears while dragging; hover a page chip to navigate, then drop to reorder.
+* Added: Album items (galleries and sub-albums) can also be dragged across pages for easier organization.
+* Fixed: Pro Lightbox settings toggles (Display Cart, Display Comments, and others) now correctly stay OFF after being saved as off — they no longer revert to ON on page reload.
+* Fixed: Pro Slideshow and Pro Horizontal Filmstrip display settings (crop, pan, aspect ratio, width, transition, etc.) now apply correctly on the frontend after being saved in the gallery editor.
+* Fixed: The "Manage gallery" link after importing a folder now opens the correct gallery instead of showing a broken URL.
+* Fixed: Pro Mosaic galleries now display images correctly on sites using Imagely CDN when original files are no longer stored locally.
+* Fixed: Album image count ("X Photos") now shows correctly on galleries inserted with the block-based album layouts (Basic Extended and Basic Compact).
+* Fixed: Bulk "Generate Thumbnails" and "Set Watermark" no longer fail with a server error when an image's embedded metadata is incomplete.
+* Fixed: Thumbnails now correctly hide off-page images when "show all in lightbox" is enabled alongside "images per page".
+* Fixed: PHP code no longer leaks into WordPress admin HTML (which triggered some security firewalls); the gallery insert button also no longer loads on unrelated admin pages.
+* Improved: NextGEN Gallery no longer loads CSS, JavaScript, or icon files on pages that contain no galleries, reducing page weight for visitors.
+* Improved: Gallery data is now stored in the WordPress object cache (Redis, Memcached) between page loads, significantly reducing database queries on high-traffic sites.
+* Improved: Display type lookups are cached, eliminating repeated database scans on every page load.
+
+= 4.2.2 - 05.27.2026 =
+* Added: Google Photos integration — import images directly from your Google Photos account into NextGEN galleries.
+* Added: Dropbox integration — import images from Dropbox into NextGEN galleries.
+
 = 4.2.1 - 05.15.2026 =
 * Fixed: Security hardening across the plugin to better protect site data and reinforce permission checks. We recommend updating.
 * Fixed: Edit Image crop tool now uses the correct aspect ratio from your gallery's thumbnail settings and no longer briefly flickers when opening crop mode.
@@ -218,10 +242,12 @@ For more information, feel free to visit the official website for the NextGEN Ga
 * Added: Duplicate pricelists individually or in bulk from the Ecommerce tab with confirmation modal
 * Added: Column visibility on "Manage Galleries" and "Manage Albums" tables is now saved and restored when returning to the page
 * Added: Automatic EXIF-based JPEG rotation using ImageMagick/Imagick when available to keep uploads correctly oriented
+* Fixed: Multisite — subsite site administrators see Path to galleries as read-only in Imagely so uploads are not pointed at another site’s directory; the main site and network super administrators can still edit the path.
+* Fixed: Multisite — network Enable import function correctly turns off Import Folder for subsites (Imagely UI and REST).
 * Fixed: Gallery image counts now display correctly in the Albums edit page
 * Fixed: Image list in "Add Media > NextGEN Gallery" modal now displays with consistent row heights instead of overflowing thumbnails
 * Fixed: Block editor no longer reverts the preview to the saved gallery when choosing a different gallery with "Change" before inserting
-* Fixed: Block editor validation errors when Bluehost's WonderBlocks feature is enabled
+* Fixed: Block editor validation errors when Bluehost’s WonderBlocks feature is enabled
 * Fixed: Pro Masonry "Maximum image width" and "Image padding" settings now save and apply correctly
 * Fixed: Display type settings in the Customize tab could appear stuck or out of sync after changing layout or saving settings
 * Fixed: Shutter Reloaded lightbox showing double the image count on Mosaic/Masonry and in the admin live preview
@@ -234,6 +260,7 @@ For more information, feel free to visit the official website for the NextGEN Ga
 * Fixed: Album pages crashing on PHP 8.x when a sub-album has no images
 * Fixed: Cases where JPEG uploads with EXIF rotation could appear as failed even though files were created successfully
 * Fixed: Multi-word tag search now works correctly by preserving full phrases before sanitization
+* Improved: Gallery path validation is shared between REST and classic Image Options (safer relative paths).
 * Improved: JPEG upload handling to be more memory-aware on hosts with older GD libraries
 
 = 4.1.1 - 03.13.2025 =

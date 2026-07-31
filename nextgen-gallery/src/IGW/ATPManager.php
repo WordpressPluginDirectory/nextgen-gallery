@@ -92,6 +92,10 @@ class ATPManager {
 	 * Renders the underscore template used by TinyMCE for IGW placeholders
 	 */
 	public function print_tinymce_placeholder_template() {
+		// Only render on post/page/site-editor screens, not on every admin page. See #801.
+		if ( ! $this->is_new_or_edit_post_screen() ) {
+			return;
+		}
 		$view     = new View( 'AttachToPost/tinymce_placeholder', [], 'photocrati-attach_to_post#tinymce_placeholder' );
 		$template = $view->find_template_abspath( 'AttachToPost/tinymce_placeholder', 'photocrati-attach_to_post#tinymce_placeholder' );
 		readfile( $template ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_readfile

@@ -1319,6 +1319,39 @@ class Manager {
 							'width'  => $new_dims['real_width'],
 							'height' => $new_dims['real_height'],
 						];
+					} elseif ( isset( $image->meta_data['full']['width'], $image->meta_data['full']['height'] ) ) {
+						// CDN/offload: local file absent, so getimagesize() cannot run. Derive dimensions
+						// from stored full-size meta instead so dynamic-thumbnail displays (e.g. Pro Mosaic)
+						// don't collapse to 0×0. Mirrors get_computed_image_url()'s meta-derived fallback.
+						$fw     = (int) $image->meta_data['full']['width'];
+						$fh     = (int) $image->meta_data['full']['height'];
+						$params = $this->get_image_size_params( $image, $size );
+						$bw     = ! empty( $params['width'] ) ? (int) $params['width'] : 0;
+						$bh     = ! empty( $params['height'] ) ? (int) $params['height'] : 0;
+
+						if ( ! empty( $params['crop'] ) && $bw && $bh ) {
+							$retval = [ 'width' => $bw, 'height' => $bh ];
+						} elseif ( $fw && $fh ) {
+							$ratio = $fw / $fh;
+							if ( $bw && $bh ) {
+								$w = $bw;
+								$h = (int) round( $bw / $ratio );
+								if ( $h > $bh ) {
+									$h = $bh;
+									$w = (int) round( $bh * $ratio );
+								}
+							} elseif ( $bw ) {
+								$w = $bw;
+								$h = (int) round( $bw / $ratio );
+							} elseif ( $bh ) {
+								$h = $bh;
+								$w = (int) round( $bh * $ratio );
+							} else {
+								$w = $fw;
+								$h = $fh;
+							}
+							$retval = [ 'width' => $w, 'height' => $h ];
+						}
 					}
 				}
 			}
@@ -1415,7 +1448,21 @@ class Manager {
 					$image_abspath = $this->get_image_abspath( $image, $size );
 				}
 			} else {
-				return null;
+				$full_abspath = $this->get_image_abspath( $image, 'full' );
+				if ( $full_abspath && file_exists( $full_abspath ) ) {
+					return null;
+				}
+				// Only fall back to a metadata-derived gallery URL when a CDN/offload plugin
+				// has claimed this image. Without this gate, non-CDN sites with a missing
+				// full-size file would cache a broken URL instead of reaching the dynamic
+				// router. Imagely CDN marks images via _envira_cdn_id; other offload plugins
+				// can hook ngg_use_offloaded_image_url to opt in (tracked envira-image-cdn#63).
+				$is_offloaded = ! empty( $image->meta_data['_envira_cdn_id'] );
+				if ( ! apply_filters( 'ngg_use_offloaded_image_url', $is_offloaded, $image ) ) {
+					return null;
+				}
+				$size          = 'full';
+				$image_abspath = $full_abspath;
 			}
 		}
 
@@ -2406,6 +2453,12 @@ class Manager {
 				$image_abspath = $this->get_image_abspath( $image, 'full' );
 				$this->generate_image_clone( $image_abspath, $image_abspath, [ 'watermark' => true ] );
 			}
+
+			// Ensure the Pope framework is loaded before this action fires. Third-party plugins
+			// such as ShortPixel hook here and instantiate legacy Pope classes (e.g. C_Gallery_Storage).
+			// On REST upload requests Pope may not have loaded yet because the constructor-time
+			// SHORTPIXEL_IMAGE_OPTIMISER_VERSION check runs before sibling plugins are included.
+			\C_NextGEN_Bootstrap::load_pope( true );
 
 			// Notify other plugins that an image has been added.
 			do_action( 'ngg_added_new_image', $image );

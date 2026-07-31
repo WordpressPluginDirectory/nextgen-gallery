@@ -2,7 +2,7 @@
 /**
  * Plugin Name: NextGEN Gallery
  * Description: The most popular gallery plugin for WordPress and one of the most popular plugins of all time with over 30 million downloads.
- * Version: 4.2.1
+ * Version: 4.2.4
  * Author: Imagely
  * Plugin URI: https://www.imagely.com/wordpress-gallery-plugin/nextgen-gallery/?utm_source=ngglite&utm_medium=pluginlist&utm_campaign=pluginuri
  * Author URI: https://www.imagely.com/?utm_source=ngglite&utm_medium=pluginlist&utm_campaign=authoruri
@@ -702,13 +702,29 @@ class C_NextGEN_Bootstrap {
 	/**
 	 * Loads the POPE framework (Plugin Object Polymorphic Extensibility).
 	 *
+	 * Declared static so it can be called as \C_NextGEN_Bootstrap::load_pope() from
+	 * namespaced code that needs to guarantee Pope is available before firing actions
+	 * that third-party plugins may handle with legacy Pope classes (e.g. ShortPixel's
+	 * use of C_Gallery_Storage via the ngg_added_new_image hook).
+	 *
 	 * @param bool $force Force loading even if conditions don't require it.
 	 */
-	public function load_pope( $force = false ) {
-		// We allow POPE to load if the requested URL/POST includes photocrati_ajax as it is still used by a few NextGEN
-		// modules for XHR such as uploading images.
+	public static function load_pope( $force = false ) {
+		// Never load twice.
+		if ( self::$pope_loaded ) {
+			return;
+		}
+
+		// Skip loading on non-admin, non-AJAX REST requests unless a known third-party
+		// image-optimisation plugin is active (those plugins hook into ngg_added_new_image
+		// and require legacy Pope classes) or loading is explicitly forced.
 		//
-		// Third-party image optimization plugins that require legacy C_Gallery_Storage class access:
+		// NOTE: This check is evaluated at plugin-load time (constructor) when sibling plugins
+		// may not yet be included, so the constant checks can be unreliable at that point.
+		// The explicit load_pope(true) call before do_action('ngg_added_new_image') in
+		// DataStorage\Manager is the reliable safety net for REST upload requests.
+		//
+		// Third-party image optimization plugins that require legacy C_Gallery_Storage access:
 		// - EWWW Image Optimizer: uses I_Gallery_Storage interface
 		// - WP Smush: uses I_Gallery_Storage interface
 		// - Imagify: adds their own mixin to C_Gallery_Storage
@@ -723,8 +739,7 @@ class C_NextGEN_Bootstrap {
 			&& ! defined( 'EWWW_IMAGE_OPTIMIZER_VERSION' ) // EWWW uses I_Gallery_Storage.
 			&& ! defined( 'WP_SMUSH_VERSION' ) // WP_SMUSH_VERSION uses I_Gallery_Storage.
 			&& ! defined( 'IMAGIFY_VERSION' ) // Imagify adds their own mixin to C_Gallery_Storage.
-			&& ! defined( 'SHORTPIXEL_IMAGE_OPTIMISER_VERSION' ) // ShortPixel uses C_Gallery_Storage.
-			|| self::$pope_loaded ) {
+			&& ! defined( 'SHORTPIXEL_IMAGE_OPTIMISER_VERSION' ) ) { // ShortPixel uses C_Gallery_Storage.
 			return;
 		}
 
@@ -1221,7 +1236,7 @@ class C_NextGEN_Bootstrap {
 		define( 'NGG_PRODUCT_DIR', implode( DIRECTORY_SEPARATOR, [ rtrim( NGG_PLUGIN_DIR, '/\\' ), 'products' ] ) );
 		define( 'NGG_MODULE_DIR', implode( DIRECTORY_SEPARATOR, [ rtrim( NGG_PRODUCT_DIR, '/\\' ), 'photocrati_nextgen', 'modules' ] ) );
 		define( 'NGG_PLUGIN_STARTED_AT', microtime() );
-		define( 'NGG_PLUGIN_VERSION', '4.2.1' );
+		define( 'NGG_PLUGIN_VERSION', '4.2.4' );
 
 		$random_version = function_exists( 'wp_rand' ) ? wp_rand( 0, mt_getrandmax() ) : mt_rand( 0, mt_getrandmax() ); // phpcs:ignore WordPress.WP.AlternativeFunctions.rand_mt_rand
 		define( 'NGG_SCRIPT_VERSION', defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ? (string) $random_version : NGG_PLUGIN_VERSION );

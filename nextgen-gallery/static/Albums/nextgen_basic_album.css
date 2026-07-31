@@ -160,7 +160,7 @@
 }
 
 .ngg-albumoverview.default-view p.ngg-album-gallery-image-counter {
-    display: none;
+    display: inline;
 }
 
 @media (max-width: 960px) {
@@ -231,8 +231,7 @@
 }
 
 .ngg-albumoverview.default-view .ngg-album-compactbox:before,
-.ngg-albumoverview.default-view .ngg-album-compactbox:after,
-.ngg-albumoverview.default-view p.ngg-album-gallery-image-counter {
+.ngg-albumoverview.default-view .ngg-album-compactbox:after {
     display: none;
 }
 

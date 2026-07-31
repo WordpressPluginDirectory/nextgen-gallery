@@ -308,6 +308,14 @@ class TableDriver extends DriverBase {
 	}
 
 	/**
+	 * {@inheritdoc}
+	 */
+	public function where_raw( $sql ) {
+		$this->where_clauses[] = $sql;
+		return $this;
+	}
+
+	/**
 	 * Returns the total number of entities known
 	 *
 	 * @return int
@@ -522,7 +530,7 @@ class TableDriver extends DriverBase {
 
 		// Clean cache.
 		if ( $retval ) {
-			$this->cache = [];
+			$this->flush_query_cache();
 		}
 
 		return $retval;
@@ -556,6 +564,10 @@ class TableDriver extends DriverBase {
 				$id
 			);
 			$retval = $this->_wpdb()->query( $sql );
+		}
+
+		if ( $retval ) {
+			$this->flush_query_cache();
 		}
 
 		return $retval;

@@ -137,8 +137,11 @@ class AttachToPost extends \WP_REST_Controller {
 		// Per-property allowlist + type cast for DisplayedGallery params arriving from the REST body.
 		// Anything outside the allowlist is silently dropped; values are cast per group rather than
 		// piped through esc_sql() (which is not a substitute for $wpdb->prepare()).
-		$id_array_props = [ 'container_ids', 'entity_ids', 'excluded_container_ids', 'gallery_ids', 'image_ids', 'tag_ids', 'album_ids', 'ids', 'exclusions' ];
-		$string_props   = [ 'display_type', 'order_by', 'order_direction', 'returns', 'source', 'src', 'slug', 'sortorder', 'transient_id' ];
+		// sortorder belongs with the ID arrays: it is the user's drag-and-drop order, a list of pids.
+		// Classifying it as a string ran every array payload through is_scalar() and coerced it to '',
+		// wiping the custom order so the modal reopened with the default gallery sort.
+		$id_array_props = [ 'container_ids', 'entity_ids', 'excluded_container_ids', 'gallery_ids', 'image_ids', 'tag_ids', 'album_ids', 'ids', 'exclusions', 'sortorder' ];
+		$string_props   = [ 'display_type', 'order_by', 'order_direction', 'returns', 'source', 'src', 'slug', 'transient_id' ];
 		$int_props      = [ 'ID', 'id', 'maximum_entity_count', 'images_list_count' ];
 		$bool_props     = [ 'is_album_gallery', 'skip_excluding_globally_excluded_images', 'tagcloud' ];
 		$assoc_props    = [ 'display_settings' ];

@@ -33,7 +33,8 @@ if ( isset( $gallery ) && ! empty( $gallery->title ) ) {
 		$_slide_gallery_name = $_slide_ngg_gallery->title;
 	}
 }
-$this->start_element( 'nextgen_gallery.gallery_container', 'container', $displayed_gallery ); ?>
+$this->start_element( 'nextgen_gallery.gallery_container', 'container', $displayed_gallery );
+?>
 
 <div class="ngg-galleryoverview ngg-slideshow"
 	id="<?php echo esc_attr( $anchor ); ?>"
@@ -43,8 +44,8 @@ $this->start_element( 'nextgen_gallery.gallery_container', 'container', $display
 	data-gallery-name="<?php echo esc_attr( $_slide_gallery_name ); ?>"
 	<?php endif; ?>
 	style="max-width: <?php echo esc_attr( $gallery_width ); ?>px;
-			max-height: <?php echo esc_attr( $gallery_height ); ?>px;
-			display: none;">
+			min-height: <?php echo esc_attr( $gallery_height ); ?>px;
+			visibility: hidden;">
 
 	<?php
 	$image_count = count( $images );
@@ -95,6 +96,7 @@ $this->start_element( 'nextgen_gallery.gallery_container', 'container', $display
 				title="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->description ) ); ?>"
 				alt="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->alttext ) ); ?>"
 				src="<?php echo esc_attr( $storage->get_computed_image_url( $image, 'full' ) ); ?>"
+				height="<?php echo esc_attr( (string) ( $gallery_height - 20 ) ); ?>"
 				style="max-height: <?php echo esc_attr( $gallery_height - 20 ); ?>px;"/>
 		</a>
 

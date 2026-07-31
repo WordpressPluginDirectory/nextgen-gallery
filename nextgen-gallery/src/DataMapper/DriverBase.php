@@ -61,6 +61,23 @@ abstract class DriverBase {
 	public $cache = [];
 
 	/**
+	 * WP object cache group. Set in subclasses to enable cross-request caching.
+	 *
+	 * @var string
+	 */
+	protected $object_cache_group = '';
+
+	/** @var string|null Memoized cache version for this request; reset by flush_query_cache(). */
+	private ?string $cache_version_memo = null;
+
+	/**
+	 * TTL in seconds for WP object cache entries.
+	 *
+	 * @var int
+	 */
+	protected $object_cache_ttl = DAY_IN_SECONDS;
+
+	/**
 	 * Model class name.
 	 *
 	 * @var string
@@ -80,6 +97,26 @@ abstract class DriverBase {
 	abstract public function add_where_clause( $where_clauses, $join );
 	abstract public function save_entity( $entity );
 	abstract public function select( $fields = null );
+
+	/**
+	 * Appends a raw SQL fragment directly to the WHERE clause list, bypassing
+	 * _parse_where_clause(). Use for conditions the parameterized system cannot
+	 * express, such as OR predicates or IS NULL checks.
+	 *
+	 * Only supported by TableDriver. Drivers that do not use direct SQL (e.g.
+	 * WPPostDriver) will throw a BadMethodCallException at runtime.
+	 *
+	 * The caller is responsible for ensuring the SQL is safe (no user input).
+	 *
+	 * @param string $sql Raw SQL condition, e.g. 'exclude = 0 OR exclude IS NULL'.
+	 * @return self
+	 * @throws \BadMethodCallException When called on a driver that does not support raw SQL.
+	 */
+	public function where_raw( $sql ) {
+		throw new \BadMethodCallException(
+			static::class . ' does not support where_raw(). Use TableDriver-based mappers for raw SQL conditions.'
+		);
+	}
 
 	/**
 	 * Gets the object name.
@@ -176,22 +213,69 @@ abstract class DriverBase {
 		return $this->primary_key_column;
 	}
 
+	/**
+	 * Returns the current version token for this mapper's WP object cache group.
+	 * Creates one on first call; UUID ensures no collision with entries from prior version tokens.
+	 */
+	private function get_cache_version(): string {
+		if ( $this->cache_version_memo !== null ) {
+			return $this->cache_version_memo;
+		}
+		$ver = wp_cache_get( $this->object_cache_group . '_ver', $this->object_cache_group );
+		if ( false === $ver ) {
+			$ver = wp_generate_uuid4();
+			if ( ! wp_cache_add( $this->object_cache_group . '_ver', $ver, $this->object_cache_group, $this->object_cache_ttl ) ) {
+				// Another request won the race; use the version it stored.
+				$stored = wp_cache_get( $this->object_cache_group . '_ver', $this->object_cache_group );
+				if ( false !== $stored ) {
+					$ver = $stored;
+				}
+				// If $stored is still false (evicted immediately), keep the locally generated UUID —
+				// those entries will be orphaned until TTL but cause no data corruption.
+			}
+		}
+		$this->cache_version_memo = (string) $ver;
+		return $this->cache_version_memo;
+	}
+
 	public function cache( $key, $results ) {
 		if ( $this->use_cache ) {
 			$this->cache[ $key ] = $results;
+			if ( ! empty( $this->object_cache_group ) ) {
+				$version = $this->get_cache_version();
+				wp_cache_set( md5( $key ) . '_v' . $version, $results, $this->object_cache_group, $this->object_cache_ttl );
+			}
 		}
 	}
 
 	public function get_from_cache( $key, $default_value = null ) {
-		if ( $this->use_cache && isset( $this->cache[ $key ] ) ) {
-			return $this->cache[ $key ];
-		} else {
-			return $default_value;
+		if ( $this->use_cache ) {
+			if ( isset( $this->cache[ $key ] ) ) {
+				return $this->cache[ $key ];
+			}
+			if ( ! empty( $this->object_cache_group ) ) {
+				$version = $this->get_cache_version();
+				$cached  = wp_cache_get( md5( $key ) . '_v' . $version, $this->object_cache_group );
+				if ( false !== $cached && ( is_array( $cached ) || is_object( $cached ) ) ) {
+					$this->cache[ $key ] = $cached;
+					return $cached;
+				}
+			}
 		}
+		return $default_value;
 	}
 
 	public function flush_query_cache() {
-		$this->cache = [];
+		$this->cache              = [];
+		$this->cache_version_memo = null;
+		if ( ! empty( $this->object_cache_group ) ) {
+			wp_cache_set(
+				$this->object_cache_group . '_ver',
+				wp_generate_uuid4(),
+				$this->object_cache_group,
+				$this->object_cache_ttl
+			);
+		}
 	}
 
 	/**
@@ -401,9 +485,12 @@ abstract class DriverBase {
 		// If the value is part of an IN clause or BETWEEN clause and
 		// has multiple values, we attempt to split the values apart into an
 		// array and iterate over them individually.
-		if ( 'in' === $operator ) {
+		// 'not in' / 'not between' must split too — otherwise the multi-value bind reaches
+		// add_where_clause() as the single string "v1,v2,v3" and gets cast to (float) v1,
+		// silently producing `col NOT IN (v1)` and losing every value past the first comma.
+		if ( 'in' === $operator || 'not in' === $operator ) {
 			$values = preg_split( "/'?\s?(,)\s?'?/i", $value );
-		} elseif ( 'between' === $operator ) {
+		} elseif ( 'between' === $operator || 'not between' === $operator ) {
 			$values = preg_split( "/'?\s?(AND)\s?'?/i", $value );
 		}
 

@@ -1,6 +1,54 @@
 NextGEN Gallery
 by Imagely
 
+= V4.2.4 - 07.30.2026 =
+* Fixed: Security hardening on gallery tag pages to better protect your site. We recommend updating.
+* Fixed: Gallery tag pages for tags containing non-Latin characters (Cyrillic, Greek, CJK, and similar) now resolve to the correct tag instead of showing an empty page.
+* Fixed: The "Images tagged ..." heading on a tag page now shows the tag's name as it is saved in your gallery tags.
+
+= V4.2.3 - 06.30.2026 =
+* Added: Drag gallery images to a different page within the same gallery — a floating page strip appears while dragging; hover a page chip to navigate, then drop to reorder.
+* Added: Album items (galleries and sub-albums) can also be dragged across pages for easier organization.
+* Fixed: Pro Lightbox settings toggles (Display Cart, Display Comments, and others) now correctly stay OFF after being saved as off — they no longer revert to ON on page reload.
+* Fixed: Pro Slideshow and Pro Horizontal Filmstrip display settings (crop, pan, aspect ratio, width, transition, etc.) now apply correctly on the frontend after being saved in the gallery editor.
+* Fixed: The "Manage gallery" link after importing a folder now opens the correct gallery instead of showing a broken URL.
+* Fixed: Pro Mosaic galleries now display images correctly on sites using Imagely CDN when original files are no longer stored locally.
+* Fixed: Album image count ("X Photos") now shows correctly on galleries inserted with the block-based album layouts (Basic Extended and Basic Compact).
+* Fixed: Bulk "Generate Thumbnails" and "Set Watermark" no longer fail with a server error when an image's embedded metadata is incomplete.
+* Fixed: Thumbnails now correctly hide off-page images when "show all in lightbox" is enabled alongside "images per page".
+* Fixed: PHP code no longer leaks into WordPress admin HTML (which triggered some security firewalls); the gallery insert button also no longer loads on unrelated admin pages.
+* Improved: NextGEN Gallery no longer loads CSS, JavaScript, or icon files on pages that contain no galleries, reducing page weight for visitors.
+* Improved: Gallery data is now stored in the WordPress object cache (Redis, Memcached) between page loads, significantly reducing database queries on high-traffic sites.
+* Improved: Display type lookups are cached, eliminating repeated database scans on every page load.
+
+= V4.2.2 - 05.19.2026 =
+* Added: Google Photos integration — import images directly from your Google Photos account into NextGEN galleries.
+* Added: Dropbox integration — import images from Dropbox into NextGEN galleries.
+* Fixed: Multisite subsite admins can no longer change the gallery base path (Path to galleries is now read-only for non-super-admins).
+* Fixed: Network super-admin toggle "Allow users to import image folders from the server" now correctly gates the Import Folder feature on subsites.
+
+= V4.2.1 - 05.15.2026 =
+* Fixed: Security hardening across the plugin to better protect site data and reinforce permission checks. We recommend updating.
+* Fixed: Edit Image crop tool now uses the correct aspect ratio from your gallery's thumbnail settings and no longer briefly flickers when opening crop mode.
+* Fixed: Additional PHP 8.2+ deprecation notices on admin screens.
+
+= V4.2.0 - 04.23.2026 =
+* Fixed: Publishing galleries and albums from the Imagely Lightroom plugin could fail with a generic processing error after a recent update
+* Fixed: Albums created by Imagely Lightroom could appear empty on the front end with missing thumbnails and broken links
+* Fixed: Newly created galleries and albums sometimes did not appear in the admin list until cached data expired
+* Fixed: Upload error messages from the Imagely Lightroom plugin now include the underlying reason when a publish fails
+* Fixed: Edited images now refresh immediately in the admin without needing a manual page reload
+* Fixed: PHP warnings and notices no longer appear on the Albums edit screen related to display types
+* Fixed: PHP 8.2+ deprecation notices on admin pages and when gallery models are loaded
+
+= V4.1.3 - 04.03.2026 =
+* Fixed: Imagely admin no longer hammered the REST API with repeated settings requests when browsing Galleries and Albums (column visibility auto-save).
+
+= V4.1.2 - 04.02.2026 =
+* Fixed:   Multisite subsite site admins see Path to galleries read-only in Imagely; main site and network super admins may still edit.
+* Fixed:   Multisite network "Enable import function" gates Import Folder for subsites (UI and REST).
+* Improved: Shared gallery path validation (REST and classic Image Options).
+
 = V4.1.1 - 03.13.2025 =
 * Fixed: PNG and WEBP watermarks no longer lose transparency when applied to images.
 * Fixed: Fatal error when using NextGen Gallery with older Pro add-on versions that reference the legacy C_NextGen_Settings class.

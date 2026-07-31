@@ -105,14 +105,32 @@ class Controller {
 		// phpcs:ignore WordPress.WP.EnqueuedResourceParameters.NotInFooter
 		\wp_enqueue_script( 'ngg_common' );
 
-		\wp_enqueue_style( 'ngg_video_play_overlay' );
-		\wp_enqueue_script( 'ngg_tiktok_video' );
+		// Resolve gallery once for video/TikTok gating — avoids duplicate DB lookups.
+		$gallery_mapper  = \Imagely\NGG\DataMappers\Gallery::get_instance();
+		$container_ids   = $displayed_gallery->container_ids;
+		$gallery         = null;
+		$external_source = null;
 
-		// Video: helper script for multi-platform video support.
-		\wp_enqueue_script( 'ngg_video_helper' );
+		if ( ! empty( $container_ids ) && is_array( $container_ids ) ) {
+			$gallery = $gallery_mapper->find( intval( $container_ids[0] ), true );
+			if ( $gallery && isset( $gallery->external_source ) && is_array( $gallery->external_source ) ) {
+				$external_source = $gallery->external_source;
+			}
+		}
 
-		// Video: lightbox styles for multi-platform video support.
-		\wp_enqueue_style( 'ngg_video_lightbox' );
+		// Unified external-source truth: [] (regular gallery) and null (unset) both mean no source.
+		$has_external = is_array( $external_source ) && ! empty( $external_source );
+
+		// Gate video assets: only load when gallery has non-empty external media source (or gallery is undetermined).
+		if ( null === $gallery || $has_external ) {
+			\wp_enqueue_style( 'ngg_video_play_overlay' );
+
+			// Video: helper script for multi-platform video support.
+			\wp_enqueue_script( 'ngg_video_helper' );
+
+			// Video: lightbox styles for multi-platform video support.
+			\wp_enqueue_style( 'ngg_video_lightbox' );
+		}
 
 		\wp_add_inline_script(
 			'ngg_common',
@@ -173,29 +191,26 @@ class Controller {
 			$tiktok_settings['global']['link_target'] = isset( $tiktok_defaults['tiktok_link_target'] ) ? (string) $tiktok_defaults['tiktok_link_target'] : '0';
 		}
 
-		$gallery_mapper = \Imagely\NGG\DataMappers\Gallery::get_instance();
-		$container_ids  = $displayed_gallery->container_ids;
+		if ( $has_external ) {
+			if ( isset( $external_source['type'] ) && 'tiktok' === $external_source['type'] ) {
+				\wp_enqueue_script( 'ngg_tiktok_video' );
+				// Flag TikTok gallery so the lightbox enqueue loop includes TikTok-specific assets.
+				LightboxManager::flag_tiktok_gallery();
+			}
 
-		if ( ! empty( $container_ids ) && is_array( $container_ids ) ) {
-			$first_gallery_id = intval( $container_ids[0] );
-			$gallery          = $gallery_mapper->find( $first_gallery_id, true );
+			$settings_mode = isset( $external_source['settings_mode'] ) ? $external_source['settings_mode'] : 'default';
 
-			if ( $gallery && isset( $gallery->external_source ) && is_array( $gallery->external_source ) ) {
-				$external_source = $gallery->external_source;
-				$settings_mode   = isset( $external_source['settings_mode'] ) ? $external_source['settings_mode'] : 'default';
+			if ( 'custom' === $settings_mode && null !== $gallery ) {
+				$gallery_id = (string) $gallery->gid;
 
-				if ( 'custom' === $settings_mode ) {
-					$gallery_id = (string) $gallery->gid;
+				$gallery_link = isset( $external_source['tiktok_link'] ) ? (string) $external_source['tiktok_link'] : $tiktok_settings['global']['link'];
 
-					$gallery_link = isset( $external_source['tiktok_link'] ) ? (string) $external_source['tiktok_link'] : $tiktok_settings['global']['link'];
+				$gallery_link_target = isset( $external_source['tiktok_link_target'] ) ? (string) $external_source['tiktok_link_target'] : $tiktok_settings['global']['link_target'];
 
-					$gallery_link_target = isset( $external_source['tiktok_link_target'] ) ? (string) $external_source['tiktok_link_target'] : $tiktok_settings['global']['link_target'];
-
-					$tiktok_settings[ 'gallery_' . $gallery_id ] = [
-						'link'        => $gallery_link,
-						'link_target' => $gallery_link_target,
-					];
-				}
+				$tiktok_settings[ 'gallery_' . $gallery_id ] = [
+					'link'        => $gallery_link,
+					'link_target' => $gallery_link_target,
+				];
 			}
 		}
 
@@ -224,27 +239,18 @@ class Controller {
 				'autoplay_videos'          => false,
 			],
 		];
-		// Get gallery-specific video settings if available
-		if ( ! empty( $container_ids ) && is_array( $container_ids ) ) {
-			$first_gallery_id = intval( $container_ids[0] );
-			$gallery          = $gallery_mapper->find( $first_gallery_id, true );
+		// Get gallery-specific video settings if available (uses already-resolved $external_source).
+		if ( $has_external && null !== $gallery && isset( $external_source['type'] ) && 'video' === $external_source['type'] ) {
+			$gallery_id                       = (string) $gallery->gid;
+			$gallery_show_video_controls      = isset( $external_source['show_video_controls'] ) ? (bool) $external_source['show_video_controls'] : $video_settings['default']['show_video_controls'];
+			$gallery_show_play_pause_controls = isset( $external_source['show_play_pause_controls'] ) ? (bool) $external_source['show_play_pause_controls'] : $video_settings['default']['show_play_pause_controls'];
+			$gallery_autoplay_videos          = isset( $external_source['autoplay_videos'] ) ? (bool) $external_source['autoplay_videos'] : $video_settings['default']['autoplay_videos'];
 
-			if ( $gallery && isset( $gallery->external_source ) && is_array( $gallery->external_source ) ) {
-				$external_source = $gallery->external_source;
-
-				if ( isset( $external_source['type'] ) && 'video' === $external_source['type'] ) {
-					$gallery_id                       = (string) $gallery->gid;
-					$gallery_show_video_controls      = isset( $external_source['show_video_controls'] ) ? (bool) $external_source['show_video_controls'] : $video_settings['default']['show_video_controls'];
-					$gallery_show_play_pause_controls = isset( $external_source['show_play_pause_controls'] ) ? (bool) $external_source['show_play_pause_controls'] : $video_settings['default']['show_play_pause_controls'];
-					$gallery_autoplay_videos          = isset( $external_source['autoplay_videos'] ) ? (bool) $external_source['autoplay_videos'] : $video_settings['default']['autoplay_videos'];
-
-					$video_settings[ 'gallery_' . $gallery_id ] = [
-						'show_video_controls'      => $gallery_show_video_controls,
-						'show_play_pause_controls' => $gallery_show_play_pause_controls,
-						'autoplay_videos'          => $gallery_autoplay_videos,
-					];
-				}
-			}
+			$video_settings[ 'gallery_' . $gallery_id ] = [
+				'show_video_controls'      => $gallery_show_video_controls,
+				'show_play_pause_controls' => $gallery_show_play_pause_controls,
+				'autoplay_videos'          => $gallery_autoplay_videos,
+			];
 		}
 
 		// Output video settings to JavaScript
@@ -746,11 +752,11 @@ class Controller {
 			}
 		}
 
-		// Early exit.
+		// Early exit — empty output; templates handle their own bottom clearfix when needed.
 		$return = [
 			'prev'   => '',
 			'next'   => '',
-			'output' => "<div class='ngg-clear'></div>",
+			'output' => '',
 		];
 
 		if ( $entities_per_page <= 0 || $number_of_entities <= 0 ) {

@@ -48,6 +48,11 @@ class Gallery extends TableDriver {
 	public $custom_post_name = 'mixin_nextgen_table_extras';
 
 	/**
+	 * @var string
+	 */
+	protected $object_cache_group = 'ngg_galleries';
+
+	/**
 	 * Constructor.
 	 *
 	 * Defines the database table structure and initializes the mapper.

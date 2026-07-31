@@ -45,14 +45,8 @@ if ( ! intval( $ajax_pagination ) ) {
 					! empty( $image->meta_data['imagely_tiktok_id'] ) &&
 					! empty( $image->meta_data['imagely_tiktok_show_play_button'] )
 				);
-				$style                   = isset( $image->style ) ? $image->style : null;
 				$column_class            = 'ngg-' . $number_of_columns . '-columns';
-
-				if ( isset( $image->hidden ) && $image->hidden ) {
-					$style = 'style="display: none;"';
-				} else {
-					$style = null;
-				}
+				$style                   = ( isset( $image->hidden ) && $image->hidden ) ? 'display: none;' : null;
 
 				$this->start_element( 'nextgen_gallery.image_panel', 'item', $image );
 				?>
@@ -64,7 +58,7 @@ if ( ! intval( $ajax_pagination ) ) {
 					"
 					<?php
 					if ( $style ) {
-										echo esc_attr( $style );}
+										echo ' style="' . esc_attr( $style ) . '"';}
 					?>
 >
 						<?php $this->start_element( 'nextgen_gallery.image', 'item', $image ); ?>
