@@ -218,16 +218,16 @@ function nggallery_sortorder( $galleryID = 0 ) {
 				<?php
 				if ( $picturelist ) {
 					foreach ( $picturelist as $picture ) {
+						// Assemble the url('...') value in a PHP string so no template
+						// whitespace can land inside it; a newline there is a CSS parse
+						// error and blanks the thumbnail.
+						$thumb_style = "background-image:url('" . \Imagely\NGG\Util\Router::esc_url( $picture->thumbURL ) . "')";
 						?>
 						<div class="imageBox"
 							id="pid-<?php print esc_attr( $picture->pid ); ?>">
 							<div class="imageBox_theImage"
-								style="background-image:url('
-								<?php
-								// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- \Imagely\NGG\Util\Router::esc_url() provides safe URL escaping
-								print \Imagely\NGG\Util\Router::esc_url( $picture->thumbURL );
-								?>
-								')">
+								<?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_url() applied to the URL above ?>
+								style="<?php print $thumb_style; ?>">
 							</div>
 							<div class="imageBox_label">
 								<span><?php print esc_html( stripslashes( $picture->alttext ?? '' ) ); ?></span>

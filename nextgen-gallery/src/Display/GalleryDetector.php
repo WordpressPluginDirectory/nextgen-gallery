@@ -14,6 +14,7 @@ namespace Imagely\NGG\Display;
  * - Widget areas (Gallery and Slideshow widgets)
  * - Block-based widget areas (WP 5.8+) and FSE template parts (wp_block, wp_template_part)
  * - Page builder postmeta (Elementor, Beaver Builder, Divi)
+ * - Legacy NGG 1.x "Attach to Post" placeholder (nextgen-attach_to_post / ngg_displayed_gallery)
  *
  * False positives are acceptable. False negatives (missing a real gallery) are not.
  *
@@ -31,6 +32,21 @@ class GalleryDetector {
 	 * @var bool|null
 	 */
 	private static $result = null;
+
+	/**
+	 * Returns the legacy NGG 1.x "Attach to Post" placeholder needles — the slug
+	 * (as an `<img>` src fragment) and the marker class NGG 1.x wrote onto the
+	 * placeholder. Shared by check_content(), check_block_templates(), and
+	 * check_term_description() so the list only needs updating in one place.
+	 *
+	 * @return string[]
+	 */
+	private static function attach_to_post_needles(): array {
+		return [
+			defined( 'NGG_ATTACH_TO_POST_SLUG' ) ? NGG_ATTACH_TO_POST_SLUG : 'nextgen-attach_to_post',
+			'ngg_displayed_gallery',
+		];
+	}
 
 	/**
 	 * Returns true if the current page contains any NextGEN Gallery content.
@@ -119,6 +135,13 @@ class GalleryDetector {
 				return true;
 			}
 
+			// Legacy NGG 1.x "Attach to Post" placeholder — no bracket shortcode present.
+			foreach ( self::attach_to_post_needles() as $needle ) {
+				if ( false !== strpos( $post->post_content, $needle ) ) {
+					return true;
+				}
+			}
+
 			foreach ( $ngg_blocks as $block_name ) {
 				if ( has_block( $block_name, $post ) ) {
 					return true;
@@ -186,19 +209,25 @@ class GalleryDetector {
 	 * relief — the queries only hit the DB once until the cache is cleared.
 	 */
 	private static function check_block_templates(): bool {
-		$cache_key   = 'ngg_gallery_in_block_templates';
+		// '[ngg' covers [ngg], [ngg_images], [nggallery] and any registered alias starting with [ngg.
+		$ngg_patterns = array_merge(
+			[
+				'imagely/main-block',
+				'imagely/nextgen-gallery',
+				'[ngg',
+			],
+			self::attach_to_post_needles()
+		);
+
+		// Cache key includes a hash of the pattern list so a stale cached result from
+		// before a needle-list change (like this PR's) can't survive on Redis/Memcached
+		// sites, where there is no per-request cache reset to fall back on.
+		$cache_key   = 'ngg_gallery_in_block_templates_' . md5( implode( '|', $ngg_patterns ) );
 		$cache_group = 'ngg_gallery_detector';
 		$cached      = wp_cache_get( $cache_key, $cache_group );
 		if ( false !== $cached ) {
 			return (bool) $cached;
 		}
-
-		// '[ngg' covers [ngg], [ngg_images], [nggallery] and any registered alias starting with [ngg.
-		$ngg_patterns = [
-			'imagely/main-block',
-			'imagely/nextgen-gallery',
-			'[ngg',
-		];
 
 		$found = false;
 		foreach ( [ 'wp_block', 'wp_template_part' ] as $post_type ) {
@@ -254,7 +283,12 @@ class GalleryDetector {
 			return true;
 		}
 
-		foreach ( [ 'imagely/main-block', 'imagely/nextgen-gallery' ] as $needle ) {
+		$needles = array_merge(
+			[ 'imagely/main-block', 'imagely/nextgen-gallery' ],
+			self::attach_to_post_needles()
+		);
+
+		foreach ( $needles as $needle ) {
 			if ( false !== strpos( $description, $needle ) ) {
 				return true;
 			}

@@ -205,7 +205,8 @@ function nggallery_picturelist( $controller ) {
 												<input type="submit"
 														class="button-primary"
 														name="scanfolder"
-														value="<?php esc_attr_e( 'Scan Folder for new images', 'nggallery' ); ?>"/>
+														value="<?php esc_attr_e( 'Scan Folder for new images', 'nggallery' ); ?>"
+														onclick="var b=this;setTimeout(function(){b.disabled=true;b.value='<?php echo esc_js( __( 'Scanning...', 'nggallery' ) ); ?>';},0);"/>
 											<?php } ?>
 											<input type="submit"
 													class="button-primary action ngg_save_gallery_changes"

@@ -43,7 +43,7 @@ if ( isset( $gallery ) && ! empty( $gallery->title ) ) {
 <?php $this->start_element( 'nextgen_gallery.gallery_container', 'container', $displayed_gallery ); ?>
 	<div class='ngg-imagebrowser default-view'
 		id='<?php print esc_attr( $anchor ); ?>'
-		data-nextgen-gallery-id="<?php echo esc_attr( $data_gallery_id ); ?>"
+		data-nextgen-gallery-id="<?php echo esc_attr( $displayed_gallery->id() ); ?>"
 		data-gallery-id="<?php echo esc_attr( $data_gallery_id ); ?>"
 		<?php if ( $data_gallery_name ) : ?>
 		data-gallery-name="<?php echo esc_attr( $data_gallery_name ); ?>"

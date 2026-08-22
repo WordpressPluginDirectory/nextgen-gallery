@@ -3390,13 +3390,9 @@ class C_Gallery_Storage extends C_Component
     }
     public function delete_gallery($gallery)
     {
-        $fs = C_Fs::get_instance();
-        $safe_dirs = [DIRECTORY_SEPARATOR, $fs->get_document_root('plugins'), $fs->get_document_root('plugins_mu'), $fs->get_document_root('templates'), $fs->get_document_root('stylesheets'), $fs->get_document_root('content'), $fs->get_document_root('galleries'), $fs->get_document_root()];
-        $abspath = $this->object->get_gallery_abspath($gallery);
-        // phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
-        if ($abspath && file_exists($abspath) && !in_array(stripslashes($abspath), $safe_dirs)) {
-            $this->object->_delete_gallery_directory($abspath);
-        }
+        // Delegate to the shared storage manager so both layers clear the gallery's own image files
+        // within the gallery boundary and only recursively remove a dedicated gallery folder.
+        \Imagely\NGG\DataStorage\Manager::get_instance()->delete_gallery($gallery);
     }
     /**
      * Deletes an image.
@@ -3414,25 +3410,64 @@ class C_Gallery_Storage extends C_Component
         }
         if ($image) {
             $image_id = $image->{$image->id_field};
-            do_action('ngg_delete_image', $image_id, $size);
+            $storage_manager = \Imagely\NGG\DataStorage\Manager::get_instance();
+            // Bound with this (legacy) layer's own gallery abspath so the boundary and the target
+            // path (also from this layer) are computed consistently. When it cannot be resolved
+            // (e.g. the gallery row is gone), skip the unlinks but still let the record be removed,
+            // rather than leaving an orphaned image permanently undeletable.
+            $gallery_abspath = $this->object->get_gallery_abspath($image->galleryid);
+            $bounded_deletable = !empty($gallery_abspath);
             // Delete only a particular image size
             if ($size) {
                 $abspath = $this->object->get_image_abspath($image, $size);
-                // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-                if ($abspath && @file_exists($abspath)) {
-                    @unlink($abspath);
-                    // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.PHP.NoSilencedErrors.Discouraged
+                // An unresolvable path (offloaded/orphaned image) is not a deletion target: skip the
+                // unlink but still update metadata. A path that resolves outside the gallery directory
+                // is refused, and only image-type files are ever removed.
+                if ($bounded_deletable && !empty($abspath)) {
+                    if (!$storage_manager->is_deletion_path_allowed($gallery_abspath, $abspath)) {
+                        return false;
+                    }
+                    do_action('ngg_delete_image', $image_id, $size);
+                    // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+                    if (@file_exists($abspath) && $storage_manager->is_removable_image_path($abspath)) {
+                        @unlink($abspath);
+                        // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.PHP.NoSilencedErrors.Discouraged
+                    }
+                } else {
+                    do_action('ngg_delete_image', $image_id, $size);
                 }
                 if (isset($image->meta_data) && isset($image->meta_data[$size])) {
                     unset($image->meta_data[$size]);
                     $this->object->_image_mapper->save($image);
                 }
             } else {
+                // Validate every resolvable path before deleting any, so an out-of-bounds size cannot
+                // cause a partial delete. Unresolvable sizes (offloaded/orphaned) are skipped rather
+                // than aborting the delete, so those images stay deletable.
+                $abspaths = [];
+                if ($bounded_deletable) {
+                    foreach ($this->object->get_image_sizes($image) as $named_size) {
+                        $image_abspath = $this->object->get_image_abspath($image, $named_size);
+                        if (empty($image_abspath)) {
+                            continue;
+                        }
+                        if (!$storage_manager->is_deletion_path_allowed($gallery_abspath, $image_abspath)) {
+                            return false;
+                        }
+                        if (!$storage_manager->is_removable_image_path($image_abspath)) {
+                            continue;
+                        }
+                        $abspaths[] = $image_abspath;
+                    }
+                }
+                do_action('ngg_delete_image', $image_id, $size);
                 // Delete all sizes of the image
-                foreach ($this->object->get_image_sizes($image) as $named_size) {
-                    $image_abspath = $this->object->get_image_abspath($image, $named_size);
-                    @unlink($image_abspath);
-                    // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.PHP.NoSilencedErrors.Discouraged
+                foreach ($abspaths as $image_abspath) {
+                    if (@file_exists($image_abspath)) {
+                        // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+                        @unlink($image_abspath);
+                        // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.PHP.NoSilencedErrors.Discouraged
+                    }
                 }
                 // Delete the entity
                 $this->object->_image_mapper->destroy($image);
@@ -3745,7 +3780,11 @@ class C_Gallery_Storage extends C_Component
             $extensions[] = '_backup';
             $ext_list = implode('|', $extensions);
             if (!preg_match("/({$ext_list})\$/i", $filename)) {
-                throw new E_UploadException(esc_html(__('Invalid image file. Acceptable formats: JPG, GIF, and PNG.', 'nggallery')));
+                throw new E_UploadException(esc_html(sprintf(
+                    /* translators: %s: comma-separated list of accepted image formats, e.g. "JPEG, JPG, PNG, GIF, WEBP". */
+                    __('Invalid image file. Acceptable formats: %s.', 'nggallery'),
+                    ngg_get_allowed_formats_label()
+                )));
             }
             // GD does not support animated WebP and will generate a fatal error when we try to create thumbnails or resize
             if ($this->is_animated_webp($image_abspath)) {
@@ -3911,7 +3950,11 @@ class C_Gallery_Storage extends C_Component
                     @unlink($filename);
                     // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.PHP.NoSilencedErrors.Discouraged
                 }
-                throw new E_UploadException(esc_html(__('Invalid image file. Acceptable formats: JPG, GIF, and PNG.', 'nggallery')));
+                throw new E_UploadException(esc_html(sprintf(
+                    /* translators: %s: comma-separated list of accepted image formats, e.g. "JPEG, JPG, PNG, GIF, WEBP". */
+                    __('Invalid image file. Acceptable formats: %s.', 'nggallery'),
+                    ngg_get_allowed_formats_label()
+                )));
             }
         } elseif ($data) {
             $retval = $this->object->upload_base64_image($gallery, $data, $filename);

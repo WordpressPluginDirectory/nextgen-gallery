@@ -110,7 +110,7 @@ class App {
 		];
 
 		foreach ( $sub_menus as $sub_menu ) {
-			$callback = ( "$menu-addons" === $sub_menu['menu_slug'] )
+			$callback              = ( "$menu-addons" === $sub_menu['menu_slug'] )
 				? [ $this, 'render_addons_page' ]
 				: [ $this, 'render_settings_page' ];
 			$this->hook_suffixes[] = add_submenu_page(
@@ -263,24 +263,24 @@ HTML;
 	 */
 	public static function get_imagely_app_data() {
 		$data = [
-			'nonce'                    => wp_create_nonce( 'imagely-admin' ),
-			'nonce_preview'            => wp_create_nonce( 'ngg_preview_shortcode' ),
-			'restURL'                  => esc_url_raw( rest_url() ),
-			'assetsURL'                => plugins_url( 'assets', NGG_PLUGIN_FILE ),
-			'home_url'                 => esc_url_raw( get_home_url() ),
-			'adminUrl'                 => esc_url_raw( admin_url() ),
-			'pluginPath'               => NGG_PLUGIN_DIR,
-			'plugin_url'               => esc_url_raw( trailingslashit( plugins_url( '', NGG_PLUGIN_FILE ) ) ),
-			'debug'                    => self::is_debug(),
-			'version'                  => class_exists( '\Imagely\NGGPro\Bootloader' ) && ! empty( \Imagely\NGGPro\Bootloader::$plugin_version )
+			'nonce'                     => wp_create_nonce( 'imagely-admin' ),
+			'nonce_preview'             => wp_create_nonce( 'ngg_preview_shortcode' ),
+			'restURL'                   => esc_url_raw( rest_url() ),
+			'assetsURL'                 => plugins_url( 'assets', NGG_PLUGIN_FILE ),
+			'home_url'                  => esc_url_raw( get_home_url() ),
+			'adminUrl'                  => esc_url_raw( admin_url() ),
+			'pluginPath'                => NGG_PLUGIN_DIR,
+			'plugin_url'                => esc_url_raw( trailingslashit( plugins_url( '', NGG_PLUGIN_FILE ) ) ),
+			'debug'                     => self::is_debug(),
+			'version'                   => class_exists( '\Imagely\NGGPro\Bootloader' ) && ! empty( \Imagely\NGGPro\Bootloader::$plugin_version )
 				? \Imagely\NGGPro\Bootloader::$plugin_version
 				: ( defined( 'NGG_PLUGIN_VERSION' ) ? NGG_PLUGIN_VERSION : '' ),
-			'utmVersion'               => self::get_utm_version(),
-			'proTypeInstalled'         => self::get_pro_type_installed(),
-			'licenseData'              => self::get_license_data(),
-			'enviraCdnConfig'          => self::get_cdn_config(),
-			'canAccessRolesSettings'   => self::can_access_roles_settings(),
-			'canAccessLicenseSettings' => self::can_access_license_settings(),
+			'utmVersion'                => self::get_utm_version(),
+			'proTypeInstalled'          => self::get_pro_type_installed(),
+			'licenseData'               => self::get_license_data(),
+			'enviraCdnConfig'           => self::get_cdn_config(),
+			'canAccessRolesSettings'    => self::can_access_roles_settings(),
+			'canAccessLicenseSettings'  => self::can_access_license_settings(),
 			// Integers survive wp_localize_script better than booleans. canEditGalleryPath is authoritative in JS.
 			'is_multisite'              => is_multisite() ? 1 : 0,
 			'is_main_site'              => ( ! is_multisite() || is_main_site() ) ? 1 : 0,
@@ -290,7 +290,7 @@ HTML;
 				! is_multisite()
 				|| (bool) \Imagely\NGG\Settings\GlobalSettings::get_instance()->get( 'wpmuImportFolder', false )
 			) ? 1 : 0,
-			'legacyTemplates'          => self::get_legacy_templates(),
+			'legacyTemplates'           => self::get_legacy_templates(),
 		];
 
 		return apply_filters( 'ngg_imagely_app_data', $data );

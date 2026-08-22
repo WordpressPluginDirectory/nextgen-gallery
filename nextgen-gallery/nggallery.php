@@ -2,14 +2,14 @@
 /**
  * Plugin Name: NextGEN Gallery
  * Description: The most popular gallery plugin for WordPress and one of the most popular plugins of all time with over 30 million downloads.
- * Version: 4.2.4
+ * Version: 4.4.0
  * Author: Imagely
  * Plugin URI: https://www.imagely.com/wordpress-gallery-plugin/nextgen-gallery/?utm_source=ngglite&utm_medium=pluginlist&utm_campaign=pluginuri
  * Author URI: https://www.imagely.com/?utm_source=ngglite&utm_medium=pluginlist&utm_campaign=authoruri
  * License: GPLv3
  * Text Domain: nggallery
  * Domain Path: /static/I18N/
- * Requires PHP: 7.0
+ * Requires PHP: 7.4
  *
  * @package Nextgen Gallery
  */
@@ -27,6 +27,7 @@ use Imagely\NGG\Admin\Shortcode_Preview;
 use Imagely\NGG\Admin\Onboarding_Wizard;
 use Imagely\NGG\Admin\App;
 use Imagely\NGG\Migrations\AddGalleryDates;
+use Imagely\NGG\Migrations\NormalizeDisplayTypeSettings;
 
 /**
  * Clean Exit Exception for graceful shutdown.
@@ -242,6 +243,14 @@ class C_NextGEN_Bootstrap {
 		// Allow Composer dependencies to be found and loaded.
 		require_once __DIR__ . DIRECTORY_SEPARATOR . 'vendor/autoload.php';
 
+		// Declare the POPE classes. Vendored in-tree rather than pulled from Composer; see
+		// src/Legacy/Pope/VENDORED.md. Loaded here, at the same point Composer's `files`
+		// autoload used to load it, because declaring these classes on every request is
+		// load-bearing for third-party integrations (and for get_declared_classes() checks
+		// in src/Util/ThirdPartyCompatibility.php). Bootstrapping the component registry is
+		// a separate, lazy step; see self::load_pope().
+		require_once __DIR__ . DIRECTORY_SEPARATOR . 'src/Legacy/Pope/lib/autoload.php';
+
 		// If another plugin or theme with the POPE library (such as the legacy Photocrati theme) is active during.
 		// the NextGEN activation process, it may produce warnings that can stop this plugin from activating.
 		if ( ! $this->is_activating() && ! $this->is_topscorer_request() ) {
@@ -265,6 +274,10 @@ class C_NextGEN_Bootstrap {
 				( new MenuNudge() )->hooks();
 				( new Ecommerce_Preview() )->hooks();
 				AddGalleryDates::migrate( false );
+				// Deferred to admin_init: the normalization needs every display-type controller
+				// registered (Pro registers its own on ngg_initialized, which fires below), so it
+				// cannot run inline here or it would skip all Pro display types.
+				add_action( 'admin_init', [ NormalizeDisplayTypeSettings::class, 'migrate' ] );
 			}
 			// TODO maybe move back to only admin after all is done.
 			( new App() )->hooks();
@@ -1236,7 +1249,7 @@ class C_NextGEN_Bootstrap {
 		define( 'NGG_PRODUCT_DIR', implode( DIRECTORY_SEPARATOR, [ rtrim( NGG_PLUGIN_DIR, '/\\' ), 'products' ] ) );
 		define( 'NGG_MODULE_DIR', implode( DIRECTORY_SEPARATOR, [ rtrim( NGG_PRODUCT_DIR, '/\\' ), 'photocrati_nextgen', 'modules' ] ) );
 		define( 'NGG_PLUGIN_STARTED_AT', microtime() );
-		define( 'NGG_PLUGIN_VERSION', '4.2.4' );
+		define( 'NGG_PLUGIN_VERSION', '4.4.0' );
 
 		$random_version = function_exists( 'wp_rand' ) ? wp_rand( 0, mt_getrandmax() ) : mt_rand( 0, mt_getrandmax() ); // phpcs:ignore WordPress.WP.AlternativeFunctions.rand_mt_rand
 		define( 'NGG_SCRIPT_VERSION', defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ? (string) $random_version : NGG_PLUGIN_VERSION );

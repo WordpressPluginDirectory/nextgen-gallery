@@ -64,6 +64,10 @@ class nggLoader {
 			if ( get_option( 'ngg_init_check' ) ) {
 				add_action( 'admin_notices', [ $this, 'output_init_check_error' ] );
 			}
+
+			if ( get_option( 'ngg_upgrade_error' ) ) {
+				add_action( 'admin_notices', [ $this, 'output_upgrade_error_notice' ] );
+			}
 		} else {
 			$settings = \Imagely\NGG\Settings\Settings::get_instance();
 			if ( $settings->get( 'useMediaRSS' ) ) {
@@ -74,6 +78,17 @@ class nggLoader {
 
 	public function output_init_check_error() {
 		printf( "<div id='message' class='error'><p><strong>%s</strong></p></div>", esc_html( get_option( 'ngg_init_check' ) ) );
+	}
+
+	/**
+	 * Displays a failure recorded during the upgrade routines (a stale lock that couldn't be
+	 * reclaimed, a dedupe step that couldn't run). Kept in its own option, separate from
+	 * ngg_init_check, because Installer::set_role_caps() unconditionally clears that option on
+	 * every successful run -- which happens in the same request these failures are recorded in
+	 * -- and would wipe the notice before this admin_notices hook ever runs.
+	 */
+	public function output_upgrade_error_notice() {
+		printf( "<div id='message' class='error'><p><strong>%s</strong></p></div>", esc_html( get_option( 'ngg_upgrade_error' ) ) );
 	}
 
 	public function define_tables() {

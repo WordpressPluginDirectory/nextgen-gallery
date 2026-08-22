@@ -1053,6 +1053,79 @@ class ImageREST {
 		$updated     = [];
 		$errors      = [];
 
+		// Fast path: sort-only payloads (id + sortorder) skip the costly per-image save_entity()
+		// and update the column directly. Avoids the timeout that left large galleries half-sorted.
+		$sortorder_only = ! empty( $images_data );
+		foreach ( $images_data as $image_data ) {
+			$data       = (array) $image_data;
+			$extra_keys = array_diff( array_keys( $data ), [ 'id', 'sortorder' ] );
+			if ( ! empty( $extra_keys ) || ! isset( $data['id'], $data['sortorder'] ) ) {
+				$sortorder_only = false;
+				break;
+			}
+		}
+
+		if ( $sortorder_only ) {
+			$db    = $mapper->_wpdb();
+			$table = $mapper->get_table_name();
+			$now   = time();
+
+			foreach ( $images_data as $image_data ) {
+				$pid = absint( $image_data['id'] ?? 0 );
+				if ( ! $pid ) {
+					continue;
+				}
+
+				$can_manage = self::current_user_can_manage_image( $pid );
+				if ( is_wp_error( $can_manage ) || ! $can_manage ) {
+					// translators: %d is the image ID.
+					$errors[] = sprintf( __( 'Permission denied for image ID %d', 'nggallery' ), $pid );
+					continue;
+				}
+
+				$sortorder = absint( $image_data['sortorder'] );
+
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$result = $db->update(
+					$table,
+					[
+						'sortorder'  => $sortorder,
+						'updated_at' => $now,
+					],
+					[ 'pid' => $pid ]
+				);
+
+				// $wpdb->update() returns false on error, or the (possibly 0) number of affected rows on success.
+				if ( false === $result ) {
+					// translators: %d is the image ID.
+					$errors[] = sprintf( __( 'Failed to update sort order for image ID %d', 'nggallery' ), $pid );
+					continue;
+				}
+
+				$updated[] = [
+					'pid'       => $pid,
+					'sortorder' => $sortorder,
+				];
+			}
+
+			// Flush once for the whole batch, not per image.
+			Transient::flush( 'displayed_gallery_rendering' );
+
+			return new WP_REST_Response(
+				[
+					'updated' => $updated,
+					'errors'  => $errors,
+					'message' => sprintf(
+						// translators: %1$d is the number of updated images, %2$d is the number of errors.
+						__( 'Updated %1$d images with %2$d errors', 'nggallery' ),
+						count( $updated ),
+						count( $errors )
+					),
+				],
+				count( $errors ) > 0 ? 207 : 200
+			);
+		}
+
 		foreach ( $images_data as $image_data ) {
 			$can_manage = self::current_user_can_manage_image( (int) $image_data['id'] );
 			if ( is_wp_error( $can_manage ) || ! $can_manage ) {

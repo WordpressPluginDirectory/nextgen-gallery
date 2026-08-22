@@ -230,6 +230,8 @@ public static function current_user_can( $capability ) {
 			'NextGEN Edit gallery options' => 'NextGEN Manage gallery',
 			'NextGEN Add new gallery'      => 'NextGEN Manage gallery',
 			'NextGEN Import image folder'  => 'NextGEN Upload images',
+			'NextGEN Add/Delete album'     => 'NextGEN Edit album',
+			'NextGEN Edit album settings'  => 'NextGEN Edit album',
 		];
 
 		$effective_cap = isset( $ngg_cap_alias_map[ $capability ] ) ? $ngg_cap_alias_map[ $capability ] : $capability;

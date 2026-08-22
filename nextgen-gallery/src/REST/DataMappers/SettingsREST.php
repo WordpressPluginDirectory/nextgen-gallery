@@ -415,6 +415,18 @@ class SettingsREST {
 
 		try {
 			$settings->save();
+
+			/**
+			 * Fires after settings saved via the REST API have been persisted.
+			 *
+			 * Lets addons (e.g. NextGEN Pro payment gateways) react to a settings change made through the
+			 * React admin, mirroring behavior they already trigger on the legacy admin form save.
+			 *
+			 * @param array    $new_settings The settings keys/values that were sent in this request.
+			 * @param Settings $settings     The settings instance, already saved.
+			 */
+			do_action( 'ngg_settings_updated', $new_settings, $settings );
+
 			return new WP_REST_Response( $settings->to_array(), 200 );
 		} catch ( \Exception $e ) {
 			return new WP_Error(

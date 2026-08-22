@@ -28,14 +28,5 @@
             'reference' => NULL,
             'dev_requirement' => false,
         ),
-        'imagely/pope-framework' => array(
-            'pretty_version' => 'v0.19',
-            'version' => '0.19.0.0',
-            'type' => 'library',
-            'install_path' => __DIR__ . '/../imagely/pope-framework',
-            'aliases' => array(),
-            'reference' => '78e0b0c59b68c44b86e688f447a5a80e78e44b4f',
-            'dev_requirement' => false,
-        ),
     ),
 );

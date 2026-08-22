@@ -261,40 +261,122 @@ class SharedController extends ParentController {
 	}
 
 	/**
-	 * Finds the parent album of a gallery.
+	 * Finds the parent album of a gallery, returning the ancestor chain.
 	 *
-	 * @param int   $gallery_id Gallery ID.
-	 * @param array $sortorder Array of children belonging to an album.
+	 * Accepts a gallery id (int) or an album key ( 'a{id}' ) and deliberately does not
+	 * normalise it to int: casting 'a5' to 0 was the depth-2 breadcrumb bug. (Separate from
+	 * album_id_in_sortorder(), an album-id-only containment check that does normalise.)
+	 *
+	 * @param int|string $gallery_id Gallery ID (int) or album key ( 'a{id}' ).
+	 * @param array      $sortorder  Array of children belonging to an album.
+	 * @param array      $visited    Album keys already walked; guards against cycles.
 	 *
 	 * @return array
 	 */
-	public function find_gallery_parent( int $gallery_id, array $sortorder ): array {
+	public function find_gallery_parent( $gallery_id, array $sortorder, array &$visited = [] ): array {
 		$map   = AlbumMapper::get_instance();
 		$found = [];
 
 		foreach ( $sortorder as $order ) {
-			if ( strpos( $order, 'a' ) === 0 ) {
-				$album_id = ltrim( $order, 'a' );
-				if ( empty( $this->breadcrumb_cache[ $order ] ) ) {
-					$album                            = $map->find( $album_id );
-					$this->breadcrumb_cache[ $order ] = $album;
-					// Using strict comparison here breaks the breadcrumb generation.
-					//phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
-					if ( is_array( $album->sortorder ) && in_array( $gallery_id, $album->sortorder ) ) {
-						$found[] = $album;
-						break;
-					} elseif ( is_array( $album->sortorder ) ) {
-						$found = $this->find_gallery_parent( (int) $gallery_id, $album->sortorder );
-						if ( $found ) {
-							$found[] = $album;
-							break;
-						}
-					}
+			if ( strpos( $order, 'a' ) !== 0 ) {
+				continue;
+			}
+
+			// Cycle guard.
+			if ( in_array( $order, $visited, true ) ) {
+				continue;
+			}
+			$visited[] = $order;
+
+			$album_id = ltrim( $order, 'a' );
+
+			// Cache only the DB lookup; the sortorder is traversed even on a cache hit, and
+			// array_key_exists() memoises a missing album as null instead of re-querying it.
+			if ( ! array_key_exists( $order, $this->breadcrumb_cache ) ) {
+				$this->breadcrumb_cache[ $order ] = $map->find( $album_id );
+			}
+			$album = $this->breadcrumb_cache[ $order ];
+
+			if ( ! $album ) {
+				// Album row is gone; skip it and keep rendering the rest of the trail.
+				continue;
+			}
+
+			// Using strict comparison here breaks the breadcrumb generation.
+			//phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
+			if ( is_array( $album->sortorder ) && in_array( $gallery_id, $album->sortorder ) ) {
+				$found[] = $album;
+				break;
+			} elseif ( is_array( $album->sortorder ) ) {
+				$found = $this->find_gallery_parent( $gallery_id, $album->sortorder, $visited );
+				if ( $found ) {
+					$found[] = $album;
+					break;
 				}
 			}
 		}
 
 		return $found;
+	}
+
+	/**
+	 * Determines whether $album_id belongs to the hierarchy of any album in $albums.
+	 *
+	 * Prevents multiple album shortcodes on the same page from all reacting to the
+	 * same ?album= URL parameter. A shortcode should only navigate into a sub-album
+	 * that actually lives within its own container album hierarchy
+	 * (see awesomemotive/nextgen-gallery-pro#627).
+	 *
+	 * @param int         $album_id Numeric album ID requested via the URL.
+	 * @param AlbumMapper $mapper   Album data mapper.
+	 * @param array       $albums   The shortcode's own container album entities.
+	 *
+	 * @return bool
+	 */
+	protected function is_album_in_hierarchy( int $album_id, $mapper, array $albums ): bool {
+		$visited = [];
+		foreach ( $albums as $album ) {
+			if ( $this->album_id_in_sortorder( $album_id, $album, $mapper, $visited ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Recursively checks whether 'a{$album_id}' appears in $album->sortorder or in
+	 * any nested sub-album's sortorder. Album IDs already walked are tracked in
+	 * $visited so cyclic or self-referential album trees cannot cause infinite
+	 * recursion, without imposing an arbitrary nesting-depth limit.
+	 *
+	 * @param int         $album_id Numeric album ID to look for.
+	 * @param object      $album    Album entity exposing a sortorder array.
+	 * @param AlbumMapper $mapper   Album data mapper.
+	 * @param array       $visited  Album IDs already visited (passed by reference).
+	 *
+	 * @return bool
+	 */
+	protected function album_id_in_sortorder( int $album_id, $album, $mapper, array &$visited ): bool {
+		if ( empty( $album->sortorder ) || ! is_array( $album->sortorder ) ) {
+			return false;
+		}
+		if ( in_array( 'a' . $album_id, $album->sortorder, true ) ) {
+			return true;
+		}
+		foreach ( $album->sortorder as $item ) {
+			if ( is_string( $item ) && strpos( $item, 'a' ) === 0 && is_numeric( substr( $item, 1 ) ) ) {
+				$sub_id = (int) substr( $item, 1 );
+				if ( isset( $visited[ $sub_id ] ) ) {
+					continue;
+				}
+				$visited[ $sub_id ] = true;
+				$sub_album          = $mapper->find( $sub_id );
+				if ( $sub_album && $this->album_id_in_sortorder( $album_id, $sub_album, $mapper, $visited ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -336,7 +418,7 @@ class SharedController extends ParentController {
 			foreach ( $entities as $entity ) {
 
 				if ( ! empty( $entity->sortorder ) ) {
-					$found = $this->find_gallery_parent( (int) $gallery_id, $entity->sortorder );
+					$found = $this->find_gallery_parent( $gallery_id, $entity->sortorder );
 				}
 
 				if ( ! empty( $found ) ) {
@@ -509,7 +591,7 @@ class SharedController extends ParentController {
 			];
 
 			if ( $result && ! empty( $result->is_ecommerce_enabled ) ) {
-				$gallery_params['is_ecommerce_enabled']                    = 1;
+				$gallery_params['is_ecommerce_enabled']                      = 1;
 				$gallery_params['original_settings']['is_ecommerce_enabled'] = 1;
 			}
 
@@ -753,16 +835,25 @@ class SharedController extends ParentController {
 			// Preserve the original album list before altering the DisplayedGallery.
 			$original_albums = $displayed_gallery->get_albums();
 
-			if ( in_array( $album, $displayed_gallery->container_ids, true ) ) {
-				$viewing_original_album = true;
+			// Only navigate into the requested album when it belongs to this shortcode's
+			// own album hierarchy. Without this check every album shortcode on the page
+			// reacts to the same ?album= parameter and renders identical content
+			// (awesomemotive/nextgen-gallery-pro#627). Non-numeric values ('all', '0', or
+			// an unresolved slug) are left to the existing reset/fall-through behaviour below.
+			$album_numeric_id = is_numeric( $album_sub ) ? (int) $album_sub : 0;
+
+			if ( ! $album_numeric_id || $this->is_album_in_hierarchy( $album_numeric_id, AlbumMapper::get_instance(), $original_albums ) ) {
+				if ( in_array( $album, $displayed_gallery->container_ids, true ) ) {
+					$viewing_original_album = true;
+				}
+
+				$displayed_gallery->entity_ids    = [];
+				$displayed_gallery->sortorder     = [];
+				$displayed_gallery->container_ids = ( '0' === $album || 'all' === $album ) ? [] : [ $album ];
+
+				$displayed_gallery->display_settings['original_album_id']       = 'a' . $album_sub;
+				$displayed_gallery->display_settings['original_album_entities'] = array_merge( $original_albums, $displayed_gallery->get_albums() );
 			}
-
-			$displayed_gallery->entity_ids    = [];
-			$displayed_gallery->sortorder     = [];
-			$displayed_gallery->container_ids = ( '0' === $album || 'all' === $album ) ? [] : [ $album ];
-
-			$displayed_gallery->display_settings['original_album_id']       = 'a' . $album_sub;
-			$displayed_gallery->display_settings['original_album_entities'] = array_merge( $original_albums, $displayed_gallery->get_albums() );
 		}
 
 		// Get the albums

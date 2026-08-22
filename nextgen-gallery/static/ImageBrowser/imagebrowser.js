@@ -5,7 +5,7 @@ document.addEventListener(
             .forEach(function (gallery) {
         new NggPaginatedGallery(
             gallery.dataset.nextgenGalleryId,
-            '.ngg-imagebrowser'
+            '#' + gallery.id
         );
     });
 });

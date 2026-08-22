@@ -68,6 +68,15 @@ class Manager {
 	protected static $image_abspath_cache = [];
 
 	/**
+	 * Canonicalized deletion-boundary directories (gallery location anchors and protected
+	 * directories), keyed by blog id. These are install constants for the current site, so they are
+	 * resolved once instead of on every per-size deletion check.
+	 *
+	 * @var array
+	 */
+	protected static $deletion_dirs_cache = [];
+
+	/**
 	 * Image URL cache.
 	 *
 	 * @var array
@@ -702,6 +711,13 @@ class Manager {
 				if ( null === $possible_quality || 0 === $possible_quality ) {
 					$filesize         = filesize( $image_path );
 					$possible_quality = ( 101 - ( ( $width * $height ) * 3 ) / $filesize );
+					$possible_quality = (int) $possible_quality;
+
+					// An estimate at or below zero isn't a meaningful quality signal (e.g. a HiDPI
+					// clone with far more pixels than the source filesize implies) — treat it as
+					// unusable and keep the caller-supplied quality instead of degrading the image
+					// to near-blank output. See #302.
+					$possible_quality = ( $possible_quality <= 0 ) ? null : min( 100, $possible_quality );
 				}
 
 				if ( $possible_quality !== null && $possible_quality < $quality ) {
@@ -1330,7 +1346,10 @@ class Manager {
 						$bh     = ! empty( $params['height'] ) ? (int) $params['height'] : 0;
 
 						if ( ! empty( $params['crop'] ) && $bw && $bh ) {
-							$retval = [ 'width' => $bw, 'height' => $bh ];
+							$retval = [
+								'width'  => $bw,
+								'height' => $bh,
+							];
 						} elseif ( $fw && $fh ) {
 							$ratio = $fw / $fh;
 							if ( $bw && $bh ) {
@@ -1350,7 +1369,10 @@ class Manager {
 								$w = $fw;
 								$h = $fh;
 							}
-							$retval = [ 'width' => $w, 'height' => $h ];
+							$retval = [
+								'width'  => $w,
+								'height' => $h,
+							];
 						}
 					}
 				}
@@ -1864,22 +1886,40 @@ class Manager {
 	}
 
 	public function delete_gallery( $gallery ) {
-		$fs        = Filesystem::get_instance();
-		$safe_dirs = [
-			DIRECTORY_SEPARATOR,
-			$fs->get_document_root( 'plugins' ),
-			$fs->get_document_root( 'plugins_mu' ),
-			$fs->get_document_root( 'templates' ),
-			$fs->get_document_root( 'stylesheets' ),
-			$fs->get_document_root( 'content' ),
-			$fs->get_document_root( 'galleries' ),
-			$fs->get_document_root(),
-		];
-
 		$abspath = $this->get_gallery_abspath( $gallery );
+		if ( empty( $abspath ) ) {
+			return;
+		}
 
-		// phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
-		if ( $abspath && file_exists( $abspath ) && ! in_array( stripslashes( $abspath ), $safe_dirs ) ) {
+		// Delete the gallery's own image files, each bounded to the gallery directory, rather than
+		// recursively removing the directory tree. This clears the gallery's images (including a
+		// "keep original location" import that lives under the uploads base) without touching
+		// unrelated media that may share the directory, so a tampered gallery path cannot wipe the
+		// media library.
+		$gallery_id = is_numeric( $gallery )
+			? (int) $gallery
+			: ( is_object( $gallery ) && isset( $gallery->gid ) ? $gallery->gid : null );
+
+		if ( $gallery_id ) {
+			foreach ( $this->image_mapper->find_all_for_gallery( $gallery_id ) as $image ) {
+				foreach ( $this->get_image_sizes( $image ) as $named_size ) {
+					$image_abspath = $this->get_image_abspath( $image, $named_size );
+					if ( empty( $image_abspath )
+						|| ! $this->is_image_path_within_gallery( $image, $image_abspath )
+						|| ! $this->is_removable_image_path( $image_abspath ) ) {
+						continue;
+					}
+					if ( @file_exists( $image_abspath ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+						@unlink( $image_abspath ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.PHP.NoSilencedErrors.Discouraged
+					}
+				}
+			}
+		}
+
+		// Only recursively remove the directory tree itself when it is a dedicated NextGEN gallery
+		// folder (never a shared or "keep original location" import location), to clean up leftover
+		// empty sub-directories and backups.
+		if ( @file_exists( $abspath ) && $this->is_gallery_directory_deletable( $abspath ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 			$this->delete_gallery_directory( $abspath );
 		}
 	}
@@ -1901,24 +1941,64 @@ class Manager {
 
 		if ( $image ) {
 			$image_id = $image->{$image->id_field};
-			do_action( 'ngg_delete_image', $image_id, $size );
+
+			// The gallery directory that bounds every unlink for this image. When it cannot be
+			// resolved (e.g. the gallery row is gone), there is nothing to bound the file to: skip the
+			// unlinks but still let the record be removed, rather than leaving an orphaned image
+			// permanently undeletable.
+			$gallery_abspath   = $this->get_gallery_abspath( $image->galleryid );
+			$bounded_deletable = ! empty( $gallery_abspath );
 
 			// Delete only a particular image size.
 			if ( $size ) {
 				$abspath = $this->get_image_abspath( $image, $size );
-				if ( $abspath && @file_exists( $abspath ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-					@unlink( $abspath ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.PHP.NoSilencedErrors.Discouraged
+
+				// An unresolvable path (e.g. an offloaded or orphaned image with no local file) is
+				// not a deletion target: skip the unlink but still update the metadata. A path that
+				// resolves outside the gallery directory is refused.
+				if ( $bounded_deletable && ! empty( $abspath ) ) {
+					if ( ! $this->is_deletion_path_allowed( $gallery_abspath, $abspath ) ) {
+						return false;
+					}
+					do_action( 'ngg_delete_image', $image_id, $size );
+					if ( @file_exists( $abspath ) && $this->is_removable_image_path( $abspath ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+						@unlink( $abspath ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.PHP.NoSilencedErrors.Discouraged
+					}
+				} else {
+					do_action( 'ngg_delete_image', $image_id, $size );
 				}
 				if ( isset( $image->meta_data ) && isset( $image->meta_data[ $size ] ) ) {
 					unset( $image->meta_data[ $size ] );
 					$this->image_mapper->save( $image );
 				}
 			} else {
-				// Delete all sizes of the image.
-				foreach ( $this->get_image_sizes( $image ) as $named_size ) {
+				// Validate every resolvable path before deleting any, so an out-of-bounds size
+				// cannot cause a partial delete. Unresolvable sizes (offloaded/orphaned) are skipped
+				// rather than aborting the delete, so those images stay deletable.
+				$abspaths = [];
+				if ( $bounded_deletable ) {
+					foreach ( $this->get_image_sizes( $image ) as $named_size ) {
+						$image_abspath = $this->get_image_abspath( $image, $named_size );
+						if ( empty( $image_abspath ) ) {
+							continue;
+						}
+						if ( ! $this->is_deletion_path_allowed( $gallery_abspath, $image_abspath ) ) {
+							return false;
+						}
+						if ( ! $this->is_removable_image_path( $image_abspath ) ) {
+							continue;
+						}
+						$abspaths[] = $image_abspath;
+					}
+				}
 
-					$image_abspath = $this->get_image_abspath( $image, $named_size );
-					@unlink( $image_abspath ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.PHP.NoSilencedErrors.Discouraged
+				do_action( 'ngg_delete_image', $image_id, $size );
+
+				// Delete all sizes of the image.
+				foreach ( $abspaths as $image_abspath ) {
+					if ( @file_exists( $image_abspath ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+						@unlink( $image_abspath ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.PHP.NoSilencedErrors.Discouraged
+					}
 				}
 
 				// Delete the entity.
@@ -1928,6 +2008,335 @@ class Manager {
 		}
 
 		return $retval;
+	}
+
+	/**
+	 * Whether the given path is safe to delete for the given image.
+	 *
+	 * @param Image  $image   The image entity whose gallery bounds the deletion.
+	 * @param string $abspath The absolute path that is about to be deleted.
+	 * @return bool
+	 */
+	protected function is_image_path_within_gallery( $image, $abspath ) {
+		return $this->is_deletion_path_allowed( $this->get_gallery_abspath( $image->galleryid ), $abspath );
+	}
+
+	/**
+	 * Whether a file is safe to delete: it must resolve inside the given gallery directory, and
+	 * that gallery directory must itself be a legitimate gallery location.
+	 *
+	 * Filenames and gallery paths are both writable through some endpoints, so either may contain
+	 * "../". The gallery is required to sit under one of the configured gallery bases (the NextGEN
+	 * gallery base or the WordPress uploads base) and not be a shared/system directory, so a
+	 * tampered gallery path (e.g. "." which resolves to the WordPress root) cannot move the boundary
+	 * to let files such as wp-config.php count as in-gallery. Those bases are canonicalized the same
+	 * way the gallery is, so an install whose media tree is reached through a symlink resolves
+	 * consistently instead of being excluded. realpath() canonicalization resolves both traversal
+	 * sequences and symlinks.
+	 *
+	 * @param string $gallery_abspath Gallery directory that bounds the deletion.
+	 * @param string $abspath         File that is about to be deleted.
+	 * @return bool
+	 */
+	public function is_deletion_path_allowed( $gallery_abspath, $abspath ) {
+		if ( empty( $abspath ) || ! is_string( $abspath ) || empty( $gallery_abspath ) ) {
+			return false;
+		}
+
+		$gallery = $this->canonicalize_path( $gallery_abspath );
+
+		if ( '' === $gallery ) {
+			return false;
+		}
+
+		// The gallery directory must be a legitimate gallery location, never one of the shared
+		// bases itself or another shared/system directory.
+		if ( ! $this->is_within_gallery_locations( $gallery ) || $this->is_protected_directory( $gallery ) ) {
+			return false;
+		}
+
+		// The target must resolve inside the gallery directory.
+		$target = $this->canonicalize_path( $abspath );
+
+		return '' !== $target && $this->path_contains( $gallery, $target );
+	}
+
+	/**
+	 * Whether a gallery directory is safe to recursively delete.
+	 *
+	 * A gallery's filesystem path is writable through XML-RPC/REST, so it could be pointed at a
+	 * shared directory. Only a directory strictly inside the dedicated NextGEN gallery base may be
+	 * recursively removed. Anything in the wider uploads tree (e.g. "wp-content/uploads/2026") is
+	 * refused, so a tampered path cannot trigger a recursive delete of the media library. A gallery
+	 * kept at its original import location under the uploads base is not removed here (its shared
+	 * folder may hold unrelated media); its image files are deleted per image instead.
+	 *
+	 * @param string $abspath Absolute path to the gallery directory that would be deleted.
+	 * @return bool
+	 */
+	public function is_gallery_directory_deletable( $abspath ) {
+		if ( empty( $abspath ) || ! is_string( $abspath ) ) {
+			return false;
+		}
+
+		$dir  = $this->canonicalize_path( $abspath );
+		$base = $this->canonicalize_path( $this->get_upload_abspath() );
+
+		if ( '' === $dir || '' === $base ) {
+			return false;
+		}
+
+		// Must be strictly inside the NextGEN gallery base, never the base itself.
+		if ( $dir === rtrim( $base, '/' ) || ! $this->path_contains( $base, $dir ) ) {
+			return false;
+		}
+
+		// Never recursively delete a shared/known directory.
+		return ! $this->is_protected_directory( $dir );
+	}
+
+	/**
+	 * Whether a file path is an image-type file that NextGEN may delete. Mirrors the extension
+	 * allowlist used by delete_gallery_directory() (the configured image types plus their "_backup"
+	 * companions), so per-image unlinks never remove a non-image file (an export, backup or document)
+	 * that happens to share a directory a gallery points at.
+	 *
+	 * @param string $abspath Absolute file path.
+	 * @return bool
+	 */
+	public function is_removable_image_path( $abspath ) {
+		$removable = apply_filters( 'ngg_allowed_file_types', NGG_DEFAULT_ALLOWED_FILE_TYPES );
+		foreach ( $removable as $extension ) {
+			$removable[] = $extension . '_backup';
+		}
+		$extension = strtolower( pathinfo( (string) $abspath, PATHINFO_EXTENSION ) );
+		return in_array( $extension, $removable, true );
+	}
+
+	/**
+	 * Resolves and caches the deletion-boundary directories for the current blog: the gallery
+	 * location anchors (the dedicated NextGEN gallery base and the WordPress uploads base, the
+	 * latter covering "keep original location" imports) and the shared/protected directories. All
+	 * are install constants for the site, so they are canonicalized once per blog rather than on
+	 * every per-size deletion check. Every entry is canonicalized so a symlinked media tree (NFS,
+	 * bind mount, symlinked wp-content) resolves the same way a gallery path does.
+	 *
+	 * @return array{anchors: string[], protected: string[]}
+	 */
+	private function get_deletion_dirs() {
+		$blog = function_exists( 'get_current_blog_id' ) ? get_current_blog_id() : 0;
+		if ( isset( self::$deletion_dirs_cache[ $blog ] ) ) {
+			return self::$deletion_dirs_cache[ $blog ];
+		}
+
+		$fs        = Filesystem::get_instance();
+		$wp_upload = wp_get_upload_dir();
+		$uploads   = ! empty( $wp_upload['basedir'] ) ? $this->canonicalize_path( $wp_upload['basedir'] ) : '';
+		$ngg_base  = $this->canonicalize_path( $this->get_upload_abspath() );
+		$root      = $this->canonicalize_path( $this->get_gallery_root() );
+		$abspath   = wp_normalize_path( ABSPATH );
+
+		$drop_empty = static function ( $dir ) {
+			return '' !== $dir;
+		};
+
+		// A gallery may legitimately live anywhere under the storage root (galleries created under a
+		// previous Gallery Path value, or on an NGG_GALLERY_ROOT_TYPE='content' install, are still
+		// under it) or under the uploads base (keep-original-location imports, and symlinked media
+		// trees whose realpath leaves the storage root). Anchoring on the storage root rather than the
+		// current, mutable gallerypath option keeps the boundary correct across those configurations.
+		$anchors = array_values( array_filter( [ $root, $ngg_base, $uploads ], $drop_empty ) );
+
+		$protected = array_values(
+			array_filter(
+				[
+					$root,
+					$this->canonicalize_path( $fs->get_document_root( 'plugins' ) ),
+					$this->canonicalize_path( $fs->get_document_root( 'plugins_mu' ) ),
+					$this->canonicalize_path( $fs->get_document_root( 'templates' ) ),
+					$this->canonicalize_path( $fs->get_document_root( 'stylesheets' ) ),
+					$this->canonicalize_path( $fs->get_document_root( 'content' ) ),
+					$this->canonicalize_path( $fs->get_document_root() ),
+					$this->canonicalize_path( $fs->join_paths( $abspath, 'wp-admin' ) ),
+					$this->canonicalize_path( $fs->join_paths( $abspath, 'wp-includes' ) ),
+					$this->canonicalize_path( get_theme_root() ),
+					$ngg_base,
+					$uploads,
+				],
+				$drop_empty
+			)
+		);
+
+		$dirs = [
+			'anchors'   => $anchors,
+			'protected' => $protected,
+		];
+
+		// A degenerate anchor list (every candidate failed to resolve, e.g. a transient realpath()
+		// failure) would refuse every deletion. Do not cache it, so it cannot outlive the condition
+		// that produced it or be mistaken for a real "out of bounds" result.
+		if ( ! empty( $anchors ) ) {
+			self::$deletion_dirs_cache[ $blog ] = $dirs;
+		}
+
+		return $dirs;
+	}
+
+	/**
+	 * Whether $dir sits strictly inside one of the legitimate gallery location anchors (and is not
+	 * one of the anchors itself).
+	 *
+	 * @param string $dir Canonicalized directory.
+	 * @return bool
+	 */
+	private function is_within_gallery_locations( $dir ) {
+		foreach ( $this->get_deletion_dirs()['anchors'] as $anchor ) {
+			if ( $dir !== rtrim( $anchor, '/' ) && $this->path_contains( $anchor, $dir ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether $dir is one of the shared/system directories that must never be treated as a
+	 * gallery: the storage root, the WordPress and NextGEN upload bases, the plugin/mu-plugin/theme
+	 * roots, wp-content and the document root.
+	 *
+	 * @param string $dir Canonicalized directory.
+	 * @return bool
+	 */
+	private function is_protected_directory( $dir ) {
+		if ( '' === $dir ) {
+			return true;
+		}
+
+		foreach ( $this->get_deletion_dirs()['protected'] as $protected_dir ) {
+			if ( $dir === rtrim( $protected_dir, '/' ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Canonicalizes a path by realpath()-ing its deepest existing ancestor, then re-appending any
+	 * missing tail (e.g. a thumbnail that was never generated) so the check does not require the
+	 * file itself to exist.
+	 *
+	 * The existence walk runs on the raw path, so realpath() resolves symlinks in the existing
+	 * portion before comparison — a symlinked directory followed by ".." cannot slip through. Any
+	 * ".." left in the non-existent tail is collapsed lexically afterwards.
+	 *
+	 * @param string $path A filesystem path.
+	 * @return string The canonicalized forward-slash path, or '' when it cannot be resolved.
+	 */
+	protected function canonicalize_path( $path ) {
+		$path = wp_normalize_path( (string) $path );
+		if ( '' === $path ) {
+			return '';
+		}
+
+		// Fail closed for any path that is not absolute. A relative or driveless path would otherwise
+		// be resolved by realpath() against the process working directory, producing a misleading
+		// absolute path. Every caller passes an absolute path (a leading "/", including UNC "//", or a
+		// drive letter on Windows).
+		if ( '/' !== $path[0] && ! preg_match( '#^[A-Za-z]:/#', $path ) ) {
+			return '';
+		}
+
+		$tail    = [];
+		$current = $path;
+
+		// Walk up to the deepest existing component so realpath() can resolve it (symlinks included).
+		while ( '' !== $current && ! @file_exists( $current ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$slash = strrpos( $current, '/' );
+			if ( false === $slash ) {
+				$tail[]  = $current;
+				$current = '';
+				break;
+			}
+			$tail[]  = substr( $current, $slash + 1 );
+			$current = substr( $current, 0, $slash );
+			if ( '' === $current ) {
+				// Reached the filesystem root: stop so realpath() below resolves it (or fails
+				// closed). Without this, a root that @file_exists() reports missing (e.g. an
+				// open_basedir that excludes "/") would loop forever.
+				$current = '/';
+				break;
+			}
+		}
+
+		if ( '' === $current ) {
+			return '';
+		}
+
+		$real = @realpath( $current ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( false === $real ) {
+			return '';
+		}
+
+		$real = wp_normalize_path( $real );
+		if ( $tail ) {
+			$real = rtrim( $real, '/' ) . '/' . implode( '/', array_reverse( $tail ) );
+		}
+
+		// Collapse any ".." that survived in the non-existent tail.
+		return $this->collapse_path_traversal( $real );
+	}
+
+	/**
+	 * Whether $path equals, or is contained within, the directory $base.
+	 *
+	 * @param string $base Base directory (canonicalized).
+	 * @param string $path Path to test (canonicalized).
+	 * @return bool
+	 */
+	protected function path_contains( $base, $path ) {
+		$base = rtrim( $base, '/' );
+
+		// A base that reduces to the filesystem root ("/") is too wide to be a boundary: every
+		// absolute path would match. Treat it as no containment.
+		if ( '' === $base ) {
+			return false;
+		}
+
+		return $path === $base || strpos( $path, $base . '/' ) === 0;
+	}
+
+	/**
+	 * Collapses "." and ".." segments in a "/" normalized path.
+	 *
+	 * Works on "/" (the separator wp_normalize_path() always produces) instead of the platform
+	 * DIRECTORY_SEPARATOR, so traversal is resolved on Windows too.
+	 *
+	 * @param string $path A wp_normalize_path()'d path.
+	 * @return string
+	 */
+	protected function collapse_path_traversal( $path ) {
+		// wp_normalize_path() preserves a leading "//" for UNC/network-share paths; keep it so the
+		// collapsed form still matches paths compared against it (and a UNC path stays distinct from
+		// its single-slash counterpart).
+		$is_unc      = ( 0 === strpos( $path, '//' ) );
+		$is_absolute = ( '' !== $path && '/' === $path[0] );
+		$segments    = [];
+
+		foreach ( explode( '/', $path ) as $segment ) {
+			if ( '' === $segment || '.' === $segment ) {
+				continue;
+			}
+			if ( '..' === $segment ) {
+				array_pop( $segments );
+				continue;
+			}
+			$segments[] = $segment;
+		}
+
+		$prefix = $is_unc ? '//' : ( $is_absolute ? '/' : '' );
+
+		return $prefix . implode( '/', $segments );
 	}
 
 	/**
@@ -2350,8 +2759,15 @@ class Manager {
 			$ext_list     = implode( '|', $extensions );
 
 			if ( ! preg_match( "/({$ext_list})\$/i", $filename ) ) {
-				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Translated string is safe
-				throw new \E_UploadException( __( 'Invalid image file. Acceptable formats: JPG, GIF, and PNG.', 'nggallery' ) );
+				throw new \E_UploadException(
+					esc_html(
+						sprintf(
+							/* translators: %s: comma-separated list of accepted image formats, e.g. "JPEG, JPG, PNG, GIF, WEBP". */
+							__( 'Invalid image file. Acceptable formats: %s.', 'nggallery' ),
+							ngg_get_allowed_formats_label()
+						)
+					)
+				);
 			}
 			// GD does not support animated WebP and will generate a fatal error when we try to create thumbnails or resize.
 			if ( $this->is_animated_webp( $image_abspath ) ) {
@@ -3079,8 +3495,15 @@ class Manager {
 					$filename = sanitize_text_field( wp_unslash( $_FILES['file']['tmp_name'] ) );
 					@unlink( $filename ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.PHP.NoSilencedErrors.Discouraged
 				}
-				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Translated string is safe
-				throw new \E_UploadException( __( 'Invalid image file. Acceptable formats: JPG, GIF, and PNG.', 'nggallery' ) );
+				throw new \E_UploadException(
+					esc_html(
+						sprintf(
+							/* translators: %s: comma-separated list of accepted image formats, e.g. "JPEG, JPG, PNG, GIF, WEBP". */
+							__( 'Invalid image file. Acceptable formats: %s.', 'nggallery' ),
+							ngg_get_allowed_formats_label()
+						)
+					)
+				);
 			}
 		} elseif ( $data ) {
 			$retval = $this->upload_base64_image(

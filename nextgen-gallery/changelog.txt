@@ -1,6 +1,43 @@
 NextGEN Gallery
 by Imagely
 
+= V4.3.1 - 08.18.2026 =
+* Fixed: Thumbnails are visible again on the legacy Sort Gallery screen (Manage Galleries → open a gallery → Sort images), so images can be reordered visually.
+* Fixed: The "Add new album" field and the Add, Delete and Edit Album controls are back on the legacy Manage Albums screen for administrators, after disappearing in 4.2.1.
+* Fixed: "Scan Folder for new images" no longer creates duplicate images when it is clicked more than once, and duplicates left behind by this bug are cleaned up when you update. The button now also disables itself while a scan is running.
+* Fixed: Album breadcrumbs now appear for sub-albums nested two or more levels deep, instead of vanishing past the first sub-album level.
+* Fixed: The Selected Items list in Edit Album now shows each gallery's current image count instead of a stale "0 images".
+* Fixed: Uploading an image your server cannot process now reports the real reason and lists the formats the server actually supports, instead of a misleading WebP message. Server-side upload errors also surface in the admin instead of failing silently.
+* Fixed: Stage aspect ratio choices such as 3:2, 4:3 and 16:9 no longer revert to "1:1 (Square)" when display settings are saved. Requires NextGEN Pro.
+* Fixed: The admin order detail view now shows the current name of a renamed pricelist item, matching the customer's confirmation page. Requires NextGEN Pro.
+* Fixed: The legacy NextGEN Gallery block now behaves correctly inside the block editor's iframed canvas — the gallery picker modal, its loading spinner and its close button all work — keeping it compatible with upcoming WordPress releases.
+* Changed: NextGEN Gallery now requires PHP 7.4 or newer and will not activate on older versions, matching the requirement already listed for the plugin.
+
+= V4.3.0 - 08.10.2026 =
+* Added: Instagram integration admin screens — connect an Instagram account and configure how its images build a gallery (caption, link, image size and caching), plus a control to clear cached Instagram data. Importing from Instagram requires NextGEN Pro.
+* Added: Display Triggers setting is now available in Pro Tile gallery settings, so share, comment and cart icons can be enabled on Tile galleries. Requires NextGEN Pro.
+* Fixed: Security hardening on image and gallery deletion to better protect your site's files. We recommend updating.
+* Fixed: Clicking a gallery source for an add-on that isn't activated yet no longer causes a white screen.
+* Fixed: Alt text, titles and descriptions are no longer mangled on save or display — words such as "description", "manuscript", "medieval" and "retrieval" are preserved.
+* Fixed: The "Set NGG Image as Featured" gallery picker no longer hangs or times out on sites with thousands of galleries.
+* Fixed: Image EXIF/IPTC metadata stored in non-UTF-8 encodings is now converted correctly instead of appearing garbled.
+* Fixed: Galleries you create, edit or delete now appear immediately on sites using a persistent object cache (Redis, Memcached) instead of after a delay of up to 30 minutes.
+* Fixed: The album preview in Edit Album no longer shows a rendering error for albums migrated from older NextGEN versions.
+* Fixed: "Sort Images" (by filename, date, ID or invert) now produces a consistent, correct order on large galleries instead of a random one.
+* Fixed: Per-gallery display settings are no longer silently discarded when the matching global display settings are changed.
+* Fixed: Simple ImageBrowser navigation now works when more than one gallery appears on the same page.
+* Fixed: Galleries inserted with the legacy "Attach to Post" tool are detected again, so gallery assets load on those pages — including NextGEN Pro's lightbox, cart and image protection.
+* Fixed: Thumbnail generation no longer fails with a fatal error on PHP 8.4+ for large, heavily compressed JPEGs.
+* Fixed: A JavaScript error on every wp-admin page of a fresh install with no galleries, which broke the admin menu tooltip and other admin scripts.
+* Fixed: The album editor's "Add Items to Album" modal no longer shows "No galleries available to add" on sites with 50+ galleries, and loading an album's galleries is much faster.
+* Fixed: Alt Text on metadata import now uses the IPTC accessibility alt-text field when present, instead of falling back to the image filename.
+* Fixed: Multiple album shortcodes on one page now navigate independently — opening a sub-album no longer changes every album on the page, and breadcrumbs stay within their own section.
+* Fixed: A fatal PHP 8 error when saving theme page settings with some third-party themes (for example Gantry 5).
+* Fixed: The nextgen_load_assets_on_page filter again forces NextGEN's core frontend scripts on pages where the gallery is rendered by a third party.
+* Fixed: Saving settings from the new admin now notifies add-ons of the change, so NextGEN Pro can re-register its Stripe checkout webhook when the API keys are saved. The eCommerce Payment Setup screen also warns when Stripe is enabled without a registered webhook. Requires NextGEN Pro.
+* Changed: The POPE framework library is now bundled with the plugin instead of being pulled in as an external dependency — no functional change, but installs and updates no longer depend on an outside package source.
+* Changed: Gallery folder paths are validated more strictly when saved — a shared directory such as wp-content/uploads can no longer be set as a gallery's path.
+
 = V4.2.4 - 07.30.2026 =
 * Fixed: Security hardening on gallery tag pages to better protect your site. We recommend updating.
 * Fixed: Gallery tag pages for tags containing non-Latin characters (Cyrillic, Greek, CJK, and similar) now resolve to the correct tag instead of showing an empty page.

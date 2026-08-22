@@ -75,20 +75,50 @@ class AttachToPost extends \WP_REST_Controller {
 		$storage      = StorageManager::get_instance();
 		$image_mapper = ImageMapper::get_instance();
 
-		// Enhance each gallery with preview image URL and image count
-		foreach ( $galleries as &$gallery ) {
-			// Add image count - use ImageMapper's find_all_for_gallery method
-			$images               = $image_mapper->find_all_for_gallery( $gallery->gid, false );
-			$gallery->image_count = is_array( $images ) ? count( $images ) : 0;
+		if ( ! is_array( $galleries ) ) {
+			$galleries = [];
+		}
 
-			// Add preview image URL if preview pic exists
-			if ( $gallery->previewpic && $gallery->previewpic > 0 ) {
-				$preview_image = $image_mapper->find( $gallery->previewpic );
-				if ( $preview_image ) {
-					$gallery->previewpic_image_url = $storage->get_image_url( $preview_image, 'thumb', true );
-				}
+		$pic_table = $image_mapper->get_table_name();
+
+		// Image counts for all galleries in one query (avoids an N+1 per-gallery loop).
+		// Routed through the mapper's run_query() so it uses the same DB/cache layer.
+		$counts     = [];
+		$count_rows = $image_mapper->run_query( "SELECT galleryid, COUNT(*) AS cnt FROM `{$pic_table}` GROUP BY galleryid", false, true );
+		foreach ( (array) $count_rows as $row ) {
+			$counts[ (int) $row->galleryid ] = (int) $row->cnt;
+		}
+
+		// Preview image records for all galleries in one IN() query.
+		$preview_ids = array_unique(
+			array_filter(
+				array_map(
+					static function ( $gallery ) {
+						return (int) $gallery->previewpic;
+					},
+					$galleries
+				)
+			)
+		);
+		$preview_map = [];
+		if ( $preview_ids ) {
+			$preview_rows = $image_mapper->select()->where( [ 'pid IN %s', $preview_ids ] )->run_query( false, true );
+			foreach ( (array) $preview_rows as $preview_image ) {
+				$preview_map[ (int) $preview_image->pid ] = $preview_image;
 			}
 		}
+
+		foreach ( $galleries as &$gallery ) {
+			$gallery->image_count = $counts[ (int) $gallery->gid ] ?? 0;
+
+			if ( $gallery->previewpic && isset( $preview_map[ (int) $gallery->previewpic ] ) ) {
+				$gallery->previewpic_image_url = $storage->get_image_url( $preview_map[ (int) $gallery->previewpic ], 'thumb', true );
+			}
+
+			// Drop the heavy serialized blob the picker never reads; keeps the payload small.
+			unset( $gallery->display_type_settings );
+		}
+		unset( $gallery );
 
 		return new \WP_REST_Response(
 			[

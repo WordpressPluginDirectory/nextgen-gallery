@@ -157,8 +157,12 @@ class DisplayTypeREST {
 			if ( is_bool( $value ) ) {
 				$sanitized[ $key ] = (bool) $value;
 			} elseif ( is_numeric( $value ) ) {
-				// Handle both integers and floats
-				$sanitized[ $key ] = is_float( $value ) ? (float) $value : (int) $value;
+				// Keep decimals intact; only cast to int when there is no fractional part.
+				// JSON delivers numeric settings as strings, so an is_float() check would
+				// truncate values like "1.5" (aspect ratio) down to 1.
+				$sanitized[ $key ] = ( (float) $value === (float) (int) $value )
+					? (int) $value
+					: (float) $value;
 			} else {
 				// Treat as string and sanitize
 				$sanitized[ $key ] = wp_kses_post( $value );

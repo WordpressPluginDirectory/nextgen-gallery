@@ -5,6 +5,13 @@
     margin-bottom: 30px;
 }
 
+/* Contain the floated nav buttons (clearfix) without clipping focus outlines. */
+.ngg-imagebrowser::after {
+    content: "";
+    display: table;
+    clear: both;
+}
+
 .ngg-imagebrowser h3 {
     text-align: center;
 }

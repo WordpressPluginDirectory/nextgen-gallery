@@ -92,6 +92,24 @@ class GalleryREST {
 						'description'       => 'Search galleries by title',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
+					'exclude_ids'       => [
+						'type'              => 'array',
+						'description'       => 'Gallery IDs to exclude from results (e.g. galleries already in an album).',
+						'items'             => [
+							'type' => 'integer',
+						],
+						'sanitize_callback' => function ( $value ) {
+							if ( ! is_array( $value ) ) {
+								return [];
+							}
+							return array_values( array_unique( array_filter( array_map( 'absint', $value ) ) ) );
+						},
+					],
+					'exclude_album_id'  => [
+						'type'              => 'integer',
+						'description'       => 'Exclude the galleries already contained in this album. Bounded alternative to exclude_ids for large albums (the server derives the IDs from the album\'s sortorder).',
+						'sanitize_callback' => 'absint',
+					],
 				],
 			]
 		);
@@ -349,6 +367,18 @@ class GalleryREST {
 		global $wpdb;
 		$mapper = GalleryMapper::get_instance();
 
+		// When exclude_album_id is supplied, derive the galleries already in that album server-side and
+		// fold them into exclude_ids. This keeps the request URL bounded for large albums (one integer
+		// instead of one exclude_ids[] entry per gallery, which can overflow web-server request-line limits).
+		$exclude_album_id = (int) $request->get_param( 'exclude_album_id' );
+		if ( $exclude_album_id > 0 ) {
+			$existing_excludes = (array) $request->get_param( 'exclude_ids' );
+			$request->set_param(
+				'exclude_ids',
+				array_values( array_unique( array_merge( $existing_excludes, self::get_album_gallery_ids( $exclude_album_id ) ) ) )
+			);
+		}
+
 		// Get and validate order parameters.
 		// Security fix (SQLi): whitelist orderby against the same enum declared in register_rest_route() args for this endpoint; unknown input falls back to 'gid' to block ORDER BY injection even if the REST enum check is bypassed.
 		$allowed_orderby   = [ 'gid', 'title', 'author', 'is_ecommerce_enabled', 'is_private', 'date_created', 'date_modified' ];
@@ -391,6 +421,7 @@ class GalleryREST {
 			$request->get_param( 'ecommerce_filter' ),
 			$request->get_param( 'is_private_filter' ),
 			$request->get_param( 'search' ),
+			$request->get_param( 'exclude_ids' ),
 		];
 		$cache_key     = Transient::create_key( 'rest_galleries', $cache_params );
 		$cached_result = Transient::fetch( $cache_key, false );
@@ -431,9 +462,19 @@ class GalleryREST {
 
 		$galleries = $query->run_query();
 
+		// Batch the per-gallery image counts into a single grouped query to avoid an N+1
+		// (previously one COUNT(*) per gallery inside prepare_gallery_list_item_for_response — the
+		// hot spot behind the large-install timeouts in #726 / #792).
+		$page_gallery_ids = [];
+		foreach ( $galleries as $gallery ) {
+			$page_gallery_ids[] = (int) $gallery->{$gallery->id_field};
+		}
+		$image_counts = self::get_image_counts_for_galleries( $page_gallery_ids );
+
 		$response = [];
 		foreach ( $galleries as $gallery ) {
-			$response[] = self::prepare_gallery_list_item_for_response( $gallery );
+			$gallery_id = (int) $gallery->{$gallery->id_field};
+			$response[] = self::prepare_gallery_list_item_for_response( $gallery, $image_counts[ $gallery_id ] ?? 0 );
 		}
 
 		$total_pages = ceil( $total_items / $per_page );
@@ -499,11 +540,99 @@ class GalleryREST {
 			$params[]        = $search_term_wildcard;
 		}
 
+		// Exclude specific gallery IDs (e.g. galleries already in an album) server-side so
+		// pagination and the per_page budget are only consumed by genuinely available galleries.
+		$exclude_ids = $request->get_param( 'exclude_ids' );
+		if ( is_array( $exclude_ids ) ) {
+			$exclude_ids = array_values( array_unique( array_filter( array_map( 'absint', $exclude_ids ) ) ) );
+			if ( ! empty( $exclude_ids ) ) {
+				$placeholders = implode( ',', array_fill( 0, count( $exclude_ids ), '%d' ) );
+
+				// Query builder understands the "NOT IN %s" array-bind form.
+				$conditions[] = [ 'gid NOT IN %s', $exclude_ids ];
+				// COUNT query uses individual %d placeholders bound to the same IDs.
+				$where_clauses[] = "gid NOT IN ( {$placeholders} )";
+				foreach ( $exclude_ids as $exclude_id ) {
+					$params[] = $exclude_id;
+				}
+			}
+		}
+
 		return [
 			'conditions'    => $conditions,
 			'where_clauses' => $where_clauses,
 			'params'        => $params,
 		];
+	}
+
+	/**
+	 * Get the gallery IDs contained in an album's sortorder.
+	 *
+	 * Album sortorder mixes gallery IDs (integers) and nested-album references (strings like "a12");
+	 * only the integer entries are galleries.
+	 *
+	 * @param int $album_id The album ID.
+	 * @return int[] Gallery IDs contained in the album.
+	 */
+	private static function get_album_gallery_ids( $album_id ) {
+		$album_id = (int) $album_id;
+		if ( $album_id <= 0 ) {
+			return [];
+		}
+
+		$album = \Imagely\NGG\DataMappers\Album::get_instance()->find( $album_id );
+		if ( ! $album || empty( $album->sortorder ) ) {
+			return [];
+		}
+
+		$sortorder = is_array( $album->sortorder ) ? $album->sortorder : json_decode( $album->sortorder, true );
+		if ( ! is_array( $sortorder ) ) {
+			return [];
+		}
+
+		$gallery_ids = [];
+		foreach ( $sortorder as $entry ) {
+			// Integer entries are galleries; string entries like "a12" are nested albums, skip those.
+			if ( is_int( $entry ) || ( is_string( $entry ) && ctype_digit( $entry ) ) ) {
+				$gallery_ids[] = (int) $entry;
+			}
+		}
+
+		return array_values( array_unique( array_filter( $gallery_ids ) ) );
+	}
+
+	/**
+	 * Get image counts for multiple galleries in a single grouped query.
+	 *
+	 * Shared by the list (get_galleries) and batch (get_galleries_batch) endpoints so neither runs a
+	 * per-gallery COUNT(*) (the N+1 behind the large-install timeouts in #726 / #792).
+	 *
+	 * @param int[] $gallery_ids Gallery IDs.
+	 * @return array<int,int> Map of gallery ID => image count. Galleries with no images are absent
+	 *                        from the map (callers should default to 0).
+	 */
+	private static function get_image_counts_for_galleries( array $gallery_ids ) {
+		global $wpdb;
+
+		$counts        = [];
+		$sanitized_ids = array_values( array_unique( array_filter( array_map( 'absint', $gallery_ids ) ) ) );
+		if ( empty( $sanitized_ids ) ) {
+			return $counts;
+		}
+
+		$placeholders = implode( ',', array_fill( 0, count( $sanitized_ids ), '%d' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared
+		$count_rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT galleryid, COUNT(*) AS total FROM {$wpdb->nggpictures} WHERE galleryid IN ( {$placeholders} ) GROUP BY galleryid",
+				$sanitized_ids
+			)
+		);
+		foreach ( (array) $count_rows as $count_row ) {
+			$counts[ (int) $count_row->galleryid ] = (int) $count_row->total;
+		}
+
+		return $counts;
 	}
 
 	/**
@@ -572,6 +701,11 @@ class GalleryREST {
 		$current_user_id = get_current_user_id();
 		$can_edit_all    = Security::is_allowed( 'nextgen_edit_gallery_unowned' );
 
+		// Batch the per-gallery image counts into a single grouped query. Previously each gallery
+		// triggered its own COUNT(*) in prepare_gallery_for_response — an N+1 that made albums with
+		// 50+ galleries fire 50+ COUNT queries on every editor load.
+		$counts = self::get_image_counts_for_galleries( $ids );
+
 		$galleries = [];
 		foreach ( $ids as $id ) {
 			$gallery = $mapper->find( $id );
@@ -589,7 +723,8 @@ class GalleryREST {
 				continue;
 			}
 
-			$galleries[] = self::prepare_gallery_for_response( $gallery );
+			$gallery_id  = (int) $gallery->{$gallery->id_field};
+			$galleries[] = self::prepare_gallery_for_response( $gallery, $counts[ $gallery_id ] ?? 0 );
 		}
 
 		return new WP_REST_Response( $galleries, 200 );
@@ -689,7 +824,20 @@ class GalleryREST {
 			$gallery->display_type = $request->get_param( 'display_type' );
 		}
 		if ( $request->has_param( 'display_type_settings' ) ) {
-			$gallery->display_type_settings = $request->get_param( 'display_type_settings' );
+			$incoming = (array) $request->get_param( 'display_type_settings' );
+			$edited   = $request->has_param( 'display_type' )
+				? $request->get_param( 'display_type' )
+				: $gallery->display_type;
+			$stored   = is_array( $gallery->display_type_settings ) ? $gallery->display_type_settings : [];
+
+			// Persist only the display type the user edited; the payload may carry every type, so key
+			// off display_type. The fallback merges onto stored settings so other customized types survive.
+			if ( '' !== (string) $edited && array_key_exists( $edited, $incoming ) ) {
+				$stored[ $edited ]              = $incoming[ $edited ];
+				$gallery->display_type_settings = $stored;
+			} else {
+				$gallery->display_type_settings = array_merge( $stored, $incoming );
+			}
 		}
 		if ( $request->has_param( 'external_source' ) ) {
 			$gallery->external_source = $request->get_param( 'external_source' );
@@ -859,6 +1007,21 @@ class GalleryREST {
 				continue;
 			}
 
+			// Re-check existence right before insert: the $old_images_list snapshot above can be
+			// stale by the time this loop runs (e.g. a concurrent scan request importing the same
+			// file), so array_diff() alone isn't a reliable guard against duplicate imports.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$already_imported = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT `pid` FROM {$wpdb->nggpictures} WHERE `galleryid` = %d AND `filename` = %s LIMIT 1",
+					$id,
+					$filename
+				)
+			);
+			if ( $already_imported ) {
+				continue;
+			}
+
 			try {
 				// Create a new image entity.
 				$image             = new \Imagely\NGG\DataTypes\Image();
@@ -959,16 +1122,23 @@ class GalleryREST {
 	 *     @type string $displayType         Gallery display type.
 	 * }
 	 */
-	private static function prepare_gallery_list_item_for_response( $gallery ) {
+	private static function prepare_gallery_list_item_for_response( $gallery, $precomputed_count = null ) {
 		global $wpdb;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
-		$gallery->counter = $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->nggpictures} WHERE galleryid = %d",
-				$gallery->{$gallery->id_field}
-			)
-		);
+		if ( null !== $precomputed_count ) {
+			// Caller supplied the image count (get_galleries batches the counts into a single grouped
+			// query to avoid an N+1 of COUNT(*) queries). Cast to string to match the wpdb::get_var()
+			// path below and the frontend `count: string` contract.
+			$gallery->counter = (string) (int) $precomputed_count;
+		} else {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$gallery->counter = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COUNT(*) FROM {$wpdb->nggpictures} WHERE galleryid = %d",
+					$gallery->{$gallery->id_field}
+				)
+			);
+		}
 
 		if ( $gallery->previewpic ) {
 			$storage   = \Imagely\NGG\DataStorage\Manager::get_instance();
@@ -1002,7 +1172,7 @@ class GalleryREST {
 	 * @param Gallery $gallery The gallery object.
 	 * @return array
 	 */
-	private static function prepare_gallery_for_response( $gallery ) {
+	private static function prepare_gallery_for_response( $gallery, $precomputed_count = null ) {
 		global $wpdb;
 
 		if ( $gallery->previewpic ) {
@@ -1010,13 +1180,20 @@ class GalleryREST {
 			$thumbnail = $storage->get_image_url( $gallery->previewpic, 'thumb' );
 		}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
-		$gallery->counter = $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->nggpictures} WHERE galleryid = %d",
-				$gallery->{$gallery->id_field}
-			)
-		);
+		if ( null !== $precomputed_count ) {
+			// Caller supplied the image count (e.g. get_galleries_batch batches the counts into a
+			// single grouped query to avoid an N+1 of COUNT(*) queries when an album loads many galleries).
+			// Cast to string to match the wpdb::get_var() path below and the frontend `counter: string` contract.
+			$gallery->counter = (string) (int) $precomputed_count;
+		} else {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$gallery->counter = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COUNT(*) FROM {$wpdb->nggpictures} WHERE galleryid = %d",
+					$gallery->{$gallery->id_field}
+				)
+			);
+		}
 
 		return [
 			'gid'                   => $gallery->gid,
@@ -1034,7 +1211,8 @@ class GalleryREST {
 			'counter'               => $gallery->counter ?? 0,
 			'previewpic_url'        => $thumbnail ?? '',
 			'display_type'          => $gallery->display_type ?? 'photocrati-nextgen_basic_thumbnails',
-			'display_type_settings' => $gallery->display_type_settings ?? [],
+			// Fill uncustomized display types with current global values for the admin UI (not persisted).
+			'display_type_settings' => GalleryMapper::get_instance()->with_display_type_defaults( $gallery->display_type_settings ?? [] ),
 			'external_source'       => $gallery->external_source ?? [],
 			'is_private'            => (bool) ( $gallery->is_private ?? false ),
 			'is_ecommerce_enabled'  => $gallery->is_ecommerce_enabled ?? false,
@@ -1121,7 +1299,7 @@ class GalleryREST {
 		$per_type_fields = [
 			'_account'          => 'string',
 			'_number'           => 'int',
-			'_link'             => 'url',
+			'_link'             => 'int',
 			'_link_target'      => 'int_bool',
 			'_image_size'       => 'string',
 			'_caption'          => 'int_bool',

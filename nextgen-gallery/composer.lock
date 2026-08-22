@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "353c17f19fe96031b13292c442365cd7",
+    "content-hash": "c5bd2eb46858d0355771576fd1680fd0",
     "packages": [
         {
             "name": "ezyang/htmlpurifier",
@@ -66,42 +66,6 @@
                 "source": "https://github.com/ezyang/htmlpurifier/tree/v4.17.0"
             },
             "time": "2023-11-17T15:01:25+00:00"
-        },
-        {
-            "name": "imagely/pope-framework",
-            "version": "v0.19",
-            "source": {
-                "type": "git",
-                "url": "git@github.com:awesomemotive/pope-framework.git",
-                "reference": "78e0b0c59b68c44b86e688f447a5a80e78e44b4f"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/awesomemotive/pope-framework/zipball/78e0b0c59b68c44b86e688f447a5a80e78e44b4f",
-                "reference": "78e0b0c59b68c44b86e688f447a5a80e78e44b4f",
-                "shasum": ""
-            },
-            "type": "library",
-            "autoload": {
-                "files": [
-                    "./lib/autoload.php"
-                ]
-            },
-            "license": [
-                "GPL-2.0-only"
-            ],
-            "authors": [
-                {
-                    "name": "Imagely",
-                    "email": "support@imagely.com"
-                }
-            ],
-            "description": "A component framework inspired by Zope 3. Pope is \"PHP's Zope\".",
-            "support": {
-                "source": "https://github.com/awesomemotive/pope-framework/tree/v0.19",
-                "issues": "https://github.com/awesomemotive/pope-framework/issues"
-            },
-            "time": "2023-12-20T13:22:52+00:00"
         }
     ],
     "packages-dev": [

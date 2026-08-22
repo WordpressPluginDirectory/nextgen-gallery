@@ -49,8 +49,10 @@
 
                         if (response) {
                             var html = $(response);
+                            // Match the container whether it parsed as a top-level node or a descendant.
+                            var candidates = html.filter(self.container_name).add(html.find(self.container_name));
                             var replacement = false;
-                            html.find(self.container_name).each(function() {
+                            candidates.each(function() {
                                 if (replacement) {
                                     return true;
                                 }
@@ -112,7 +114,7 @@
         }
 
         // We maintain a count of all the current AJAX actions initiated
-        if (typeof(window['ngg_ajax_operation_count']) == 'undefined') {
+        if (typeof(window['ngg_ajax_operaton_count']) == 'undefined') {
             window['ngg_ajax_operaton_count'] = 0;
         }
     };

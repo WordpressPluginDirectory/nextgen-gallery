@@ -483,17 +483,21 @@ class MetaData {
 
 			// --------- Some values from the XMP format--------- //
 			$xmp_tags = [
-				'xap:CreateDate'            => 'created_timestamp',
-				'xap:ModifyDate'            => 'last_modfied',
-				'xap:CreatorTool'           => 'tool',
-				'dc:format'                 => 'format',
-				'dc:title'                  => 'title',
-				'dc:creator'                => 'author',
-				'dc:subject'                => 'keywords',
-				'dc:description'            => 'caption',
-				'photoshop:AuthorsPosition' => 'position',
-				'photoshop:City'            => 'city',
-				'photoshop:Country'         => 'country',
+				'xap:CreateDate'                   => 'created_timestamp',
+				'xap:ModifyDate'                   => 'last_modfied',
+				'xap:CreatorTool'                  => 'tool',
+				'dc:format'                        => 'format',
+				'dc:title'                         => 'title',
+				// IPTC-aware tools write accessibility alt text to this XMP extension property.
+				// It is the dedicated alt-text field, so it takes priority over dc:title when
+				// populating the image alttext.
+				'Iptc4xmpExt:AltTextAccessibility' => 'title',
+				'dc:creator'                       => 'author',
+				'dc:subject'                       => 'keywords',
+				'dc:description'                   => 'caption',
+				'photoshop:AuthorsPosition'        => 'position',
+				'photoshop:City'                   => 'city',
+				'photoshop:Country'                => 'country',
 			];
 
 			foreach ( $xmp_tags as $xmp_tag => $xmp_field ) {

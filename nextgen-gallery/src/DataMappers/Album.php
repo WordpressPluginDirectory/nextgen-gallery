@@ -113,9 +113,7 @@ class Album extends TableDriver {
 		}
 		$entity->date_modified = $current_time;
 
-		// Initialize display type settings before saving
-		$this->initialize_display_type_settings( $entity );
-
+		// Defaults are not baked into per-album settings here; absent types inherit global at render.
 		$retval = parent::save_entity( $entity );
 
 		if ( $retval ) {
@@ -169,33 +167,31 @@ class Album extends TableDriver {
 	}
 
 	/**
-	 * Ensures display type settings are properly initialized with defaults
+	 * Fills missing display types in the given per-album settings with the current global defaults.
+	 * Presentation-only (admin UI); never persisted onto the album.
 	 *
-	 * @param object $entity The album entity
-	 * @return void
+	 * @param array $settings Stored per-album display type settings keyed by display type name.
+	 * @return array Settings with missing display types and untouched keys filled from current global.
 	 */
-	private function initialize_display_type_settings( $entity ) {
-		// Initialize display type settings if not set
-		if ( ! is_array( $entity->display_type_settings ) ) {
-			$entity->display_type_settings = [];
+	public function with_display_type_defaults( $settings ) {
+		$settings = is_array( $settings ) ? $settings : [];
+
+		foreach ( $this->get_all_display_type_defaults() as $type_name => $defaults ) {
+			$sanitized_defaults = array_map(
+				static function ( $value ) {
+					return is_bool( $value ) ? (int) $value : $value;
+				},
+				$defaults
+			);
+
+			// Fill at the key level so a partially-customized type keeps its stored values but has its
+			// untouched keys filled from the current global (not stale client-side defaults).
+			$settings[ $type_name ] = isset( $settings[ $type_name ] ) && is_array( $settings[ $type_name ] )
+				? array_merge( $sanitized_defaults, $settings[ $type_name ] )
+				: $sanitized_defaults;
 		}
 
-		// Get defaults for all display types
-		$all_defaults = $this->get_all_display_type_defaults();
-
-		// Ensure all display types have settings
-		foreach ( $all_defaults as $type_name => $defaults ) {
-			if ( ! isset( $entity->display_type_settings[ $type_name ] ) ) {
-				$sanitized_defaults = array_map(
-					function ( $value ) {
-						return is_bool( $value ) ? (int) $value : $value;
-					},
-					$defaults
-				);
-
-				$entity->display_type_settings[ $type_name ] = $sanitized_defaults;
-			}
-		}
+		return $settings;
 	}
 
 	/**

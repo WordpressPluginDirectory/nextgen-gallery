@@ -55,6 +55,7 @@ class DisplayManager {
 		add_action( 'wp_print_styles', [ $self, 'fix_nextgen_custom_css_order' ], PHP_INT_MAX - 1 );
 
 		add_action( 'wp_enqueue_scripts', [ $self, 'enqueue_frontend_resources' ] );
+		add_action( 'wp_enqueue_scripts', [ $self, 'maybe_enqueue_base_assets' ], 9 );
 		add_action( 'wp_enqueue_scripts', [ $self, 'maybe_enqueue_ga4_tracking' ], 20 );
 	}
 
@@ -76,8 +77,8 @@ class DisplayManager {
 			return;
 		}
 
-		$posts           = $wp_query->posts;
-		$shortcode_tags  = array_keys( Shortcodes::get_instance()->get_shortcodes() );
+		$posts          = $wp_query->posts;
+		$shortcode_tags = array_keys( Shortcodes::get_instance()->get_shortcodes() );
 
 		foreach ( $posts as $post ) {
 			if ( empty( $post->post_content ) ) {
@@ -97,6 +98,43 @@ class DisplayManager {
 			}
 
 			self::enqueue_frontend_resources_for_content( $post->post_content );
+		}
+	}
+
+	/**
+	 * Forces NextGEN's base frontend scripts to load when the documented
+	 * `nextgen_load_assets_on_page` filter explicitly opts the current page in.
+	 *
+	 * Pages that actually render an NGG gallery already enqueue ngg_common /
+	 * photocrati_ajax through the shortcode-scan / render path in
+	 * enqueue_frontend_resources(). This hook covers the case that path cannot see:
+	 * assets deliberately forced on a page NextGEN does not render itself (the escape
+	 * hatch a site uses when a third party renders the gallery, or when it simply needs
+	 * NextGEN's frontend JS present).
+	 *
+	 * Gating on the explicit filter rather than GalleryDetector::has_gallery() keeps the
+	 * base handles off detector false positives (a stray shortcode-like string, a
+	 * page-builder postmeta match, a widget in an unrelated sidebar) that never render a
+	 * gallery, while still making nextgen_load_assets_on_page a reliable
+	 * "load NextGEN assets here" switch.
+	 *
+	 * @return void
+	 */
+	public function maybe_enqueue_base_assets() {
+		if ( ( defined( 'NGG_SKIP_LOAD_SCRIPTS' ) && NGG_SKIP_LOAD_SCRIPTS ) || $this->is_rest_request() ) {
+			return;
+		}
+
+		// The false default means this is true only when a callback has explicitly
+		// hooked the filter to force asset loading on the current page.
+		if ( ! apply_filters( 'nextgen_load_assets_on_page', false ) ) {
+			return;
+		}
+
+		foreach ( [ 'photocrati_ajax', 'ngg_common' ] as $handle ) {
+			if ( wp_script_is( $handle, 'registered' ) && ! wp_script_is( $handle, 'enqueued' ) ) {
+				wp_enqueue_script( $handle );
+			}
 		}
 	}
 

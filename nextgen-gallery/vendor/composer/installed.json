@@ -63,45 +63,6 @@
                 "source": "https://github.com/ezyang/htmlpurifier/tree/v4.17.0"
             },
             "install-path": "../ezyang/htmlpurifier"
-        },
-        {
-            "name": "imagely/pope-framework",
-            "version": "v0.19",
-            "version_normalized": "0.19.0.0",
-            "source": {
-                "type": "git",
-                "url": "git@github.com:awesomemotive/pope-framework.git",
-                "reference": "78e0b0c59b68c44b86e688f447a5a80e78e44b4f"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/awesomemotive/pope-framework/zipball/78e0b0c59b68c44b86e688f447a5a80e78e44b4f",
-                "reference": "78e0b0c59b68c44b86e688f447a5a80e78e44b4f",
-                "shasum": ""
-            },
-            "time": "2023-12-20T13:22:52+00:00",
-            "type": "library",
-            "installation-source": "dist",
-            "autoload": {
-                "files": [
-                    "./lib/autoload.php"
-                ]
-            },
-            "license": [
-                "GPL-2.0-only"
-            ],
-            "authors": [
-                {
-                    "name": "Imagely",
-                    "email": "support@imagely.com"
-                }
-            ],
-            "description": "A component framework inspired by Zope 3. Pope is \"PHP's Zope\".",
-            "support": {
-                "source": "https://github.com/awesomemotive/pope-framework/tree/v0.19",
-                "issues": "https://github.com/awesomemotive/pope-framework/issues"
-            },
-            "install-path": "../imagely/pope-framework"
         }
     ],
     "dev": false,

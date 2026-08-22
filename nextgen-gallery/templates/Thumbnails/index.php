@@ -55,7 +55,7 @@ $this->start_element( 'nextgen_gallery.gallery_container', 'container', $display
 			! empty( $image->meta_data['imagely_tiktok_id'] ) &&
 			! empty( $image->meta_data['imagely_tiktok_show_play_button'] )
 		);
-		$style = ( isset( $image->hidden ) && $image->hidden ) ? 'display: none;' : null;
+		$style                   = ( isset( $image->hidden ) && $image->hidden ) ? 'display: none;' : null;
 
 			$this->start_element( 'nextgen_gallery.image_panel', 'item', $image );
 

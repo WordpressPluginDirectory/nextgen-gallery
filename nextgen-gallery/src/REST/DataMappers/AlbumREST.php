@@ -63,7 +63,7 @@ class AlbumREST {
 				'callback'            => [ self::class, 'get_albums' ],
 				'permission_callback' => [ self::class, 'check_read_permission' ],
 				'args'                => [
-					'orderby'  => [
+					'orderby'          => [
 						'type'              => 'string',
 						'enum'              => [
 							'id',
@@ -76,26 +76,44 @@ class AlbumREST {
 						'default'           => 'id',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
-					'order'    => [
+					'order'            => [
 						'type'              => 'string',
 						'enum'              => [ 'ASC', 'DESC' ],
 						'default'           => 'ASC',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
-					'per_page' => [
+					'per_page'         => [
 						'type'              => 'integer',
 						'default'           => 25,
 						'sanitize_callback' => [ self::class, 'sanitize_per_page' ],
 					],
-					'page'     => [
+					'page'             => [
 						'type'              => 'integer',
 						'default'           => 1,
 						'sanitize_callback' => 'absint',
 					],
-					'search'   => [
+					'search'           => [
 						'type'              => 'string',
 						'description'       => 'Search albums by name',
 						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'exclude_ids'      => [
+						'type'              => 'array',
+						'description'       => 'Album IDs to exclude from results (e.g. the album currently being edited or albums already added).',
+						'items'             => [
+							'type' => 'integer',
+						],
+						'sanitize_callback' => function ( $value ) {
+							if ( ! is_array( $value ) ) {
+								return [];
+							}
+							return array_values( array_unique( array_filter( array_map( 'absint', $value ) ) ) );
+						},
+					],
+					'exclude_album_id' => [
+						'type'              => 'integer',
+						'description'       => 'Exclude this album and the albums nested inside it. Bounded alternative to exclude_ids for albums with many members (the server derives the IDs from the album\'s sortorder).',
+						'sanitize_callback' => 'absint',
 					],
 				],
 			]
@@ -453,6 +471,18 @@ class AlbumREST {
 		global $wpdb;
 		$mapper = AlbumMapper::get_instance();
 
+		// When exclude_album_id is supplied, exclude that album itself plus the albums nested inside it,
+		// derived server-side. This keeps the request URL bounded for albums with many members (one
+		// integer instead of one exclude_ids[] entry per nested album).
+		$exclude_album_id = (int) $request->get_param( 'exclude_album_id' );
+		if ( $exclude_album_id > 0 ) {
+			$existing_excludes = (array) $request->get_param( 'exclude_ids' );
+			$request->set_param(
+				'exclude_ids',
+				array_values( array_unique( array_merge( $existing_excludes, self::get_album_child_album_ids( $exclude_album_id ) ) ) )
+			);
+		}
+
 		// Get and validate order parameters.
 		// Security fix (SQLi): normalize orderby input via sanitize_key before mapping so only safe identifier chars are considered.
 		$orderby = sanitize_key( (string) ( $request->get_param( 'orderby' ) ?? 'id' ) );
@@ -494,6 +524,7 @@ class AlbumREST {
 			$per_page_param,
 			$page,
 			$request->get_param( 'search' ),
+			$request->get_param( 'exclude_ids' ),
 		];
 		$cache_key     = Transient::create_key( 'rest_albums', $cache_params );
 		$cached_result = Transient::fetch( $cache_key, false );
@@ -514,6 +545,14 @@ class AlbumREST {
 			$query->where( [ 'name LIKE %s', '%' . $search_term . '%' ] );
 		}
 
+		// Exclude specific album IDs (e.g. the album being edited) server-side so pagination
+		// and the per_page budget are only consumed by genuinely available albums.
+		$exclude_ids = $request->get_param( 'exclude_ids' );
+		$exclude_ids = is_array( $exclude_ids ) ? array_values( array_unique( array_filter( array_map( 'absint', $exclude_ids ) ) ) ) : [];
+		if ( ! empty( $exclude_ids ) ) {
+			$query->where( [ 'id NOT IN %s', $exclude_ids ] );
+		}
+
 		// Calculate total items for pagination using the same filters.
 		$where_clauses = [];
 		$params        = [];
@@ -522,6 +561,14 @@ class AlbumREST {
 			$search_term     = '%' . $request->get_param( 'search' ) . '%';
 			$where_clauses[] = 'name LIKE %s';
 			$params[]        = $search_term;
+		}
+
+		if ( ! empty( $exclude_ids ) ) {
+			$placeholders    = implode( ',', array_fill( 0, count( $exclude_ids ), '%d' ) );
+			$where_clauses[] = "id NOT IN ( {$placeholders} )";
+			foreach ( $exclude_ids as $exclude_id ) {
+				$params[] = $exclude_id;
+			}
 		}
 
 		$table_name = $wpdb->nggalbum;
@@ -564,6 +611,39 @@ class AlbumREST {
 		$result->header( 'X-WP-TotalPages', $total_pages );
 
 		return $result;
+	}
+
+	/**
+	 * Get the album IDs to exclude for a given album: the album itself plus any albums nested in it.
+	 *
+	 * Album sortorder stores nested albums as strings like "a12" and galleries as plain integers,
+	 * so only the "a"-prefixed entries are sub-albums.
+	 *
+	 * @param int $album_id The album ID.
+	 * @return int[] Album IDs (self + nested albums).
+	 */
+	private static function get_album_child_album_ids( $album_id ) {
+		$album_id = (int) $album_id;
+		if ( $album_id <= 0 ) {
+			return [];
+		}
+
+		// Always exclude the album itself (an album cannot be added to itself).
+		$album_ids = [ $album_id ];
+
+		$album = AlbumMapper::get_instance()->find( $album_id );
+		if ( $album && ! empty( $album->sortorder ) ) {
+			$sortorder = is_array( $album->sortorder ) ? $album->sortorder : json_decode( $album->sortorder, true );
+			if ( is_array( $sortorder ) ) {
+				foreach ( $sortorder as $entry ) {
+					if ( is_string( $entry ) && isset( $entry[0] ) && 'a' === $entry[0] && ctype_digit( substr( $entry, 1 ) ) ) {
+						$album_ids[] = (int) substr( $entry, 1 );
+					}
+				}
+			}
+		}
+
+		return array_values( array_unique( array_filter( $album_ids ) ) );
 	}
 
 	/**
@@ -685,7 +765,20 @@ class AlbumREST {
 			$album->display_type = $request->get_param( 'display_type' );
 		}
 		if ( $request->has_param( 'display_type_settings' ) ) {
-			$album->display_type_settings = $request->get_param( 'display_type_settings' );
+			$incoming = (array) $request->get_param( 'display_type_settings' );
+			$edited   = $request->has_param( 'display_type' )
+				? $request->get_param( 'display_type' )
+				: $album->display_type;
+			$stored   = is_array( $album->display_type_settings ) ? $album->display_type_settings : [];
+
+			// Persist only the display type the user edited; the payload may carry every type, so key
+			// off display_type. The fallback merges onto stored settings so other customized types survive.
+			if ( '' !== (string) $edited && array_key_exists( $edited, $incoming ) ) {
+				$stored[ $edited ]            = $incoming[ $edited ];
+				$album->display_type_settings = $stored;
+			} else {
+				$album->display_type_settings = array_merge( $stored, $incoming );
+			}
 		}
 
 		try {
@@ -794,7 +887,7 @@ class AlbumREST {
 			'thumbnail'   => $thumbnail,
 			'created'     => $album->date_created,
 			'modified'    => $album->date_modified,
-			'displayType' => $album->display_type ?? 'photocrati-nextgen_basic_thumbnails',
+			'displayType' => $album->display_type ?: 'photocrati-nextgen_basic_compact_album',
 		];
 	}
 
@@ -837,8 +930,9 @@ class AlbumREST {
 			'counter'               => $gallery_count,
 			'sortorder'             => $album->sortorder,
 			'extras_post_id'        => $album->extras_post_id,
-			'display_type'          => $album->display_type ?? 'photocrati-nextgen_basic_thumbnails',
-			'display_type_settings' => $album->display_type_settings ?? [],
+			'display_type'          => $album->display_type ?: 'photocrati-nextgen_basic_compact_album',
+			// Fill uncustomized display types with current global values for the admin UI (not persisted).
+			'display_type_settings' => AlbumMapper::get_instance()->with_display_type_defaults( $album->display_type_settings ?? [] ),
 		];
 	}
 

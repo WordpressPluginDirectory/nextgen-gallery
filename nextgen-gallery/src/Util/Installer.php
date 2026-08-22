@@ -75,19 +75,107 @@ class Installer {
 	}
 
 	public static function can_do_upgrade() {
-		$proceed = false;
+		global $wpdb;
 
-		// Proceed if no other process has started the installer routines.
-		$doing_upgrade = \get_option( 'ngg_doing_upgrade', false );
-		if ( ! $doing_upgrade ) {
-			\update_option( 'ngg_doing_upgrade', \time() );
-			$proceed = true;
-		} elseif ( $doing_upgrade === true || \time() - $doing_upgrade > 120 ) {
-			\update_option( 'ngg_doing_upgrade', \time() );
-			$proceed = true;
+		if ( self::_insert_upgrade_lock() ) {
+			return true;
 		}
 
-		return $proceed;
+		// Another request already holds the lock. Reclaim it only if it's left over from a run
+		// that never finished (crashed, or is still running past a generous timeout). Doing the
+		// staleness check as a get_option()-then-update_option() pair would reopen the same race
+		// the INSERT above closes -- two requests could both read it as stale before either
+		// writes -- so instead this DELETE's WHERE clause encodes staleness itself and MySQL
+		// evaluates it atomically in one statement. Only the request whose DELETE actually removes
+		// the row gets to reclaim the lock; a losing request's DELETE matches zero rows.
+		//
+		// $wpdb->prepare() has no placeholder for table identifiers; {$wpdb->options} is WordPress
+		// core's own table-name property, never user input.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$reclaimed_rows = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->options}
+				WHERE option_name = 'ngg_doing_upgrade'
+					AND ( option_value = '1' OR ( option_value REGEXP '^[0-9]+$' AND CAST( option_value AS UNSIGNED ) < %d ) )",
+				\time() - 120
+			)
+		);
+		// phpcs:enable
+
+		if ( false === $reclaimed_rows ) {
+			// A DB-level failure here (dropped connection, restricted privilege) is otherwise
+			// indistinguishable from "another request holds a fresh lock" -- surface it via
+			// ngg_upgrade_error (a separate option from ngg_init_check, which set_role_caps()
+			// below clears unconditionally on every successful run and would otherwise wipe
+			// this before an admin ever sees it) instead of leaving the site stuck on
+			// can_do_upgrade() === false with no clue why.
+			\update_option( 'ngg_upgrade_error', \sprintf( 'NextGEN Gallery: could not check the upgrade lock: %s', $wpdb->last_error ) );
+			return false;
+		}
+
+		if ( ! $reclaimed_rows ) {
+			return false;
+		}
+
+		// The row is gone -- invalidate both the per-option cache key and the alloptions blob the
+		// raw DELETE above bypassed (delete_option() clears both; a raw DELETE clears neither),
+		// then reclaim the lock exactly like the first-time case.
+		\wp_cache_delete( 'ngg_doing_upgrade', 'options' );
+		\wp_cache_delete( 'alloptions', 'options' );
+
+		return self::_insert_upgrade_lock();
+	}
+
+	/**
+	 * Atomically takes the ngg_doing_upgrade lock with a bare INSERT.
+	 *
+	 * Core's add_option() ends in INSERT ... ON DUPLICATE KEY UPDATE, so the option_name UNIQUE
+	 * KEY never rejects a second writer -- it upserts the row and reports success to both callers.
+	 * A plain INSERT has no such fallback: MySQL rejects the second writer at the database level
+	 * with a duplicate-key error, which is the only atomic way to hand the lock to exactly one
+	 * request. Errors are suppressed because that duplicate-key hit is the expected "someone else
+	 * holds the lock" outcome here, not a problem to log -- but it's the ONLY expected failure;
+	 * anything else (dropped connection, a write-privilege restriction, a lock-wait timeout) is
+	 * reported below rather than silently collapsed into the same "someone else has it" return.
+	 *
+	 * @return bool
+	 */
+	private static function _insert_upgrade_lock() {
+		global $wpdb;
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$suppress   = $wpdb->suppress_errors( true );
+		$inserted   = $wpdb->query(
+			$wpdb->prepare(
+				"INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES ( 'ngg_doing_upgrade', %s, 'no' )",
+				\time()
+			)
+		);
+		$last_error = $wpdb->last_error;
+		$wpdb->suppress_errors( $suppress );
+		// phpcs:enable
+
+		if ( false === $inserted ) {
+			// A duplicate-key error on option_name IS the lock being held -- that's this
+			// function's whole mechanism, not a failure. Anything else means no lock was taken
+			// by anyone, and without this check that was indistinguishable from normal
+			// contention: can_do_upgrade() would return false forever with nothing to explain why.
+			if ( false === \stripos( $last_error, 'duplicate' ) ) {
+				\update_option( 'ngg_upgrade_error', \sprintf( 'NextGEN Gallery: could not take the upgrade lock: %s', $last_error ) );
+			}
+			return false;
+		}
+
+		// The raw INSERT bypassed add_option()'s own cache writes: for an autoload='no' option
+		// (this one), add_option() would set the per-option cache directly and clear any
+		// negative "notoptions" entry left by an earlier get_option() call finding no row.
+		// alloptions is cleared too in case a pre-this-PR stale lock (autoloaded, from the old
+		// update_option() call) is still cached from before this option existed as autoload='no'.
+		\wp_cache_delete( 'alloptions', 'options' );
+		\wp_cache_delete( 'ngg_doing_upgrade', 'options' );
+		\wp_cache_delete( 'notoptions', 'options' );
+
+		return true;
 	}
 
 	public static function done_upgrade() {
@@ -121,6 +209,16 @@ class Installer {
 		$can_upgrade = $do_upgrade && self::can_do_upgrade();
 
 		if ( $can_upgrade && $do_upgrade ) {
+			// Clear any notice a previous attempt left behind before trying again -- if whatever
+			// failed last time (a DB privilege, a leftover temp index) has since been resolved,
+			// nothing below will rewrite this, so the notice won't outlive the problem it reported.
+			// Only the request that actually won the upgrade lock clears it: during #934's
+			// concurrency storm, every request evaluates $do_upgrade as true until the version
+			// bumps, so clearing on $do_upgrade alone let a request that lost the lock race erase
+			// a notice a still-running winner (or the handler loop below, for this same request)
+			// was about to write -- permanently, since a losing request does nothing else.
+			\delete_option( 'ngg_upgrade_error' );
+
 			// Clear APC cache.
 			if ( \function_exists( 'apc_clear_cache' ) ) {
 				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged

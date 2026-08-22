@@ -751,6 +751,7 @@ class LegacyThumbnail {
 	 * @param string $name
 	 */
 	public function show( $quality = 100, $name = '' ) {
+		$quality = max( -1, min( 100, (int) $quality ) );
 		switch ( $this->format ) {
 			case 'GIF':
 				if ( $name != '' ) {

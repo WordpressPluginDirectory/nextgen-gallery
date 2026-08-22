@@ -545,6 +545,22 @@ class nggAdmin {
 			if ( ! @getimagesize( $gallerypath . '/' . $picture ) ) {
 				unset( $new_images[ $key ] );
 				@unlink( $gallerypath . '/' . $picture ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.PHP.NoSilencedErrors.Discouraged
+				continue;
+			}
+
+			// Re-check existence right before insert: $old_imageslist above can be stale by the
+			// time this loop runs (e.g. a concurrent scan request importing the same file), so
+			// array_diff() alone isn't a reliable guard against duplicate imports.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$already_imported = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT `pid` FROM {$wpdb->nggpictures} WHERE `galleryid` = %d AND `filename` = %s LIMIT 1",
+					$gallery_id,
+					$picture
+				)
+			);
+			if ( $already_imported ) {
+				unset( $new_images[ $key ] );
 			}
 		}
 
