@@ -317,16 +317,16 @@ class LightboxManager {
 	 * Maybe enqueue lightbox resources based on context.
 	 */
 	public function maybe_enqueue() {
-		if ( ! GalleryDetector::has_gallery() ) {
-			return;
-		}
-
 		$settings             = Settings::get_instance();
 		$thumb_effect_context = $settings->get( 'thumbEffectContext', '' );
 
-		if ( 'nextgen_images' !== $thumb_effect_context ) {
-			$this->enqueue();
+		// The default context only covers NextGEN images, which the gallery render path
+		// already handles; the other contexts must load the stack on every page.
+		if ( 'nextgen_images' === $thumb_effect_context ) {
+			return;
 		}
+
+		$this->enqueue();
 	}
 
 	/**

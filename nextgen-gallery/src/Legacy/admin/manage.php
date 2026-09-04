@@ -921,7 +921,7 @@ class nggManageGallery {
 				if ( $this->gallery ) {
 					// Allowlist matches the editable inputs in templates/manage_gallery/gallery_*_field.php.
 					// Iterating $_POST blindly would let columns like author/gid/extras_post_id/slug be set.
-					$editable_gallery_fields = [ 'title', 'galdesc', 'previewpic', 'path', 'pageid' ];
+					$editable_gallery_fields = [ 'title', 'galdesc', 'previewpic', 'path', 'pageid', 'pricelist_id' ];
 
 					foreach ( $editable_gallery_fields as $field ) {
 						if ( ! isset( $_POST[ $field ] ) ) {
@@ -931,7 +931,7 @@ class nggManageGallery {
 						if ( $field === 'path' ) {
 							// IIS hack: gallery paths can be mangled into \\wp-content\\blah\\ which causes later errors when validating the gallery path.
 							$value = str_replace( '\\\\', '/', sanitize_text_field( wp_unslash( $_POST[ $field ] ) ) );
-						} elseif ( $field === 'previewpic' || $field === 'pageid' ) {
+						} elseif ( $field === 'previewpic' || $field === 'pageid' || $field === 'pricelist_id' ) {
 							$value = (int) wp_unslash( $_POST[ $field ] );
 						} else {
 							// title/galdesc are pre-sanitized higher in this branch (sanitize_text_field + strip_tags allowlist) and written back into $_POST; read that processed value.
@@ -942,6 +942,12 @@ class nggManageGallery {
 					}
 
 					$mapper->save( $this->gallery );
+
+					// Mirror the REST save so the ecommerce requirement check (which reads this post meta) sees it.
+					// Only when the gallery is valid, so an invalid save does not mark the requirement complete.
+					if ( isset( $_POST['pricelist_id'] ) && ! empty( $this->gallery->extras_post_id ) && $this->gallery->is_valid() ) {
+						update_post_meta( $this->gallery->extras_post_id, 'pricelist_id', (int) wp_unslash( $_POST['pricelist_id'] ) );
+					}
 
 					if ( ! $this->gallery->is_valid() ) {
 						foreach ( $this->gallery->validation() as $property => $errors ) {
@@ -1111,12 +1117,14 @@ class nggManageGallery {
 					}
 
 					// image_slug is included because the alttext-change branch above sets it to null to trigger regeneration.
+					// pricelist_id is the per-image Pricelist select Pro injects into the Ecommerce column.
 					// Iterating $data blindly would allow columns like galleryid/meta_data/post_id/extras_post_id/imagedate to be overwritten via crafted images[<pid>][...] POST.
-					$editable_image_fields = [ 'alttext', 'description', 'title', 'exclude', 'tags', 'image_slug' ];
+					$editable_image_fields = [ 'alttext', 'description', 'title', 'exclude', 'tags', 'image_slug', 'pricelist_id' ];
 
 					foreach ( $editable_image_fields as $field ) {
 						if ( array_key_exists( $field, $data ) ) {
-							$image->$field = $data[ $field ];
+							// pricelist_id: 0 = inherit gallery, -1 = none, >0 = a pricelist. Cast with (int), not absint, so -1 survives.
+							$image->$field = ( 'pricelist_id' === $field ) ? (int) $data[ $field ] : $data[ $field ];
 						}
 					}
 					if ( $image_mapper->save( $image ) ) {

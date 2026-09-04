@@ -62,7 +62,7 @@ class Controller {
 				$pro_active = constant( $pro_active );
 			}
 			if ( ! is_admin() && ( empty( $pro_active ) || version_compare( $pro_active, '1.0.11' ) >= 0 ) ) {
-				\wp_enqueue_style( 'fontawesome' );
+				\wp_enqueue_style( 'nextgen_gallery_icons' );
 				$retval         = true;
 				$this->run_once = true;
 			}

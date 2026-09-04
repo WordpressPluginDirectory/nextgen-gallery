@@ -138,6 +138,10 @@ class DisplayedGallery extends Model {
 	 */
 	public $is_album_gallery;
 
+	// Sources allowed to override the global maximum_entity_count; shared by the constructor and
+	// get_maximum_entity_count() so the two stay in sync.
+	const MAX_COUNT_SOURCES = [ 'tag', 'tags', 'image_tag', 'image_tags', 'random_images', 'recent_images', 'random', 'recent' ];
+
 	/**
 	 * Maximum entity count.
 	 *
@@ -250,8 +254,7 @@ class DisplayedGallery extends Model {
 
 		// Only some sources should have their own maximum_entity_count.
 		if ( ! empty( $this->display_settings['maximum_entity_count'] )
-		// phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
-		&& in_array( $this->source, [ 'tag', 'tags', 'random_images', 'recent_images', 'random', 'recent' ] ) ) {
+		&& in_array( $this->source, self::MAX_COUNT_SOURCES, true ) ) {
 			$this->maximum_entity_count = $this->display_settings['maximum_entity_count'];
 		}
 
@@ -701,15 +704,24 @@ class DisplayedGallery extends Model {
 			$container_ids = $this->container_ids;
 			if ( $container_ids ) {
 				if ( $container_ids !== [ '0' ] && $container_ids !== [ '' ] ) {
-					$container_ids = array_map( 'intval', $container_ids );
-					$album_mapper->where( [ "{$album_key} IN %s", $container_ids ] );
+					// Keep only positive ids; an unresolved slug intval()s to 0 and negatives are dropped too, and
+					// skip the query when nothing is left, avoiding an empty IN()/FIELD().
+					$container_ids = array_filter(
+						array_map( 'intval', $container_ids ),
+						static function ( $id ) {
+							return $id > 0;
+						}
+					);
+					if ( $container_ids ) {
+						$album_mapper->where( [ "{$album_key} IN %s", $container_ids ] );
 
-					// This order_by is necessary for albums to be ordered correctly given the WHERE .. IN() above.
-					$order_string = implode( ',', $container_ids );
-					$album_mapper->order_by( "FIELD('id', {$order_string})" );
+						// This order_by is necessary for albums to be ordered correctly given the WHERE .. IN() above.
+						$order_string = implode( ',', $container_ids );
+						$album_mapper->order_by( "FIELD('id', {$order_string})" );
 
-					foreach ( $album_mapper->run_query() as $album ) {
-						$entity_ids = array_merge( $entity_ids, (array) $album->sortorder );
+						foreach ( $album_mapper->run_query() as $album ) {
+							$entity_ids = array_merge( $entity_ids, (array) $album->sortorder );
+						}
 					}
 				} elseif ( $container_ids === [ '0' ] || $container_ids === [ '' ] ) {
 					foreach ( $gallery_mapper->select( $gallery_key )->run_query() as $gallery ) {
@@ -899,17 +911,19 @@ class DisplayedGallery extends Model {
 	}
 
 	/**
-	 * Honor the gallery 'maximum_entity_count' setting ONLY when dealing with random & recent galleries. All others
-	 * will always obey the *global* 'maximum_entity_count' setting.
+	 * Honor a per-gallery 'maximum_entity_count' only for the sources in self::MAX_COUNT_SOURCES
+	 * (tag/tags, random, recent). Every other source obeys the global setting.
 	 */
 	public function get_maximum_entity_count() {
 		$max = intval( Settings::get_instance()->get( 'maximum_entity_count', 500 ) );
 
-		$sources    = SourceManager::get_instance();
-		$source_obj = $this->get_source();
-  // phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
-		if ( in_array( $source_obj, [ $sources->get( 'random' ), $sources->get( 'random_images' ), $sources->get( 'recent' ), $sources->get( 'recent_images' ) ] ) ) {
-			$max = intval( $this->maximum_entity_count );
+		if ( in_array( $this->source, self::MAX_COUNT_SOURCES, true ) ) {
+			// Ignore a non-numeric, zero, or negative per-gallery value and use the global cap instead,
+			// so an invalid per-gallery value cannot resolve to 0 and drop the query LIMIT.
+			$per_gallery = intval( $this->maximum_entity_count );
+			if ( $per_gallery >= 1 ) {
+				$max = $per_gallery;
+			}
 		}
 
 		return $max;

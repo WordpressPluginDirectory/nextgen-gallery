@@ -177,6 +177,8 @@ class AttachToPost extends \WP_REST_Controller {
 		$assoc_props    = [ 'display_settings' ];
 		$text_props     = [ 'effect_code', 'inner_content', 'display' ];
 
+		// Normalize keys once so the source lookup and the assignment loop key off identical values.
+		$normalized = [];
 		foreach ( $params as $raw_key => $raw_value ) {
 			if ( ! is_string( $raw_key ) ) {
 				continue;
@@ -185,9 +187,42 @@ class AttachToPost extends \WP_REST_Controller {
 			if ( '' === $key ) {
 				continue;
 			}
+			$normalized[ $key ] = $raw_value;
+		}
 
+		// container_ids holds numeric ids for gallery/album sources but tag names for tag sources, so its
+		// sanitization depends on the source. Resolve it up front: key order is not guaranteed.
+		$source = '';
+		foreach ( [ 'source', 'src' ] as $source_key ) {
+			if ( isset( $normalized[ $source_key ] ) && is_scalar( $normalized[ $source_key ] ) ) {
+				$source = sanitize_text_field( (string) $normalized[ $source_key ] );
+				break;
+			}
+		}
+
+		// Tag sources (and aliases) address containers by name, not id; absint() would wipe them. Tag
+		// names are escaped downstream in get_term_ids_for_tags().
+		$is_tag_source  = in_array( $source, [ 'tags', 'tag', 'image_tags', 'image_tag' ], true );
+		$tag_name_props = [ 'container_ids', 'excluded_container_ids' ];
+
+		foreach ( $normalized as $key => $raw_value ) {
 			if ( in_array( $key, $id_array_props, true ) ) {
-				if ( is_array( $raw_value ) ) {
+				if ( $is_tag_source && in_array( $key, $tag_name_props, true ) ) {
+					$raw_list = is_array( $raw_value )
+						? $raw_value
+						: ( is_string( $raw_value ) ? explode( ',', $raw_value ) : [] );
+
+					// 'strlen' drops empty strings while keeping a tag literally named '0'.
+					$value = array_values(
+						array_filter(
+							array_map(
+								'sanitize_text_field',
+								array_map( 'trim', array_map( 'strval', array_filter( $raw_list, 'is_scalar' ) ) )
+							),
+							'strlen'
+						)
+					);
+				} elseif ( is_array( $raw_value ) ) {
 					$value = array_values( array_filter( array_map( 'absint', $raw_value ) ) );
 				} elseif ( is_string( $raw_value ) ) {
 					$value = array_values(

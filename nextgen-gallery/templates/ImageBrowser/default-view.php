@@ -129,6 +129,5 @@ if ( isset( $gallery ) && ! empty( $gallery->title ) ) {
 			<p><?php print \Imagely\NGG\Display\I18N::ngg_decode_sanitized_html_content( $image->description ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></p>
 		</div>
 
-	</div>		</div>
 	</div>
 <?php $this->end_element(); ?>

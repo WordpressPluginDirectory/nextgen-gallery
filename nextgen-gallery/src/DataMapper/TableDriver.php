@@ -163,10 +163,14 @@ class TableDriver extends DriverBase {
 		// We treat the rand() function as an exception.
 		if ( preg_match( '/rand\(\s*\)/', $order_by ) ) {
 			$order = 'rand()';
-		} elseif ( preg_match( "/^FIELD\\(\\s*[`']?([A-Za-z_][A-Za-z0-9_]*)[`']?\\s*,\\s*([0-9,\\s]+)\\)$/", (string) $order_by, $m ) ) {
+		} elseif ( preg_match( "/^FIELD\\(\\s*[`']?([A-Za-z_][A-Za-z0-9_]*)[`']?\\s*,\\s*([0-9,\\s]*)\\)$/", (string) $order_by, $m ) ) {
 			// Security fix (SQLi): allow the legacy FIELD(<ident>, <int-list>) form used for preserving IN() result order. Both identifier and integer list are strictly validated so no user-controlled string can reach SQL here.
 			$ident   = $m[1];
 			$ints    = array_filter( array_map( 'intval', preg_split( '/\s*,\s*/', trim( $m[2] ) ) ) );
+			if ( empty( $ints ) ) {
+				// No ids to order by; skip the clause to avoid an empty FIELD().
+				return $this;
+			}
 			$int_csv = implode( ',', $ints );
 			$order   = "FIELD(`{$ident}`, {$int_csv})";
 		} else {

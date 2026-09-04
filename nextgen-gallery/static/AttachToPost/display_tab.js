@@ -1609,18 +1609,33 @@ jQuery(function($){
 
                 this.displayed_gallery.set('source', this.sources.selected_value());
 
-                // If the source changed, and it's not the set to the original value, then
-                // exclusions get's set to []
-                if (this.sources.selected_value() != this.original_displayed_gallery.get('source'))
-                    this.displayed_gallery.set('exclusions', this.entities.excluded_ids());
+                // Resolve the stored source to its canonical name so alias spellings (e.g. tag vs tags)
+                // compare correctly, then treat the same canonical source as unchanged.
+                var original_source = this.sources.find_by_name_or_alias(this.original_displayed_gallery.get('source'));
+                original_source = original_source ? original_source.get('name') : this.original_displayed_gallery.get('source');
+                var source_changed = (this.sources.selected_value() != original_source);
 
-                // Otherwise, we revert to the original exclusions
+                // If the source genuinely changed, reset exclusions; otherwise keep the originals.
+                if (source_changed)
+                    this.displayed_gallery.set('exclusions', this.entities.excluded_ids());
                 else
                     this.displayed_gallery.set('exclusions', this.original_displayed_gallery.get('exclusions'));
 
-                // special exemption: these should default to a reasonable limit
-                if (this.sources.selected_value() == 'random_images' || this.sources.selected_value() == 'recent_images') {
+                // maximum_entity_count: on an unchanged source restore the gallery's own value (dropping a
+                // value that merely echoes the global default, which the server backfills); on a real
+                // switch default Random/Recent to 20 and clear it for sources with no limit field.
+                if (!source_changed) {
+                    var original_max = this.original_displayed_gallery.get('maximum_entity_count');
+                    var default_max  = igw_data.shortcode_defaults ? igw_data.shortcode_defaults.maximum_entity_count : undefined;
+                    if (typeof original_max === 'undefined' || original_max === null || original_max == default_max) {
+                        this.displayed_gallery.unset('maximum_entity_count');
+                    } else {
+                        this.displayed_gallery.set('maximum_entity_count', original_max);
+                    }
+                } else if (this.sources.selected_value() == 'random_images' || this.sources.selected_value() == 'recent_images') {
                     this.displayed_gallery.set('maximum_entity_count', 20);
+                } else {
+                    this.displayed_gallery.unset('maximum_entity_count');
                 }
 
                 // Reset everything else

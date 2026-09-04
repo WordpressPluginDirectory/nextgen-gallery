@@ -296,10 +296,30 @@ class TriggerManager {
 		return $retval;
 	}
 
+	/**
+	 * Runs each registered trigger's is_renderable() for its enqueue side effect,
+	 * so trigger assets survive a rendering-cache hit that skips the render pass.
+	 *
+	 * @param object $displayed_gallery The displayed gallery.
+	 * @return void
+	 */
+	public function enqueue_trigger_assets( $displayed_gallery ) {
+		foreach ( $this->_trigger_order as $name ) {
+			if ( ! isset( $this->_triggers[ $name ] ) ) {
+				continue;
+			}
+
+			$klass = $this->_triggers[ $name ];
+			if ( method_exists( $klass, 'is_renderable' ) ) {
+				call_user_func( [ $klass, 'is_renderable' ], $name, $displayed_gallery );
+			}
+		}
+	}
+
 	public function enqueue_resources( $displayed_gallery ) {
 		$handler = $this->get_handler_for_displayed_gallery( $displayed_gallery );
 		if ( $handler ) {
-			wp_enqueue_style( 'fontawesome' );
+			wp_enqueue_style( 'nextgen_gallery_icons' );
 			wp_enqueue_style( 'ngg_trigger_buttons' );
 
 			if ( method_exists( $handler, 'enqueue_resources' ) ) {

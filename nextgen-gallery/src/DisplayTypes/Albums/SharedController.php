@@ -8,6 +8,7 @@
 namespace Imagely\NGG\DisplayTypes\Albums;
 
 use Imagely\NGG\DataMappers\Album as AlbumMapper;
+use Imagely\NGG\DataMappers\DisplayType as DisplayTypeMapper;
 use Imagely\NGG\DataMappers\Gallery as GalleryMapper;
 use Imagely\NGG\DataMappers\Image as ImageMapper;
 use Imagely\NGG\DataStorage\Manager as StorageManager;
@@ -23,6 +24,73 @@ use Imagely\NGG\Util\Router;
  * SharedController definition.
  */
 class SharedController extends ParentController {
+
+	/**
+	 * Stored display settings that must never be merged into a child gallery's params.
+	 *
+	 * The three view keys select a template file and reach the include in legacy_render(); the
+	 * album sets the child template itself further down. is_ecommerce_enabled is a gallery-level
+	 * column rather than a per-display-type setting and is applied from the gallery entity.
+	 *
+	 * The remaining keys are Renderer::params_to_displayed_gallery()'s structural vocabulary: they
+	 * choose *which* entities render rather than how they look, so they are denied unconditionally
+	 * even when a display type declares them (a display type's stored settings row is not a
+	 * trustworthy allow-list on its own - see filter_child_display_settings()). Without this a
+	 * stored `id` would substitute a persisted displayed gallery for the album's child, and
+	 * `gallery_ids` / `container_ids` would retarget it at unrelated galleries. Note the lightbox
+	 * path merges with array_merge(), so it cannot rely on the permalink path's `+=` precedence.
+	 *
+	 * `order_by` / `order_direction` are deliberately NOT denied: they only sort the child's own
+	 * entities, and display types (e.g. Pro Search) declare them as genuine settings.
+	 *
+	 * @var string[]
+	 */
+	const RESERVED_CHILD_SETTINGS = [
+		'template',
+		'display_view',
+		'display_type_view',
+		'is_ecommerce_enabled',
+		// Renderer::params_to_displayed_gallery() structural params.
+		'album_ids',
+		'container_ids',
+		'display',
+		'display_type',
+		'entity_ids',
+		'exclusions',
+		'gallery_ids',
+		'id',
+		'ids',
+		'image_ids',
+		'returns',
+		'slug',
+		'sortorder',
+		'source',
+		'src',
+		'tag_ids',
+		'tagcloud',
+	];
+
+	/**
+	 * Thumbnail geometry keys, the only settings carried across display types (#787).
+	 *
+	 * A gallery's saved override lives under the display type the admin UI was showing, which for
+	 * a Pro Grid/List album child is not the type the album forces on it. These keys mean the same
+	 * thing in every display type that declares them, so they are safe to carry over; nothing else
+	 * is (a `number_of_columns` or `images_per_page` saved for basic thumbnails is not a statement
+	 * about how the forced type should paginate). They are also carried as one group, never
+	 * key-by-key, so the `override_thumbnail_settings` gate and the dimensions it gates can never
+	 * come from two different buckets.
+	 *
+	 * @var string[]
+	 */
+	const CROSS_TYPE_CHILD_SETTINGS = [
+		'override_thumbnail_settings',
+		'thumbnail_width',
+		'thumbnail_height',
+		'thumbnail_crop',
+		'thumbnail_quality',
+		'thumbnail_watermark',
+	];
 
 	/**
 	 * Cache of albums to be displayed.
@@ -590,6 +658,18 @@ class SharedController extends ParentController {
 				'original_album_entities' => $parent_albums,
 			];
 
+			// Apply the gallery's own saved display settings for the child display type,
+			// matching how the gallery renders outside an album (#787). += keeps the structural
+			// keys set above; only settings the display type declares come through the filter.
+			$gallery_entity  = $result ? $result : ( is_numeric( $gallery ) ? GalleryMapper::get_instance()->find( $gallery ) : null );
+			$gallery_params += $this->saved_child_settings( $gallery_entity, $display_settings['gallery_display_type'] );
+
+			// Deliberately no ngg_triggers_display compensation here, unlike the lightbox path below:
+			// on this path the child resolves ngg_triggers_display exactly as the standalone render
+			// does, so forcing 'always' for eCommerce galleries would make the album permalink
+			// disagree with [imagely id=X] - reintroducing the very inconsistency #787 removes. A
+			// saved 'never' is the owner's choice and is honored on both. Making eCommerce outrank
+			// that choice is a product decision for both paths at once, not part of #787.
 			if ( $result && ! empty( $result->is_ecommerce_enabled ) ) {
 				$gallery_params['is_ecommerce_enabled']                      = 1;
 				$gallery_params['original_settings']['is_ecommerce_enabled'] = 1;
@@ -607,6 +687,177 @@ class SharedController extends ParentController {
 		}
 
 		return $displayed_gallery;
+	}
+
+	/**
+	 * Filters a gallery's stored display settings down to what may safely be merged into the
+	 * params of a child gallery rendered inside an album.
+	 *
+	 * The display_type_settings store is free-form: GalleryREST::sanitize_display_type_settings()
+	 * casts values but whitelists no keys. Merged unfiltered, a stored key could become a
+	 * structural argument in Renderer::params_to_displayed_gallery() or select a template file.
+	 * Only keys the child display type actually declares are kept, minus RESERVED_CHILD_SETTINGS.
+	 *
+	 * Two known limits of this filter, both deliberate:
+	 *
+	 * 1. $display_type->settings is not a code-defined allow-list. DisplayType::set_defaults()
+	 *    merges the controller defaults *under* the persisted row, and DisplayTypeREST::
+	 *    update_display_type() persists arbitrary keys (cap: NextGEN Change style), so a declared
+	 *    key can be anything an administrator stored. That is why the structural vocabulary is
+	 *    denied unconditionally in RESERVED_CHILD_SETTINGS rather than merely being absent from
+	 *    the allow-list. Conversely the set can be under-populated when the display type has no
+	 *    controller, in which case the merge is a no-op and the child renders as it did before
+	 *    #787 - degraded, never wrong.
+	 * 2. Settings a display type uses but never declares (e.g. Pro's animate_* keys, written per
+	 *    display type by the adminApp) are dropped, so an album child falls back to the global
+	 *    animation settings. Widening the filter to admit undeclared keys is a separate change
+	 *    (it needs its own deny-list rework, since undeclared keys are exactly where the
+	 *    structural ones hide); #787 is about thumbnail geometry, which every relevant display
+	 *    type declares. Do not "fix" this by unioning the raw blob.
+	 *
+	 * @param array  $saved_settings Stored settings for the child display type.
+	 * @param string $child_type     Name of the child display type.
+	 *
+	 * @return array
+	 */
+	protected function filter_child_display_settings( array $saved_settings, string $child_type ): array {
+		$declared = $this->child_display_type_settings( $child_type );
+
+		if ( ! $declared ) {
+			return [];
+		}
+
+		// $display_type->settings is the stored row with the controller's declared defaults merged
+		// under it (DisplayType mapper set_defaults()), which is what lets this allow-list cover Pro
+		// and addon types without knowing them. It is not authoritative in either direction, hence
+		// the unconditional deny-list on top - see the docblock above.
+		$allowed = array_diff_key( $declared, array_flip( self::RESERVED_CHILD_SETTINGS ) );
+
+		return array_intersect_key( $saved_settings, $allowed );
+	}
+
+	/**
+	 * Returns the settings a display type declares, i.e. the stored DisplayType row with the
+	 * controller's defaults merged under it. [] when the display type is unknown.
+	 *
+	 * @param string $child_type Name of the display type.
+	 *
+	 * @return array
+	 */
+	private function child_display_type_settings( string $child_type ): array {
+		$display_type = DisplayTypeMapper::get_instance()->find_by_name( $child_type );
+
+		if ( ! $display_type || empty( $display_type->settings ) || ! is_array( $display_type->settings ) ) {
+			return [];
+		}
+
+		return $display_type->settings;
+	}
+
+	/**
+	 * Returns a gallery entity's saved, filtered display settings for a child display type,
+	 * ready to merge into an album child's params. [] when the gallery has none. Shared by the
+	 * album permalink and lightbox paths so the guard-and-filter lives in one place (#787).
+	 *
+	 * @param object|null $gallery_entity The child gallery entity, or null.
+	 * @param string      $child_type     Name of the child display type.
+	 *
+	 * @return array
+	 */
+	protected function saved_child_settings( $gallery_entity, string $child_type ): array {
+		if ( ! $gallery_entity || empty( $gallery_entity->display_type_settings ) || ! is_array( $gallery_entity->display_type_settings ) ) {
+			return [];
+		}
+
+		$stored = $gallery_entity->display_type_settings;
+
+		// Settings the gallery saved under the display type the album forces on it. This bucket is
+		// an exact match for what the child renders, so it is carried whole - the same slice the
+		// standalone render path applies, which is the parity #787 asks for.
+		$out = ! empty( $stored[ $child_type ] ) && is_array( $stored[ $child_type ] )
+			? $this->filter_child_display_settings( $stored[ $child_type ], $child_type )
+			: [];
+
+		$geometry = $this->cross_type_child_settings( $stored, $child_type, $out, $gallery_entity->display_type ?? '' );
+
+		if ( ! $geometry ) {
+			return $out;
+		}
+
+		// Take the geometry from one bucket only: drop the forced bucket's geometry keys entirely
+		// rather than letting the ones the other bucket happens not to set survive underneath.
+		// Anything dropped falls back to the child display type's declared default in
+		// DisplayedGallery::merge_display_settings(), never to another layout's saved value.
+		return array_merge( array_diff_key( $out, array_flip( self::CROSS_TYPE_CHILD_SETTINGS ) ), $geometry );
+	}
+
+	/**
+	 * Returns the thumbnail geometry a gallery saved under its OWN display type, when that is
+	 * where the override lives and the child render would otherwise miss it (#787, paid path).
+	 *
+	 * Pro Grid/List albums force gallery_display_type = pro_thumbnail_grid on their children, but
+	 * the admin UI saves a gallery's override under the gallery's own display type (basic_thumbnails
+	 * by default), so the forced type's bucket is empty and the child fell back to the global
+	 * thumbnail size. Only CROSS_TYPE_CHILD_SETTINGS crosses the type boundary, and only as a whole
+	 * group taken from a single bucket:
+	 *
+	 * - Nothing is carried unless the own bucket's `override_thumbnail_settings` is truthy. That
+	 *   flag is what gates dynamic thumbnails in every consumer (Thumbnails, Pro ThumbnailGrid,
+	 *   ...), so a gallery whose size the owner never overrode carries nothing and the child keeps
+	 *   the forced type's configured geometry. This is also why a bucket that merely *mentions*
+	 *   these keys - a UI snapshot, a stale value behind an unchecked box - cannot quietly switch
+	 *   the child to on-disk thumbnails.
+	 * - Nothing is carried when the forced type's own bucket already declares an override; that is
+	 *   a deliberate, type-specific choice and outranks a value saved for another type.
+	 * - The group replaces the forced bucket's geometry rather than filling gaps in it. Buckets are
+	 *   routinely sparse (NormalizeDisplayTypeSettings::strip_defaults() deletes default-equal
+	 *   keys), so filling gaps key-by-key could take a gate from one bucket and a dimension from
+	 *   another and render a size the owner never chose anywhere.
+	 *
+	 * Everything else stays per-type on purpose: `images_per_page`, `number_of_columns` and the
+	 * like mean different things to different layouts, and carrying them over would let a
+	 * gallery's basic-thumbnails settings override the site's configured Pro Grid layout.
+	 *
+	 * @param array  $stored     The gallery's whole display_type_settings store.
+	 * @param string $child_type Name of the display type the album forces on the child.
+	 * @param array  $forced     Already-filtered settings from the forced type's own bucket.
+	 * @param string $own_type   Name of the gallery's own display type.
+	 *
+	 * @return array Geometry to overlay on $forced, or [].
+	 */
+	private function cross_type_child_settings( array $stored, string $child_type, array $forced, string $own_type ): array {
+		if ( ! empty( $forced['override_thumbnail_settings'] ) ) {
+			return [];
+		}
+
+		if ( ! $own_type || $own_type === $child_type || empty( $stored[ $own_type ] ) || ! is_array( $stored[ $own_type ] ) ) {
+			return [];
+		}
+
+		// Still allow-listed against the forced child type: a key it does not declare is not a
+		// setting it can render, whichever bucket the value came from.
+		$own = $this->filter_child_display_settings( $stored[ $own_type ], $child_type );
+
+		if ( empty( $own['override_thumbnail_settings'] ) ) {
+			return [];
+		}
+
+		$geometry = array_intersect_key( $own, array_flip( self::CROSS_TYPE_CHILD_SETTINGS ) );
+		$declared = $this->child_display_type_settings( $child_type );
+
+		// Complete the group from the forced type's own declared values. Saved buckets are sparse,
+		// and the lightbox path (make_child_displayed_gallery()) merges onto the album's settings
+		// with no display-type defaults layer beneath it, so a member left unset there would take
+		// the album cover's value - e.g. this gallery's width against the album's crop. Filling the
+		// group here keeps it self-contained on both paths and is a no-op on the permalink path,
+		// where DisplayedGallery::merge_display_settings() would supply the same values anyway.
+		foreach ( self::CROSS_TYPE_CHILD_SETTINGS as $key ) {
+			if ( ! array_key_exists( $key, $geometry ) && array_key_exists( $key, $declared ) ) {
+				$geometry[ $key ] = $declared[ $key ];
+			}
+		}
+
+		return $geometry;
 	}
 
 	/**
@@ -830,29 +1081,34 @@ class SharedController extends ParentController {
 			$album_sub = $result ? $result->{$result->id_field} : null;
 			if ( null !== $album_sub ) {
 				$album = $album_sub;
+			} elseif ( '0' !== $album && 'all' !== $album ) {
+				// Slug did not resolve to a real album; fall back to the main album view
+				// instead of storing the raw slug as a container id.
+				$album = null;
 			}
 
-			// Preserve the original album list before altering the DisplayedGallery.
-			$original_albums = $displayed_gallery->get_albums();
+			if ( null !== $album ) {
+				// Preserve the original album list before altering the DisplayedGallery.
+				$original_albums = $displayed_gallery->get_albums();
 
-			// Only navigate into the requested album when it belongs to this shortcode's
-			// own album hierarchy. Without this check every album shortcode on the page
-			// reacts to the same ?album= parameter and renders identical content
-			// (awesomemotive/nextgen-gallery-pro#627). Non-numeric values ('all', '0', or
-			// an unresolved slug) are left to the existing reset/fall-through behaviour below.
-			$album_numeric_id = is_numeric( $album_sub ) ? (int) $album_sub : 0;
+				// Only navigate into the requested album when it belongs to this shortcode's
+				// own album hierarchy. Without this check every album shortcode on the page
+				// reacts to the same ?album= parameter and renders identical content. The
+				// 'all'/'0' reset values are non-numeric and fall through to the reset below.
+				$album_numeric_id = is_numeric( $album_sub ) ? (int) $album_sub : 0;
 
-			if ( ! $album_numeric_id || $this->is_album_in_hierarchy( $album_numeric_id, AlbumMapper::get_instance(), $original_albums ) ) {
-				if ( in_array( $album, $displayed_gallery->container_ids, true ) ) {
-					$viewing_original_album = true;
+				if ( ! $album_numeric_id || $this->is_album_in_hierarchy( $album_numeric_id, AlbumMapper::get_instance(), $original_albums ) ) {
+					if ( in_array( $album, $displayed_gallery->container_ids, true ) ) {
+						$viewing_original_album = true;
+					}
+
+					$displayed_gallery->entity_ids    = [];
+					$displayed_gallery->sortorder     = [];
+					$displayed_gallery->container_ids = ( '0' === $album || 'all' === $album ) ? [] : [ $album ];
+
+					$displayed_gallery->display_settings['original_album_id']       = 'a' . $album_sub;
+					$displayed_gallery->display_settings['original_album_entities'] = array_merge( $original_albums, $displayed_gallery->get_albums() );
 				}
-
-				$displayed_gallery->entity_ids    = [];
-				$displayed_gallery->sortorder     = [];
-				$displayed_gallery->container_ids = ( '0' === $album || 'all' === $album ) ? [] : [ $album ];
-
-				$displayed_gallery->display_settings['original_album_id']       = 'a' . $album_sub;
-				$displayed_gallery->display_settings['original_album_entities'] = array_merge( $original_albums, $displayed_gallery->get_albums() );
 			}
 		}
 
@@ -941,6 +1197,28 @@ class SharedController extends ParentController {
 	 * @return object
 	 */
 	public function make_child_displayed_gallery( \stdClass $gallery, array $display_settings ) {
+		// Apply the gallery's own saved display settings for the child display type (#787),
+		// mirroring get_alternate_displayed_gallery(). array_merge lets the saved settings win over
+		// the album's incoming defaults; the eCommerce overrides below still run after this.
+		//
+		// Unlike the permalink path this child is built as a bare DisplayedGallery with no
+		// display_type assigned, so DisplayedGallery::merge_display_settings() never runs and the
+		// base here is the album's own settings (including its cover geometry), not the child display
+		// type's defaults. That is pre-existing and deliberately left alone: this displayed gallery
+		// exists to carry the lightbox effect code and inline JS payload for the child, while the
+		// album's tiles are sized from the album's settings by the caller - assigning display_type
+		// would re-base every existing album lightbox child, which is well outside #787. What #787
+		// needs from it is that a carried thumbnail override arrives as a complete group rather than
+		// splicing into the album's geometry, and saved_child_settings() guarantees that.
+		if ( ! empty( $display_settings['gallery_display_type'] ) ) {
+			// $gallery is the album-loop entity and already carries display_type / display_type_settings
+			// as direct ngg_gallery columns, so read from it instead of a per-child GalleryMapper::find().
+			$display_settings = array_merge(
+				$display_settings,
+				$this->saved_child_settings( $gallery, $display_settings['gallery_display_type'] )
+			);
+		}
+
 		if ( ! empty( $gallery->is_ecommerce_enabled ) ) {
 			$display_settings['is_ecommerce_enabled'] = 1;
 			// Album display types set ngg_triggers_display='never'; override so eCommerce trigger icons

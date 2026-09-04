@@ -220,8 +220,15 @@ class AlbumREST {
 					'preview_image_id'      => [
 						'required'          => false,
 						'type'              => 'integer',
-						'sanitize_callback' => 'absint',
-						'validate_callback' => [ self::class, 'validate_preview_image_id' ],
+						// Cast keeping the sign (not absint) so a negative ID stays negative and hits the
+						// fallback in update_album() instead of flipping to a real image (-42 -> 42). Wrapped
+						// in a closure because WP passes ($value, $request, $param) to sanitize_callback and
+						// the built-in intval() rejects the extra args (ArgumentCountError -> HTTP 500).
+						'sanitize_callback' => static function ( $value ) {
+							return (int) $value;
+						},
+						// Existence checked in update_album() instead of here, so a stale unchanged
+						// previewpic can't block an edit (#875).
 					],
 					'pageid'                => [
 						'required'          => false,
@@ -357,23 +364,7 @@ class AlbumREST {
 			);
 		}
 
-		// Check cache first.
-		$cache_key = 'ngg_image_exists_' . $value;
-		$exists    = wp_cache_get( $cache_key );
-
-		if ( false === $exists ) {
-			global $wpdb;
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
-			$exists = $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT COUNT(*) FROM {$wpdb->nggpictures} WHERE pid = %d",
-					$value
-				)
-			);
-			wp_cache_set( $cache_key, $exists, '', 3600 ); // Cache for 1 hour.
-		}
-
-		if ( ! $exists ) {
+		if ( ! self::image_exists( $value ) ) {
 			return new WP_Error(
 				'invalid_preview_image_id',
 				// translators: %d is the image ID.
@@ -383,6 +374,23 @@ class AlbumREST {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Whether an image with the given pid exists.
+	 *
+	 * @param int $pid The image ID to check.
+	 * @return bool
+	 */
+	public static function image_exists( $pid ) {
+		$pid = (int) $pid;
+		if ( $pid <= 0 ) {
+			return false;
+		}
+
+		// Via the mapper (not a standalone COUNT + cache key) so image deletion invalidates the result
+		// and a preview set to a just-deleted image self-heals instead of hitting a stale positive.
+		return (bool) ImageMapper::get_instance()->find( $pid );
 	}
 
 	/**
@@ -748,9 +756,6 @@ class AlbumREST {
 		if ( $request->has_param( 'description' ) ) {
 			$album->albumdesc = $request->get_param( 'description' );
 		}
-		if ( $request->has_param( 'preview_image_id' ) ) {
-			$album->previewpic = $request->get_param( 'preview_image_id' );
-		}
 		if ( $request->has_param( 'pageid' ) ) {
 			$album->pageid = $request->get_param( 'pageid' );
 		}
@@ -758,6 +763,20 @@ class AlbumREST {
 		// Handle sortorder field
 		if ( $request->has_param( 'sortorder' ) ) {
 			$album->sortorder = $request->get_param( 'sortorder' );
+		}
+
+		// Preview image: only touch it when the caller actually picked a different image. Re-sending the
+		// stored previewpic unchanged (the admin app round-trips the whole album on save) must never fail,
+		// even if that image was later deleted. When a genuinely new value doesn't resolve, self-heal to a
+		// valid first-gallery thumbnail instead of rejecting the whole update. See GH issue #875.
+		// Placed after sortorder so the fallback uses the incoming galleries, not the stale ones.
+		if ( $request->has_param( 'preview_image_id' ) ) {
+			$new_pid = (int) $request->get_param( 'preview_image_id' );
+			if ( $new_pid !== (int) $album->previewpic ) {
+				$album->previewpic = self::image_exists( $new_pid )
+					? $new_pid
+					: self::get_first_gallery_thumbnail( $album->sortorder );
+			}
 		}
 
 		// Handle display type fields

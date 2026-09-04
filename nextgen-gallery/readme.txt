@@ -2,7 +2,7 @@
 Contributors: photocrati, imagely
 Tags: gallery, wordpress gallery plugin, photo gallery, image gallery, slideshow
 Requires at least: 5.5.4
-Stable tag: 4.4.0
+Stable tag: 4.4.1
 Tested up to: 7.1
 License: GPLv3
 Requires PHP: 7.4
@@ -197,6 +197,16 @@ For more information, feel free to visit the official website for the NextGEN Ga
 
 == Changelog ==
 
+= 4.4.1 - 09.03.2026 =
+* Fixed: Sites no longer break when a gallery contains an image with damaged size information.
+* Fixed: Albums can be saved again when their preview image has been deleted or is missing.
+* Fixed: Broken album and gallery links no longer fill the error log with database errors.
+* Fixed: Tag-based galleries now respect the image limit you set for them.
+* Fixed: The Sort and Exclude tab now lists only the images that belong to a tag-based gallery, instead of every image in the library.
+* Fixed: The lightbox now follows your global lightbox setting on pages that don't contain a gallery.
+* Fixed: Removed stray markup in the image browser that could break the layout of the surrounding page.
+* Fixed: Settings in the gallery Customize tab no longer snap back to their previous values while you're editing.
+
 = 4.4.0 - 08.21.2026 =
 * Fixed: Updating no longer slows the site down or throws errors while duplicate images are cleaned up, on sites with very large galleries.
 * Fixed: If that cleanup does fail during an update, you now get a notice explaining why instead of it failing quietly.
@@ -309,13 +319,13 @@ For more information, feel free to visit the official website for the NextGEN Ga
 * Improved: Gallery path validation is shared between REST and classic Image Options (safer relative paths).
 * Improved: JPEG upload handling to be more memory-aware on hosts with older GD libraries
 
-= 4.1.1 - 03.13.2025 =
+= 4.1.1 - 03.13.2026 =
 * Fixed: PNG and WEBP watermarks no longer lose transparency when applied to images
 * Fixed: Fatal error when using NextGen Gallery with older Pro add-on versions that reference the legacy C_NextGen_Settings class
 * Fixed: SinglePicture display no longer crashes when width/height settings are not configured
 * Fixed: Imagebrowser now opens to the correct image when viewing images within albums (Thumbnails display type)
 
-= 4.1.0 - 03.11.2026
+= 4.1.0 - 03.11.2026 =
 * Added: Features page for discovering and managing available integrations
 * Added: CDN menu item in the admin sidebar
 * Added: Gallery deletion functionality from the Image Uploader

@@ -391,11 +391,19 @@ class DisplayManager {
 			return;
 		}
 
-		if ( ! wp_style_is( 'fontawesome', 'registered' ) ) {
+		if ( ! wp_style_is( 'nextgen_gallery_icons', 'registered' ) ) {
 			wp_enqueue_style(
-				'fontawesome',
+				'nextgen_gallery_icons',
 				StaticAssets::get_url( 'FontAwesome/css/ngg-icons.min.css' ),
 				[],
+				NGG_SCRIPT_VERSION
+			);
+			// Lightbox-scoped copy under a unique family name so the Pro lightbox
+			// toolbar icons are immune to any third-party Font Awesome on the page.
+			wp_enqueue_style(
+				'nextgen_gallery_icons_scope',
+				StaticAssets::get_url( 'FontAwesome/css/ngg-icons-scope.css' ),
+				[ 'nextgen_gallery_icons' ],
 				NGG_SCRIPT_VERSION
 			);
 		}

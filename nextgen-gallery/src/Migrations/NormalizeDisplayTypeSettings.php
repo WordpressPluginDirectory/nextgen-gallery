@@ -16,7 +16,9 @@ use Imagely\NGG\Util\Serializable;
  * only genuine customizations so uncustomized types inherit the current global settings at render.
  *
  * Older versions baked a full snapshot of every display type into each entity; this strips, once
- * per display type, any stored value equal to that type's controller default.
+ * per display type, any stored value equal to what an uncustomized entity would inherit at render
+ * (the stored global for that key, falling back to the controller default). Values that differ from
+ * the inherited value are genuine customizations and are kept.
  *
  * Two properties keep this safe on real installs:
  *  - Incremental by type. The completion marker stores the list of display types already normalized.
@@ -73,6 +75,11 @@ class NormalizeDisplayTypeSettings {
 			return false;
 		}
 
+		// The value an uncustomized entity inherits at render is the stored global, falling back to the
+		// controller default. Stripping compares against this, not the bare default, so a value equal to
+		// the default but differing from the global is preserved instead of silently following the global.
+		$globals = self::get_global_settings( $todo );
+
 		// Per-table cursors — including the durable DONE marker — are only valid for the exact type
 		// set they were scanned against. If that set changed since a previous partial run (e.g. Pro
 		// activated mid-run, growing $todo), discard the stale cursors so an already-"done" table is
@@ -85,8 +92,8 @@ class NormalizeDisplayTypeSettings {
 
 		global $wpdb;
 		$budget       = self::MAX_ROWS_PER_REQUEST;
-		$gallery_stat = self::normalize_table( $wpdb->prefix . 'ngg_gallery', 'gid', $defaults, $budget );
-		$album_stat   = self::normalize_table( $wpdb->prefix . 'ngg_album', 'id', $defaults, $budget );
+		$gallery_stat = self::normalize_table( $wpdb->prefix . 'ngg_gallery', 'gid', $defaults, $globals, $budget );
+		$album_stat   = self::normalize_table( $wpdb->prefix . 'ngg_album', 'id', $defaults, $globals, $budget );
 
 		// A DB error leaves the marker unchanged so the run retries; per-table cursors preserve progress.
 		if ( self::FAILED === $gallery_stat || self::FAILED === $album_stat ) {
@@ -164,6 +171,32 @@ class NormalizeDisplayTypeSettings {
 	}
 
 	/**
+	 * Builds a map of display type name => stored global settings — the settings an uncustomized entity
+	 * inherits at render (the same global row the renderer merges over the controller defaults).
+	 *
+	 * @param array $only_types Restrict to these display type names.
+	 * @return array
+	 */
+	private static function get_global_settings( $only_types ) {
+		$globals = [];
+
+		foreach ( DisplayTypeMapper::get_instance()->find_all() as $display_type ) {
+			if ( empty( $display_type->name ) || ! ControllerFactory::has_controller( $display_type->name ) ) {
+				continue;
+			}
+
+			// phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
+			if ( ! in_array( $display_type->name, $only_types, true ) ) {
+				continue;
+			}
+
+			$globals[ $display_type->name ] = (array) $display_type->settings;
+		}
+
+		return $globals;
+	}
+
+	/**
 	 * Strips default-equal values from one table's display_type_settings column.
 	 *
 	 * Keyset pagination (WHERE id > cursor) with a durable per-table cursor: an integer row id while in
@@ -172,10 +205,11 @@ class NormalizeDisplayTypeSettings {
 	 * @param string $table    Fully-qualified table name.
 	 * @param string $id_field Primary key column.
 	 * @param array  $defaults Map of display type name => default settings.
+	 * @param array  $globals  Map of display type name => stored global settings.
 	 * @param int    $budget   Remaining rows this request may process, passed by reference.
 	 * @return string One of self::DONE, self::PARTIAL, self::FAILED.
 	 */
-	private static function normalize_table( $table, $id_field, $defaults, &$budget ) {
+	private static function normalize_table( $table, $id_field, $defaults, $globals, &$budget ) {
 		global $wpdb;
 
 		$cursor_option = self::CURSOR_PREFIX . $id_field;
@@ -226,7 +260,7 @@ class NormalizeDisplayTypeSettings {
 					continue;
 				}
 
-				if ( ! self::strip_defaults( $settings, $defaults ) ) {
+				if ( ! self::strip_defaults( $settings, $defaults, $globals ) ) {
 					continue;
 				}
 
@@ -266,13 +300,24 @@ class NormalizeDisplayTypeSettings {
 	}
 
 	/**
-	 * Removes values equal to the controller default from each display type slice.
+	 * Removes stored values equal to what an uncustomized entity would inherit at render.
+	 *
+	 * The inherited value is the stored global for that key, falling back to the controller default when
+	 * the global row has no such key. Comparing against the inherited value (not the bare default) keeps
+	 * the strip lossless at migration time: a removed key resolves to the same value at render right after
+	 * the run. A stored value that differs from the inherited value is a real customization and is kept.
+	 *
+	 * Note the "lossless" guarantee is for the moment of migration only. A stored value equal to the
+	 * current global is removed and will therefore track the global on any later global change, rather
+	 * than staying pinned to its original value. That is the intended cleanup behavior (uncustomized
+	 * entities follow the global); only a value that differs from the global stays pinned.
 	 *
 	 * @param array $settings Per-entity display type settings, passed by reference.
 	 * @param array $defaults Map of display type name => default settings.
+	 * @param array $globals  Map of display type name => stored global settings.
 	 * @return bool True if anything was removed.
 	 */
-	private static function strip_defaults( &$settings, $defaults ) {
+	private static function strip_defaults( &$settings, $defaults, $globals ) {
 		$changed = false;
 
 		foreach ( $settings as $type_name => $type_settings ) {
@@ -281,18 +326,21 @@ class NormalizeDisplayTypeSettings {
 			}
 
 			$type_defaults = $defaults[ $type_name ];
+			$type_global   = isset( $globals[ $type_name ] ) && is_array( $globals[ $type_name ] ) ? $globals[ $type_name ] : [];
 
 			foreach ( $type_settings as $key => $value ) {
 				if ( ! \array_key_exists( $key, $type_defaults ) ) {
 					continue;
 				}
 
-				// The old save path baked booleans as ints, so normalize a boolean default the same
-				// way before comparing (e.g. false -> 0 so it matches a baked '0').
-				$default = $type_defaults[ $key ];
-				$default = is_bool( $default ) ? (int) $default : $default;
+				// What an uncustomized entity inherits: the stored global for this key, else the default.
+				$inherited = \array_key_exists( $key, $type_global ) ? $type_global[ $key ] : $type_defaults[ $key ];
 
-				if ( (string) $default === (string) $value ) {
+				// The old save path baked booleans as ints, so normalize a boolean inherited value the
+				// same way before comparing (e.g. false -> 0 so it matches a baked '0').
+				$inherited = is_bool( $inherited ) ? (int) $inherited : $inherited;
+
+				if ( (string) $inherited === (string) $value ) {
 					unset( $settings[ $type_name ][ $key ] );
 					$changed = true;
 				}

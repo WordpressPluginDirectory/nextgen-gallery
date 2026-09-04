@@ -379,6 +379,12 @@ class Renderer {
 			$controller->enqueue_frontend_resources( $displayed_gallery );
 		}
 
+		// Enqueue trigger assets outside the dedup block so they survive a cache hit.
+		if ( ( ! defined( 'NGG_SKIP_LOAD_SCRIPTS' ) || ! NGG_SKIP_LOAD_SCRIPTS )
+		&& ! $this->is_rest_request() ) {
+			TriggerManager::get_instance()->enqueue_trigger_assets( $displayed_gallery );
+		}
+
 		// Try cache lookup, if we're to do so.
 		$key  = null;
 		$html = false;

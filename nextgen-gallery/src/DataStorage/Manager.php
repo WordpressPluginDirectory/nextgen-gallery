@@ -1309,7 +1309,9 @@ class Manager {
 
 			// Image dimensions are stored in the $image->meta_data
 			// property for all implementations.
-			if ( isset( $image->meta_data ) && isset( $image->meta_data[ $size ] ) ) {
+			// is_array() guards against corrupt stored meta (e.g. the literal string "Array"
+			// left by a non-serialization-safe migration); fall through to recompute from disk.
+			if ( isset( $image->meta_data ) && isset( $image->meta_data[ $size ] ) && is_array( $image->meta_data[ $size ] ) ) {
 				$retval = $image->meta_data[ $size ];
 			} else {
 				// Didn't exist for meta data. We'll have to compute
@@ -1567,6 +1569,11 @@ class Manager {
 	}
 
 	public function get_image_size_params( $image, $size, $params = [], $skip_defaults = false ) {
+		// Callers may pass corrupt stored meta (a string) as $params — PHP 8 fatals on string-offset writes.
+		if ( ! is_array( $params ) ) {
+			$params = [];
+		}
+
 		// Get the image entity.
 		if ( is_numeric( $image ) ) {
 			$image = $this->image_mapper->find( $image );
