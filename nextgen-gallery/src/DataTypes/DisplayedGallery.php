@@ -609,6 +609,13 @@ class DisplayedGallery extends Model {
 		// Apply a sorting order.
 		if ( $sort_by ) {
 			$mapper->order_by( $sort_by, $sort_direction );
+			// Append a deterministic pid tiebreaker so tied sort values cannot be
+			// partitioned differently across LIMIT/OFFSET page queries. Without it,
+			// rows sharing a sort value (e.g. appended images all at sortorder 0) can
+			// repeat on one page and be absent from every page.
+			if ( 'pid' !== $sort_by ) {
+				$mapper->order_by( 'pid', 'ASC' );
+			}
 		}
 
 		// Apply a limit.

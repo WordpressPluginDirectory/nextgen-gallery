@@ -131,6 +131,9 @@ class BlockManager {
 					'nonce'     => \wp_create_nonce( 'ngg_attach_to_post_iframe' ),
 					'restNonce' => \wp_create_nonce( 'wp_rest' ),
 					'adminUrl'  => \admin_url( 'admin.php' ),
+					// Both block scripts publish this same global, so the key has to be on
+					// both objects: whichever inline script prints last wins.
+					'igwUrl'    => \admin_url( '/?' . NGG_ATTACH_TO_POST_SLUG . '=1' ),
 				]
 			) . ';',
 			'before'
@@ -172,6 +175,10 @@ class BlockManager {
 						'nonce'     => \wp_create_nonce( 'ngg_attach_to_post_iframe' ),
 						'restNonce' => \wp_create_nonce( 'wp_rest' ),
 						'adminUrl'  => \admin_url( 'admin.php' ),
+						// The picker URL has to travel on this handle rather than on the
+						// classic media-editor handle, which WordPress only enqueues on
+						// some screens and which this plugin never enqueues itself.
+						'igwUrl'    => \admin_url( '/?' . NGG_ATTACH_TO_POST_SLUG . '=1' ),
 					]
 				) . ';',
 				'before'

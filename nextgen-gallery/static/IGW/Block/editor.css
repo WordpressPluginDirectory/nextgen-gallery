@@ -111,6 +111,33 @@ div[data-type="imagely/nextgen-album-simple"]:focus::after {
 #add-ngg-gallery-modal-spinner i.fa.fa-spin {
 }
 
+/* Shown in place of the picker when no address is available for it */
+#add-ngg-gallery-modal-error {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+    padding: 0 40px;
+    background: white;
+    text-align: center;
+}
+
+#add-ngg-gallery-modal-error:focus {
+    outline: none;
+}
+
+#add-ngg-gallery-modal-error p {
+    margin: 4px 0;
+    font-size: 15px;
+    max-width: 520px;
+}
+
 /* Customize the NextGEN Gallery placeholder */
 
 div[data-type="imagely/nextgen-gallery"] .add-ngg-gallery-parent,

@@ -119,7 +119,15 @@ class UsageTracking {
 	 * is stored per table and survives every server upgrade -- a table created on MySQL 5.5 is still
 	 * COMPACT on MySQL 8 today.
 	 *
+	 * unique_key alone stopped being enough once the key could be created as a filename prefix.
+	 * It is decided on index *name*, so a site that has the guard at a 191-character prefix and a
+	 * site that has always had the full-column key both report '1' -- which would collapse the
+	 * previously-broken and always-fine populations into one number and make the measurement this
+	 * function exists for impossible to take. unique_key_prefix separates them: 'full' for the
+	 * whole column, the prefix length for a prefixed key, 'none' when there is no key at all.
+	 *
 	 * @since 4.4.0
+	 * @since 4.4.2 Added unique_key_prefix.
 	 *
 	 * @return array
 	 */
@@ -129,10 +137,11 @@ class UsageTracking {
 		// 'unknown' rather than an empty string, so "we could not look this up" stays distinguishable
 		// from a table that exists and genuinely has no unique key.
 		$info = [
-			'engine'     => 'unknown',
-			'row_format' => 'unknown',
-			'charset'    => 'unknown',
-			'unique_key' => 'unknown',
+			'engine'            => 'unknown',
+			'row_format'        => 'unknown',
+			'charset'           => 'unknown',
+			'unique_key'        => 'unknown',
+			'unique_key_prefix' => 'unknown',
 		];
 
 		$table = $wpdb->prefix . 'ngg_pictures';
@@ -158,17 +167,30 @@ class UsageTracking {
 		$info['row_format'] = ! empty( $table_info->row_format ) ? $table_info->row_format : 'unknown';
 		$info['charset']    = ! empty( $table_info->charset ) ? $table_info->charset : 'unknown';
 
-		$has_unique_key = $wpdb->get_var(
+		// SUB_PART is NULL for a column indexed in full and the prefix length for a prefixed one,
+		// so MAX() over the index's rows reports the filename prefix without needing to name the
+		// column: 0 means every column is indexed in full, anything else is the prefix length.
+		$key_info = $wpdb->get_row(
 			$wpdb->prepare(
-				'SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = %s AND index_name = %s',
+				'SELECT COUNT(*) AS columns_indexed, MAX( COALESCE( SUB_PART, 0 ) ) AS filename_prefix
+				FROM information_schema.statistics
+				WHERE table_schema = DATABASE() AND table_name = %s AND index_name = %s',
 				$table,
 				'unique_gallery_filename'
 			)
 		);
 		// phpcs:enable
 
-		if ( null !== $has_unique_key ) {
-			$info['unique_key'] = $has_unique_key ? '1' : '0';
+		if ( ! empty( $key_info ) && null !== $key_info->columns_indexed ) {
+			$info['unique_key'] = $key_info->columns_indexed ? '1' : '0';
+
+			if ( ! $key_info->columns_indexed ) {
+				$info['unique_key_prefix'] = 'none';
+			} elseif ( empty( $key_info->filename_prefix ) ) {
+				$info['unique_key_prefix'] = 'full';
+			} else {
+				$info['unique_key_prefix'] = (string) (int) $key_info->filename_prefix;
+			}
 		}
 
 		return $info;
@@ -212,6 +234,15 @@ class UsageTracking {
 		$settings['pictures_row_format'] = $pictures_info['row_format'];
 		$settings['pictures_charset']    = $pictures_info['charset'];
 		$settings['pictures_unique_key'] = $pictures_info['unique_key'];
+		// Without this the prefix is computed on every check-in and thrown away, and a prefixed
+		// key reports 'pictures_unique_key' => '1' identically to a full-column one -- the exact
+		// collapse get_pictures_table_info()'s docblock says makes #941's measurement impossible.
+		$settings['pictures_unique_key_prefix'] = $pictures_info['unique_key_prefix'];
+		// The population the installer deliberately did NOT migrate: set on an existing table
+		// that has no guard, carrying that table's approximate row count. #941 sizes what was
+		// left behind from this rather than by inspecting sites by hand. '' when nothing was
+		// deferred, so the deferred and never-examined populations stay distinguishable.
+		$settings['pictures_guard_deferred'] = (string) get_option( 'ngg_pictures_guard_deferred', '' );
 
 		$data['nextgen_version'] = NGG_PLUGIN_VERSION;
 		$data['ng_type']         = 'lite';

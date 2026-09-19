@@ -56,13 +56,20 @@ function close_attach_to_post_window() {
 
 	// TinyMCE editor
 	} else {
-		const src = jQuery(top.document).find("#TB_window iframe").attr('src');
-		if (src && src.match('attach_to_post')) {
-			top.tb_remove();
-		} else {
-			top.tinyMCE.activeEditor.windowManager.close(window);
+		try {
+			const src = jQuery(top.document).find("#TB_window iframe").attr('src');
+			if (src && src.match('attach_to_post')) {
+				top.tb_remove();
+			} else {
+				top.tinyMCE.activeEditor.windowManager.close(window);
+			}
+		} catch (e) {
+			// Only the cross-origin canvas case is handled here; surface anything else.
+			if (e.name !== 'SecurityError') { throw e; }
+			if (window.parent && window.parent !== window) {
+				window.parent.postMessage({ ngg_attach_to_post: 'close' }, '*');
+			}
 		}
-
 	}
 }
 
@@ -73,35 +80,45 @@ function insert_into_editor(snippet, ref_or_id) {
 			shortcode: snippet
 		}});
 		iframe.dispatchEvent(event);
+		return;
 	}
-	else if (is_visual_editor()) {
-		var editor = top.tinyMCE.activeEditor;
-		if (editor.selection.getNode().outerHTML.indexOf(ref_or_id) >= 0) {
-			jQuery(editor.selection.getNode()).attr('data-shortcode', snippet.substring(1, snippet.length-1));
+
+	try {
+		if (is_visual_editor()) {
+			var editor = top.tinyMCE.activeEditor;
+			if (editor.selection.getNode().outerHTML.indexOf(ref_or_id) >= 0) {
+				jQuery(editor.selection.getNode()).attr('data-shortcode', snippet.substring(1, snippet.length-1));
+			} else {
+				editor.execCommand('mceInsertContent', false, snippet);
+			}
+			editor.selection.collapse(false);
+
 		} else {
-			editor.execCommand('mceInsertContent', false, snippet);
+			myField = top.document.getElementById('content');
+
+			myValue = snippet;
+
+			//IE support
+			if (document.selection) {
+				myField.trigger('focus');
+				sel = document.selection.createRange();
+				sel.text = myValue;
+			} else if (myField.selectionStart || myField.selectionStart === '0') {
+				//MOZILLA and others
+				var startPos = myField.selectionStart;
+				var endPos = myField.selectionEnd;
+				myField.value = myField.value.substring(0, startPos)
+					+ myValue
+					+ myField.value.substring(endPos, myField.value.length);
+			} else {
+				myField.value += myValue;
+			}
 		}
-		editor.selection.collapse(false);
-
-	} else {
-		myField = top.document.getElementById('content');
-
-		myValue = snippet;
-
-		//IE support
-		if (document.selection) {
-			myField.trigger('focus');
-			sel = document.selection.createRange();
-			sel.text = myValue;
-		} else if (myField.selectionStart || myField.selectionStart === '0') {
-			//MOZILLA and others
-			var startPos = myField.selectionStart;
-			var endPos = myField.selectionEnd;
-			myField.value = myField.value.substring(0, startPos)
-				+ myValue
-				+ myField.value.substring(endPos, myField.value.length);
-		} else {
-			myField.value += myValue;
+	} catch (e) {
+		// Only the cross-origin canvas case is handled here; surface anything else.
+		if (e.name !== 'SecurityError') { throw e; }
+		if (window.parent && window.parent !== window) {
+			window.parent.postMessage({ ngg_attach_to_post: 'insert', shortcode: snippet, ref: ref_or_id }, '*');
 		}
 	}
 }

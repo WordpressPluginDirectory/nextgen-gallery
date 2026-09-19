@@ -160,7 +160,16 @@ trait ConvertGalleryTrait {
 					);
 				}
 			} catch ( \RuntimeException $ex ) {
-				$errors[] = $ex->getMessage();
+				// A bare E_EntityNotFoundException would otherwise append an empty string, which
+				// counts as an error but shows the user nothing.
+				$errors[] = \Imagely\NGG\Util\Sanitization::exception_message(
+					$ex,
+					sprintf(
+						// translators: %d is the attachment ID.
+						__( 'Failed to import attachment ID %d', 'nggallery' ),
+						$attachment_id
+					)
+				);
 			} catch ( \Exception $ex ) {
 				$errors[] = sprintf(
 					// translators: %d is the attachment ID.

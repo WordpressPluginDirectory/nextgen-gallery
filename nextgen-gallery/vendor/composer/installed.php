@@ -11,12 +11,12 @@
     ),
     'versions' => array(
         'ezyang/htmlpurifier' => array(
-            'pretty_version' => 'v4.17.0',
-            'version' => '4.17.0.0',
+            'pretty_version' => 'v4.19.0',
+            'version' => '4.19.0.0',
             'type' => 'library',
             'install_path' => __DIR__ . '/../ezyang/htmlpurifier',
             'aliases' => array(),
-            'reference' => 'bbc513d79acf6691fa9cf10f192c90dd2957f18c',
+            'reference' => 'b287d2a16aceffbf6e0295559b39662612b77fcf',
             'dev_requirement' => false,
         ),
         'imagely/nextgen-gallery' => array(

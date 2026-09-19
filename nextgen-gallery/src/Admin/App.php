@@ -83,15 +83,14 @@ class App {
 			],
 		];
 
-		// Only add eCommerce menu item if Pro level is installed
-		$pro_type = $this->get_pro_type_installed();
-		if ( 'pro' === $pro_type ) {
-			$sub_menus[] = [
-				'name'       => __( 'eCommerce', 'nggallery' ),
-				'capability' => 'NextGEN Change options',
-				'menu_slug'  => "$menu-ecommerce",
-			];
-		}
+		// eCommerce menu: Pro opens the full hub; Lite opens a static Pro-upsell page (the React
+		// app renders the right one). Lite uses manage_options since it has no config to gate.
+		$is_pro_ecommerce = ( 'pro' === $this->get_pro_type_installed() );
+		$sub_menus[]      = [
+			'name'       => __( 'eCommerce', 'nggallery' ),
+			'capability' => $is_pro_ecommerce ? 'NextGEN Change options' : 'manage_options',
+			'menu_slug'  => "$menu-ecommerce",
+		];
 
 		$sub_menus[] = [
 			'name'       => __( 'Settings', 'nggallery' ),
@@ -353,6 +352,7 @@ HTML;
 			'is_valid'     => false,
 			'expiration'   => null,
 			'expires_soon' => false,
+			'brand'        => 'imagely',
 		];
 
 		// Only get license data if we're not on the free version
@@ -384,6 +384,12 @@ HTML;
 				$level = get_option( 'ngg_license_level_' . $pro_type, '' );
 				if ( ! empty( $level ) ) {
 					$license_data['level'] = $level;
+				}
+
+				// Get storefront brand (defaults to imagely; only photocrati-store licenses differ).
+				$brand = get_option( 'ngg_license_brand_' . $pro_type, '' );
+				if ( ! empty( $brand ) ) {
+					$license_data['brand'] = $brand;
 				}
 
 				// Get last check time
@@ -426,6 +432,9 @@ HTML;
 
 		// Get upload directory info
 		$upload_dir = wp_upload_dir();
+
+		// Reported as-is ("rows:<n>") when set; see the note on the field below.
+		$guard_deferred = (string) get_option( 'ngg_pictures_guard_deferred', '' );
 
 		$system_info = [
 			// Existing fields
@@ -487,6 +496,16 @@ HTML;
 			'timezone'                 => wp_timezone_string(),
 			'locale'                   => get_locale(),
 			'permalink_structure'      => get_option( 'permalink_structure', 'Default' ),
+
+			// Database schema state. The duplicate-image guard is deliberately not migrated onto
+			// existing pictures tables (#941), so on those sites it is simply absent -- and the
+			// only other record of that is the weekly check-in, which UsageTracking::hooks()
+			// skips unless the onboarding wizard ran and the licence is lite. Old installs are
+			// exactly the affected population and exactly the one that cannot report, so the
+			// deferral is surfaced here too, where a site owner or support can read it.
+			'pictures_guard_deferred'  => '' !== $guard_deferred ? $guard_deferred : 'No',
+			'schema_error_recorded'    => '' !== (string) get_option( 'ngg_schema_error', '' ) ? 'Yes' : 'No',
+			'upgrade_error_recorded'   => '' !== (string) get_option( 'ngg_upgrade_error', '' ) ? 'Yes' : 'No',
 
 			// NextGen Legacy Settings
 			'show_legacy_admin_pages'  => $settings->get( 'ngg_show_old_settings', false ) ? 'Yes' : 'No',

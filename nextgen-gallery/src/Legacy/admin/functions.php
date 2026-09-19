@@ -623,14 +623,29 @@ class nggAdmin {
 			return '';
 		}
 
-		$js_array = implode( '","', $image_array );
+		// Built with wp_json_encode() rather than implode( '","', ... ) inside a quoted string
+		// literal. esc_js() runs _wp_specialchars( $text, ENT_COMPAT ), which entity-encodes the
+		// double quotes used as the separator: the ids 9601,9602 became the string
+		// 9601&quot;,&quot;9602, so `new Array( "..." )` produced a ONE element array whose single
+		// entry was that whole mangled string. The client then posted it as an id, the server
+		// absint()-ed it back to 9601, and every dialog-driven bulk operation processed only the
+		// first selected image while the progress bar reported completion over maxStep = 1.
+		// That is the still-open half of issue #925 (the other half - sanitize_text_field()
+		// collapsing the posted doaction[] array to '' - is fixed in manage.php).
+		//
+		// The ids are integers here, but the JSON is hex-escaped anyway so no value can close the
+		// <script> element or break out of the literal.
+		$js_array = wp_json_encode(
+			array_values( array_map( 'strval', $image_array ) ),
+			JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+		);
 
 		// send out some JavaScript, which initate the ajax operation.
 		ob_start();
 		?>
 		<script type="text/javascript">
 
-			Images = new Array("<?php echo esc_js( $js_array ); ?>");
+			Images = <?php echo $js_array; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_json_encode with JSON_HEX_* produces a self-contained, script-safe JS array literal; esc_js() would corrupt it. ?>;
 
 			nggAjaxOptions = {
 				operation: "<?php echo esc_js( $operation ); ?>",

@@ -42,8 +42,8 @@ if ( ! intval( $ajax_pagination ) ) {
 		?>
 		<a href="<?php echo esc_attr( $storage->get_image_url( $current_image, 'full', true ) ); ?>"
 			title="<?php echo esc_attr( $current_image->description ); ?>"
-			data-src="<?php echo esc_attr( $storage->get_image_url( $current_image ) ); ?>"
-			data-thumbnail="<?php echo esc_attr( $storage->get_image_url( $current_image, 'thumb' ) ); ?>"
+			data-src="<?php echo esc_attr( $storage->get_cache_busted_image_url( $current_image ) ); ?>"
+			data-thumbnail="<?php echo esc_attr( $storage->get_cache_busted_image_url( $current_image, 'thumb' ) ); ?>"
 			data-image-id="<?php echo esc_attr( $current_image->{$current_image->id_field} ); ?>"
 			data-image-name="<?php echo esc_attr( $current_image->filename ?? '' ); ?>"
 			data-title="<?php echo esc_attr( $current_image->alttext ); ?>"
@@ -65,9 +65,9 @@ if ( ! intval( $ajax_pagination ) ) {
 			<?php if ( $show_tiktok_play_button_current ) : ?>
 				<span class="ngg-video-play-overlay" aria-hidden="true"></span>
 			<?php endif; ?>
-			<img title="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $current_image->alttext ) ); ?>"
+			<img<?php echo \Imagely\NGG\Display\GalleryImage::attributes(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- attributes() escapes each attribute with esc_attr(). ?> title="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $current_image->alttext ) ); ?>"
 				alt="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $current_image->alttext ) ); ?>"
-				src="<?php echo esc_attr( $storage->get_image_url( $current_image, 'full' ) ); ?>"
+				src="<?php echo esc_attr( $storage->get_cache_busted_image_url( $current_image, 'full' ) ); ?>"
 				width="<?php echo esc_attr( $image_size['width'] ); ?>"
 				height="<?php echo esc_attr( $image_size['height'] ); ?>"
 				style="max-width: <?php print esc_attr( $image_size['width'] ); ?>px;"/>
@@ -113,9 +113,9 @@ if ( ! intval( $ajax_pagination ) ) {
 								<?php if ( $show_tiktok_play_button || ! empty( $image->meta_data['video_link'] ) ) { ?>
 									<span class="ngg-video-play-overlay" aria-hidden="true"></span>
 								<?php } ?>
-								<img title="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->alttext ) ); ?>"
+								<img<?php echo \Imagely\NGG\Display\GalleryImage::attributes(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- attributes() escapes each attribute with esc_attr(). ?> title="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->alttext ) ); ?>"
 										alt="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->alttext ) ); ?>"
-										src="<?php echo esc_attr( $storage->get_image_url( $image, $thumbnail_size_name ) ); ?>"
+										src="<?php echo esc_attr( $storage->get_cache_busted_image_url( $image, $thumbnail_size_name ) ); ?>"
 										width="<?php echo esc_attr( $thumb_size['width'] ); ?>"
 										height="<?php echo esc_attr( $thumb_size['height'] ); ?>"/>
 								</a>

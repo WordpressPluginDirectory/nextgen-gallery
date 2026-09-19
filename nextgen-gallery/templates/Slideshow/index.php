@@ -69,8 +69,8 @@ $this->start_element( 'nextgen_gallery.gallery_container', 'container', $display
 
 		<a href="<?php echo esc_attr( $storage->get_image_url( $image ) ); ?>"
 			title="<?php echo esc_attr( $image->description ); ?>"
-			data-src="<?php echo esc_attr( $storage->get_image_url( $image ) ); ?>"
-			data-thumbnail="<?php echo esc_attr( $storage->get_image_url( $image, 'thumb' ) ); ?>"
+			data-src="<?php echo esc_attr( $storage->get_cache_busted_image_url( $image ) ); ?>"
+			data-thumbnail="<?php echo esc_attr( $storage->get_cache_busted_image_url( $image, 'thumb' ) ); ?>"
 			data-image-id="<?php echo esc_attr( $image->{$image->id_field} ); ?>"
 			data-image-name="<?php echo esc_attr( $image->filename ?? '' ); ?>"
 			data-title="<?php echo esc_attr( $image->alttext ); ?>"
@@ -92,10 +92,10 @@ $this->start_element( 'nextgen_gallery.gallery_container', 'container', $display
 				<span class="ngg-video-play-overlay" aria-hidden="true"></span>
 			<?php endif; ?>
 
-			<img data-image-id='<?php echo esc_attr( $image->pid ); ?>'
+			<img<?php echo \Imagely\NGG\Display\GalleryImage::attributes(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- attributes() escapes each attribute with esc_attr(). ?> data-image-id='<?php echo esc_attr( $image->pid ); ?>'
 				title="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->description ) ); ?>"
 				alt="<?php echo esc_attr( \Imagely\NGG\Display\I18N::ngg_plain_text_alt_title_attributes( $image->alttext ) ); ?>"
-				src="<?php echo esc_attr( $storage->get_computed_image_url( $image, 'full' ) ); ?>"
+				src="<?php echo esc_attr( $storage->get_cache_busted_image_url( $image, 'full' ) ); ?>"
 				height="<?php echo esc_attr( (string) ( $gallery_height - 20 ) ); ?>"
 				style="max-height: <?php echo esc_attr( $gallery_height - 20 ); ?>px;"/>
 		</a>

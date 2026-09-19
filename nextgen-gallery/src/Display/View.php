@@ -138,7 +138,13 @@ class View {
 		}
 
 		// Filename must end with ".php".
-		if ( substr_compare( $filename, '.php', -3 ) === 0 ) {
+		//
+		// This gate was inert in both directions. The offset was -3, so it compared the last three
+		// characters ("php") against the four-character needle ".php" and could never return 0 -
+		// substr_compare( 'a.php', '.php', -3 ) is 66, not 0. And the sense was inverted against
+		// the comment: it returned false when the name *did* end in ".php", so correcting only the
+		// offset would have rejected every legitimate template instead. Both are fixed together.
+		if ( substr_compare( $filename, '.php', -4 ) !== 0 ) {
 			return false;
 		}
 

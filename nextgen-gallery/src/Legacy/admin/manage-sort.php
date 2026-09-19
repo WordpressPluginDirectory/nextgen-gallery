@@ -221,7 +221,13 @@ function nggallery_sortorder( $galleryID = 0 ) {
 						// Assemble the url('...') value in a PHP string so no template
 						// whitespace can land inside it; a newline there is a CSS parse
 						// error and blanks the thumbnail.
-						$thumb_style = "background-image:url('" . \Imagely\NGG\Util\Router::esc_url( $picture->thumbURL ) . "')";
+						// Admin-only cache-buster: thumbURL is canonical now, so an edited
+						// image would keep its old pixels here without this.
+						$thumb_url = $picture->thumbURL;
+						if ( ! empty( $picture->updated_at ) ) {
+							$thumb_url = add_query_arg( 't', $picture->updated_at, $thumb_url );
+						}
+						$thumb_style = "background-image:url('" . \Imagely\NGG\Util\Router::esc_url( $thumb_url ) . "')";
 						?>
 						<div class="imageBox"
 							id="pid-<?php print esc_attr( $picture->pid ); ?>">

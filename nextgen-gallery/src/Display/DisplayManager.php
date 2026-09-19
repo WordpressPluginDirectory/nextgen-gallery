@@ -35,6 +35,28 @@ class DisplayManager {
 	public static $enqueued_displayed_gallery_ids = [];
 
 	/**
+	 * The post whose content is currently being scanned for galleries.
+	 *
+	 * Set only while enqueue_frontend_resources() walks the queried posts. Anything
+	 * downstream that needs to know which post a gallery came from has to read it
+	 * from here: the loop covers every post in the query while $GLOBALS['post']
+	 * stays on the first one, so get_the_ID() names an unrelated post on any
+	 * listing page.
+	 *
+	 * @var int
+	 */
+	private static $current_content_post_id = 0;
+
+	/**
+	 * The post whose content is currently being scanned for galleries.
+	 *
+	 * @return int Post ID, or 0 outside the content scan.
+	 */
+	public static function get_current_content_post_id() {
+		return self::$current_content_post_id;
+	}
+
+	/**
 	 * Registers hooks for display manager
 	 *
 	 * @return void
@@ -85,6 +107,15 @@ class DisplayManager {
 				continue;
 			}
 
+			// A password-protected post shows its visitor a form, not its content, so
+			// its galleries must not be rendered — and their image data localized —
+			// into a listing page every visitor can read. post_password_required()
+			// honours the wp-postpass cookie, so a visitor who entered the password
+			// still gets the gallery.
+			if ( post_password_required( $post ) ) {
+				continue;
+			}
+
 			// Skip expensive regex + DataMapper processing when no registered NGG shortcode is present.
 			$has_shortcode = false;
 			foreach ( $shortcode_tags as $tag ) {
@@ -97,7 +128,15 @@ class DisplayManager {
 				continue;
 			}
 
-			self::enqueue_frontend_resources_for_content( $post->post_content );
+			// Name the post being scanned for anything downstream that needs to know
+			// which post a gallery belongs to; see get_current_content_post_id().
+			self::$current_content_post_id = (int) $post->ID;
+
+			try {
+				self::enqueue_frontend_resources_for_content( $post->post_content );
+			} finally {
+				self::$current_content_post_id = 0;
+			}
 		}
 	}
 
@@ -739,8 +778,83 @@ class DisplayManager {
 	 * @return string
 	 */
 	public function display_images( $params, $inner_content = null ) {
+		$params   = self::apply_album_descriptions_setting( $params );
 		$renderer = Renderer::get_instance();
 		return $renderer->display_images( $params, $inner_content );
+	}
+
+	/**
+	 * Applies an album's saved descriptions setting to a legacy shortcode that did not set one.
+	 *
+	 * The legacy shortcode takes its display settings from its own attributes and otherwise falls
+	 * back to the display type's global row, so an album's own toggle never reached the renderer.
+	 * Only the descriptions setting is layered here, and only underneath the shortcode attributes,
+	 * so an explicit attribute stays authoritative.
+	 *
+	 * @param array $params Shortcode parameters.
+	 * @return array
+	 */
+	private static function apply_album_descriptions_setting( $params ) {
+		if ( ! is_array( $params ) || isset( $params['enable_descriptions'] ) ) {
+			return $params;
+		}
+
+		$source = $params['src'] ?? ( $params['source'] ?? '' );
+
+		if ( ! in_array( $source, [ 'albums', 'album' ], true ) && empty( $params['albums'] ) && empty( $params['album_ids'] ) ) {
+			return $params;
+		}
+
+		// Key order mirrors the precedence in Renderer::params_to_displayed_gallery(), where 'albums'
+		// is folded into 'album_ids' and 'ids' overwrites the container ids resolved from either.
+		$ids = null;
+		foreach ( [ 'ids', 'albums', 'album_ids', 'container_ids' ] as $key ) {
+			if ( ! empty( $params[ $key ] ) ) {
+				$ids = $params[ $key ];
+				break;
+			}
+		}
+
+		if ( null === $ids ) {
+			return $params;
+		}
+
+		$ids = is_array( $ids ) ? $ids : preg_split( '/,|\|/', (string) $ids );
+		$ids = array_values( array_filter( array_map( 'trim', array_map( 'strval', $ids ) ), 'strlen' ) );
+
+		// A multi-album shortcode has no single entity whose setting should win.
+		if ( count( $ids ) !== 1 ) {
+			return $params;
+		}
+
+		$album = AlbumMapper::get_instance()->find( (int) $ids[0] );
+
+		if ( ! $album || empty( $album->display_type_settings ) || ! is_array( $album->display_type_settings ) ) {
+			return $params;
+		}
+
+		$display_type = $params['display_type'] ?? ( $params['display'] ?? '' );
+
+		if ( empty( $display_type ) ) {
+			$display_type = $album->display_type ?? '';
+		}
+
+		// Shortcodes use aliases, while stored settings are keyed by the canonical display type name.
+		if ( ControllerFactory::has_controller( $display_type ) ) {
+			$display_type = ControllerFactory::get_display_type_id( $display_type );
+		}
+
+		if ( empty( $display_type ) || empty( $album->display_type_settings[ $display_type ] ) ) {
+			return $params;
+		}
+
+		$stored = $album->display_type_settings[ $display_type ];
+
+		if ( is_array( $stored ) && array_key_exists( 'enable_descriptions', $stored ) ) {
+			$params['enable_descriptions'] = $stored['enable_descriptions'];
+		}
+
+		return $params;
 	}
 
 	/**

@@ -29,6 +29,64 @@ class Installer {
 	}
 
 	/**
+	 * Records an upgrade failure for display to an administrator.
+	 *
+	 * Owns the one shape that kept going wrong: a summary that reads as a complete sentence on
+	 * its own, with the database's error appended only when there actually is one. Every writer
+	 * of ngg_upgrade_error goes through here. While each call site built its own message, the
+	 * "trails off after its colon" defect issue #960 reported was fixed at two of the four sites
+	 * and went on recurring verbatim from the other two -- every one of those branches fires on
+	 * `false === $wpdb->query( ... )`, and a dropped connection or a reconnect mid-statement
+	 * returns false with last_error left empty.
+	 *
+	 * ngg_upgrade_error rather than ngg_init_check, because set_role_caps() clears the latter
+	 * unconditionally on every successful run -- in the same request these failures are recorded
+	 * in, so such a notice never reaches admin_notices.
+	 *
+	 * Callers must read $wpdb->last_error into a variable at the point of failure and pass it in
+	 * rather than letting this method read it: wpdb::query() calls flush(), which clears the
+	 * string, so any intervening query (an information_schema lookup, a SHOW TABLES) destroys it.
+	 *
+	 * Appends rather than replaces, because ngg_upgrade_error holds one string and more than one
+	 * step can fail in a single request: on an existing pictures table the dedupe records its
+	 * failure and the guard's ALTER then records its own a few lines later, so a plain
+	 * update_option() discarded the dedupe error -- the one naming the *cause* -- and kept only
+	 * the consequence. An identical message is dropped instead of repeated, so a path that fires
+	 * on many requests (the schema probe's failure counter) cannot grow the option without
+	 * bound, and the total is capped. Installer::update() deletes the option before running the
+	 * handlers, so a new upgrade attempt still starts from a clean slate.
+	 *
+	 * @param string $summary Complete, period-terminated sentence describing what failed.
+	 * @param string $error   Optional database error; appended only when non-empty.
+	 */
+	public static function record_upgrade_error( $summary, $error = '' ) {
+		$message = $summary;
+
+		if ( ! empty( $error ) ) {
+			$message .= ' ' . $error;
+		}
+
+		$recorded = (string) \get_option( 'ngg_upgrade_error' );
+
+		if ( '' !== $recorded ) {
+			if ( false !== \strpos( $recorded, $message ) ) {
+				return;
+			}
+
+			$message = $recorded . ' ' . $message;
+		}
+
+		// One notice, not a transcript. 1000 characters is several full sentences plus a MySQL
+		// error string; past that the admin is reading a wall of text, and the first failure is
+		// the one worth keeping.
+		if ( \strlen( $message ) > 1000 ) {
+			$message = \substr( $message, 0, 1000 );
+		}
+
+		\update_option( 'ngg_upgrade_error', $message );
+	}
+
+	/**
 	 * Gets an instance of an installation handler
 	 *
 	 * @param $name
@@ -109,7 +167,7 @@ class Installer {
 			// below clears unconditionally on every successful run and would otherwise wipe
 			// this before an admin ever sees it) instead of leaving the site stuck on
 			// can_do_upgrade() === false with no clue why.
-			\update_option( 'ngg_upgrade_error', \sprintf( 'NextGEN Gallery: could not check the upgrade lock: %s', $wpdb->last_error ) );
+			self::record_upgrade_error( 'NextGEN Gallery: could not check the upgrade lock.', $wpdb->last_error );
 			return false;
 		}
 
@@ -161,7 +219,7 @@ class Installer {
 			// by anyone, and without this check that was indistinguishable from normal
 			// contention: can_do_upgrade() would return false forever with nothing to explain why.
 			if ( false === \stripos( $last_error, 'duplicate' ) ) {
-				\update_option( 'ngg_upgrade_error', \sprintf( 'NextGEN Gallery: could not take the upgrade lock: %s', $last_error ) );
+				self::record_upgrade_error( 'NextGEN Gallery: could not take the upgrade lock.', $last_error );
 			}
 			return false;
 		}
@@ -218,6 +276,16 @@ class Installer {
 			// a notice a still-running winner (or the handler loop below, for this same request)
 			// was about to write -- permanently, since a losing request does nothing else.
 			\delete_option( 'ngg_upgrade_error' );
+
+			// The runtime schema probe records its failure into the option above and then latches
+			// ngg_schema_check_reported so it stops re-recording. That latch only clears when a
+			// probe later succeeds, which never happens for a durable failure -- a restricted
+			// grant, a statement-timeout policy, the SQLite drop-in behind #969 -- so deleting
+			// the option without the latch left those sites with no notice and no way to
+			// regenerate one: silent for the rest of the install's life, which is the exact
+			// outcome #960 and #989 were filed about. Clearing both together means the next
+			// failing probe re-reports.
+			\delete_option( 'ngg_schema_check_reported' );
 
 			// Clear APC cache.
 			if ( \function_exists( 'apc_clear_cache' ) ) {
@@ -373,5 +441,27 @@ class Installer {
 		foreach ( $capabilities as $capability ) {
 			$role->add_cap( $capability );
 		}
+
+		// Deliberately NOT auto-granting "NextGEN Manage gallery" to other roles here.
+		//
+		// Lightroom publishing and the XML-RPC gallery/image writes now require an active
+		// `nextgen_edit_gallery` (which maps to "NextGEN Manage gallery") on top of ownership, so
+		// a site that delegated uploads through the Roles screen has to grant that capability
+		// before those accounts can publish again. An earlier version of this change granted it
+		// automatically to every role already holding "NextGEN Upload images", which was wrong:
+		// ngg_set_capability() (Legacy/admin/roles.php:135) applies a Roles-screen selection from
+		// the chosen role *upward*, so delegating uploads to Contributor leaves Contributor
+		// holding "NextGEN Upload images" - and #932's attacker profile is exactly "Subscriber or
+		// custom-level access and above, provided they are the stored author of at least one
+		// gallery". Auto-granting therefore handed those roles the very capability this hardening
+		// added as the barrier, and it would also have opened the five gates #1004 records as
+		// still accepting ownership alone.
+		//
+		// Widening an authorization surface has to be an explicit administrator action. What makes
+		// it discoverable instead is the refusal path itself: Lightroom\Controller now names the
+		// specific capability the refused tasks were missing, and where to grant it, in both the
+		// all-refused error and the partial-refusal warning. That reaches the person actually
+		// blocked, which a changelog line does not. (The changelog note for this requirement
+		// travels with the #932 branch, which introduced it - not duplicated here.)
 	}
 }

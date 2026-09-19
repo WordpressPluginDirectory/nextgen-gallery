@@ -474,11 +474,32 @@ class Controller {
 				$display_type_view = join( DIRECTORY_SEPARATOR, [ 'default', $display_type_view ] );
 			}
 
+			$storage = StorageManager::get_instance();
+
 			foreach ( $dirs as $category => $dir ) {
 				$category = preg_quote( $category . DIRECTORY_SEPARATOR, '#' );
 				if ( preg_match( "#^{$category}(.*)$#", $display_type_view, $match ) ) {
 					$display_type_view = $match[1];
 					$template_abspath  = $fs->join_paths( $dir, $display_type_view );
+
+					// join_paths() preserves "..", and this value comes from the gallery's stored
+					// display_type_settings, which remote-editing endpoints can write. Without a
+					// containment check, "default/../../../../uploads/2026/01/x.jpg" resolves here
+					// and View::render() include()s whatever it points at. The refused case falls
+					// through to the built-in template rather than failing the render.
+					if ( ! $storage->is_path_contained( $dir, $template_abspath ) ) {
+						$storage->log_path_refusal(
+							sprintf(
+								'NextGEN Gallery: refused display template "%s" for display type "%s" - resolves outside the template directory (%s)',
+								$template_abspath,
+								$display_type_name,
+								$dir
+							),
+							StorageManager::REFUSAL_TEMPLATE_PATH
+						);
+						continue;
+					}
+
 					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 					if ( @file_exists( $template_abspath ) ) {
 						$template = $template_abspath;

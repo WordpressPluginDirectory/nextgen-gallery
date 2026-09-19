@@ -287,9 +287,19 @@ class TableDriver extends DriverBase {
 				$value = [ $value ];
 			}
 
+			// A value flagged 'prepared' still carries the escaping _parse_where_clause() applied
+			// with $wpdb->prepare(). Strip that pass before esc_sql() below so the value is
+			// escaped exactly once: otherwise a term holding a quote, a backslash or an
+			// esc_like() sequence is compared against a double-escaped copy and matches nothing.
+			$prepared = ! empty( $clause['prepared'] );
+
 			foreach ( $value as $index => $v ) {
 				// esc_sql + single-quote wrap for string values; raw cast for numeric. Prevents SQLi when callers pass user-influenced strings.
-				$v               = ( 'numeric' === $type ) ? (float) $v : "'" . esc_sql( $v ) . "'";
+				if ( 'numeric' === $type ) {
+					$v = (float) $v;
+				} else {
+					$v = "'" . esc_sql( $prepared ? stripslashes( $v ) : $v ) . "'";
+				}
 				$value[ $index ] = $v;
 			}
 
@@ -517,8 +527,44 @@ class TableDriver extends DriverBase {
 		unset( $entity->id_field );
 		$primary_key = $this->get_primary_key_column();
 		if ( isset( $entity->$primary_key ) && $entity->$primary_key > 0 ) {
-			if ( $this->_update( $entity ) ) {
-				$retval = intval( $entity->$primary_key );
+			// Not a truthiness test. _update() returns wpdb::update()'s value, which is the number
+			// of affected rows, and that is 0 whenever the row already held the submitted values.
+			// A successful no-op update was therefore reported as a failed save, and every caller
+			// that tests save() for truthiness had to compensate. Two of them did it by reading
+			// $wpdb->last_error afterwards, which is unsound: wpdb::update() has `return false`
+			// paths that run before any query is issued (a non-array $data or $where, a
+			// process_fields() charset failure), and in those cases last_error still holds
+			// whatever the previous query left - usually nothing - so a genuinely rejected write
+			// looked like a no-op and was reported to the client as success.
+			//
+			// But 0 is ambiguous, and testing only `false !==` trades that bug for its mirror:
+			// MySQL also reports 0 affected rows when the WHERE matched NOTHING, with no error
+			// set. Verified: an UPDATE with an unchanged value and an UPDATE against a deleted
+			// primary key both return 0 and both leave last_error empty. This branch is entered on
+			// `$entity->$primary_key > 0` alone and never confirms the row still exists, so
+			// treating every 0 as success reports a persisted save for a row that is gone - and
+			// the subclass hooks then act on it (DataMappers\Gallery::save_entity() re-runs
+			// wp_mkdir_p() and fires ngg_created_new_gallery for the deleted gallery). The window
+			// is real on exactly the path this change is for: Lightroom's gallery_edit loads the
+			// gallery, runs the whole per-image download/resize loop, and saves seconds later.
+			//
+			// So: false is a refused write; a positive count is a persisted change; and 0 is
+			// resolved by asking whether the row is actually there. The extra read happens only on
+			// the 0 path, so the per-save cost this change exists to avoid is not reintroduced.
+			// The cache is flushed first because this entity was very likely read into it earlier
+			// in the same request, and a stale hit would defeat the check.
+			$affected = $this->_update( $entity );
+
+			if ( false !== $affected ) {
+				if ( 0 !== (int) $affected ) {
+					$retval = intval( $entity->$primary_key );
+				} else {
+					$this->flush_query_cache();
+
+					if ( $this->find( $entity->$primary_key ) ) {
+						$retval = intval( $entity->$primary_key );
+					}
+				}
 			}
 		} else {
 			$retval = $this->_create( $entity );

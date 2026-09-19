@@ -6,6 +6,7 @@ use Imagely\NGG\DataMappers\Album as AlbumMapper;
 use Imagely\NGG\DataMappers\Gallery as GalleryMapper;
 use Imagely\NGG\DataMappers\Image as ImageMapper;
 use Imagely\NGG\DataStorage\Manager as StorageManager;
+use Imagely\NGG\Util\MassAssignment;
 use Imagely\NGG\Util\Security;
 
 /**
@@ -66,9 +67,24 @@ class Controller {
 		}
 
 		if ( $gallery ) {
-			if ( \get_current_user_id() === $gallery->author ) {
-				$retval = true;
+			/*
+			 * The "NextGEN Manage gallery" capability is required in every case (#932), and
+			 * ownership is never authorization on its own (#933): the stored author id
+			 * survives the capability being revoked, so without the outer gate an
+			 * ex-manager keeps write access to every gallery they ever created, and a
+			 * Subscriber who happens to own one gallery reaches the gallery/image write
+			 * methods through this endpoint.
+			 *
+			 * Past that gate, ownership decides whether the additional "NextGEN Manage
+			 * others gallery" capability is also needed. The author column is compared as
+			 * an integer because the mapper hands it back as a numeric string, and `===`
+			 * against an int id is false for every user.
+			 */
+			if ( ! Security::is_allowed( 'nextgen_edit_gallery' ) ) {
+				$retval = false;
 			} elseif ( Security::is_allowed( 'nextgen_edit_gallery_unowned' ) ) {
+				$retval = true;
+			} elseif ( (int) \get_current_user_id() === (int) $gallery->author ) {
 				$retval = true;
 			}
 
@@ -140,7 +156,7 @@ class Controller {
 						$image->thumb_url = $storage->get_image_url( $image, 'thumb' );
 
 						$image->image_path = $storage->get_image_abspath( $image );
-						$image->thumb_path = $storage->get_thumb_abspath( $image );
+						$image->thumb_path = $storage->get_image_abspath( $image, 'thumb' );
 						$retval            = $image;
 					} else {
 						$retval = new \IXR_Error( 403, "You don't have permission to manage gallery #{$image->galleryid}" );
@@ -247,7 +263,7 @@ class Controller {
 							$image->image_url  = $storage->get_image_url( $image );
 							$image->thumb_url  = $storage->get_image_url( $image, 'thumb' );
 							$image->image_path = $storage->get_image_abspath( $image );
-							$image->thumb_path = $storage->get_thumb_abspath( $image );
+							$image->thumb_path = $storage->get_image_abspath( $image, 'thumb' );
 							$retval            = $image->get_entity();
 						} else {
 							$retval = new \IXR_Error( 500, 'Could not upload image' );
@@ -285,8 +301,38 @@ class Controller {
 			$retval->description = $description;
 			$retval->exclude     = $exclude;
 
-			// Other properties can be specified using an associative array.
-			foreach ( $properties as $key => $value ) {
+			// Other properties can be specified using an associative array, but only the
+			// descriptive schema fields may be set this way. Assigning arbitrary keys let a caller
+			// overwrite 'meta_data' (whose per-size 'filename' entries are joined into filesystem
+			// paths), 'filename', or ownership columns such as 'galleryid'.
+			$assignable = MassAssignment::filter( $properties, 'image', $refused );
+
+			if ( $refused ) {
+				// Refused before the save, not after: array_intersect_key() drops these keys
+				// silently, and every method here returns $entity->save() - a truthy id - so a
+				// partial edit would be indistinguishable from a complete one. Failing the call
+				// keeps the edit atomic and names the fields the client has to stop sending.
+				//
+				// This deliberately diverges from the Lightroom path, which saves the accepted
+				// fields and reports the refusal as a warning. The difference is whether the
+				// client can see an error: XML-RPC is synchronous and returns this IXR_Error
+				// straight to the caller, which can drop the offending key and retry, so refusing
+				// atomically costs nothing and never leaves a half-applied edit. A Lightroom task
+				// is asynchronous and the desktop client ignores the response's error field once
+				// the task status is 'done', so refusing there would have discarded the publish
+				// silently - which is why that path had to save and warn instead. Both are honest
+				// about what happened; the transports differ.
+				//
+				// The positional alttext/description/exclude arguments are discarded along with
+				// the rest, and the message says so explicitly.
+				return new \IXR_Error(
+					403,
+					'These image properties may not be set through this endpoint and nothing was saved: '
+						. MassAssignment::describe_refused( $refused )
+				);
+			}
+
+			foreach ( $assignable as $key => $value ) {
 				$retval->$key = $value;
 			}
 
@@ -376,7 +422,27 @@ class Controller {
 					$gallery->title      = $title;
 					$gallery->galdesc    = $galdesc;
 					$gallery->previewpic = $image_id;
-					foreach ( $properties as $key => $value ) {
+
+					// #932 note: `path` is not only ownership-relevant, it is the write half of a
+					// code-execution chain - repointing a gallery at a registered legacy template
+					// directory is how the Lightroom upload in that report landed an includable
+					// file. It is denied for both reasons.
+					// Only descriptive schema fields may be mass assigned - see edit_image(). For a
+					// gallery the dangerous keys are 'path' (the filesystem directory every image
+					// path is built from) and 'author' (which decides who may manage the gallery).
+					$assignable = MassAssignment::filter( $properties, 'gallery', $refused );
+
+					if ( $refused ) {
+						// See edit_image(): reported instead of dropped, and before the save so the
+						// gallery is not left half updated.
+						return new \IXR_Error(
+							403,
+							'These gallery properties may not be set through this endpoint and nothing was saved: '
+								. MassAssignment::describe_refused( $refused )
+						);
+					}
+
+					foreach ( $assignable as $key => $value ) {
 						$gallery->$key = $value;
 					}
 
@@ -490,7 +556,7 @@ class Controller {
 		$title      = strval( $args[3] );
 		$previewpic = isset( $args[4] ) ? intval( $args[4] ) : 0;
 		$desc       = isset( $args[5] ) ? strval( $args[5] ) : '';
-		$sortorder  = isset( $args[6] ) ? $args[6] : '';
+		$sortorder  = self::normalize_album_sortorder( isset( $args[6] ) ? $args[6] : [] );
 		$page_id    = isset( $args[7] ) ? intval( $args[7] ) : 0;
 
 		// Authenticate the user.
@@ -611,6 +677,35 @@ class Controller {
 	}
 
 	/**
+	 * Reduces a caller-supplied album sortorder to the shape the album mapper normalizes.
+	 *
+	 * `sortorder` is a serialized column whose consumers call count() on it, and
+	 * DataMappers\Album::set_defaults() normalizes it only when it is already an array,
+	 * so a scalar arriving from XML-RPC serialized through unnormalized and later raised
+	 * a TypeError. It is kept off MassAssignment's assignable album list for that reason and
+	 * is only assignable through this method's own positional argument.
+	 *
+	 * @param mixed $sortorder Raw sortorder argument.
+	 * @return array List of gallery ids and "a"-prefixed album ids, empty when unusable.
+	 */
+	private static function normalize_album_sortorder( $sortorder ) {
+		if ( ! is_array( $sortorder ) ) {
+			// '' is the historical default for this argument and must stay an empty list
+			// rather than becoming a single entry of 0.
+			$sortorder = ( '' === $sortorder || null === $sortorder ) ? [] : [ $sortorder ];
+		}
+
+		$sortorder = array_filter(
+			$sortorder,
+			function ( $item ) {
+				return is_scalar( $item ) && '' !== $item;
+			}
+		);
+
+		return array_values( $sortorder );
+	}
+
+	/**
 	 * Edit an existing album
 	 *
 	 * @param array $args (blog_id, username, password, album_id, name, preview pic id, description, galleries).
@@ -623,10 +718,33 @@ class Controller {
 			$retval->name       = strval( $args[4] );
 			$retval->previewpic = intval( $args[5] );
 			$retval->albumdesc  = strval( $args[6] );
-			$retval->sortorder  = $args[7];
+			// Only reassign when the caller actually sent the argument. Defaulting to an
+			// empty list here would silently empty the album's gallery list for any
+			// client that omits it.
+			if ( isset( $args[7] ) ) {
+				$retval->sortorder = self::normalize_album_sortorder( $args[7] );
+			}
 
-			$properties = isset( $args[8] ) ? $args[8] : [];
-			foreach ( $properties as $key => $value ) {
+			$properties = isset( $args[8] ) ? (array) $args[8] : [];
+
+			// #932 note on `extras_post_id`, which $denied['album'] covers: it is a real album
+			// column, so assigning it through this bag persisted.
+			// create_custom_post_entity() then treats it as a post ID and ngg.deleteAlbum
+			// reaches wp_delete_post( ..., true ) with it, so a caller holding only
+			// nextgen_edit_album could retype and permanently delete any post or page.
+			// Only descriptive schema fields may be mass assigned - see edit_image().
+			$assignable = MassAssignment::filter( $properties, 'album', $refused );
+
+			if ( $refused ) {
+				// See edit_image().
+				return new \IXR_Error(
+					403,
+					'These album properties may not be set through this endpoint and nothing was saved: '
+						. MassAssignment::describe_refused( $refused )
+				);
+			}
+
+			foreach ( $assignable as $key => $value ) {
 				$retval->$key = $value;
 			}
 			unset( $retval->galleries );

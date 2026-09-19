@@ -112,7 +112,7 @@ class AttachToPost extends \WP_REST_Controller {
 			$gallery->image_count = $counts[ (int) $gallery->gid ] ?? 0;
 
 			if ( $gallery->previewpic && isset( $preview_map[ (int) $gallery->previewpic ] ) ) {
-				$gallery->previewpic_image_url = $storage->get_image_url( $preview_map[ (int) $gallery->previewpic ], 'thumb', true );
+				$gallery->previewpic_image_url = $storage->get_cache_busted_image_url( $preview_map[ (int) $gallery->previewpic ], 'thumb' );
 			}
 
 			// Drop the heavy serialized blob the picker never reads; keeps the payload small.
@@ -285,9 +285,14 @@ class AttachToPost extends \WP_REST_Controller {
 				}
 			}
 
-			// Get the thumbnail
-			$entity->thumb_url  = $storage->get_image_url( $image, 'thumb', true );
-			$entity->thumb_html = $storage->get_image_html( $image, 'thumb' );
+			// Get the thumbnail. A gallery/album with no previewpic resolves to null above.
+			if ( $image ) {
+				$entity->thumb_url  = $storage->get_cache_busted_image_url( $image, 'thumb' );
+				$entity->thumb_html = $storage->get_image_html( $image, 'thumb' );
+			} else {
+				$entity->thumb_url  = '';
+				$entity->thumb_html = '';
+			}
 		}
 
 		return new \WP_REST_Response( $response );

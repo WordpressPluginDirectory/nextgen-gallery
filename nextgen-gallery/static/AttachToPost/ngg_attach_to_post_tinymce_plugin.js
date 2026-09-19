@@ -33,11 +33,85 @@
     init: function (editor, plugin_url) {
       var self = this;
 
+      // Cross-origin fallback: accept the dialog's postMessage result, but only
+      // from our own dialog iframe.
+      if (!window.ngg_atp_message_bridge) {
+        window.ngg_atp_message_bridge = true;
+        window.addEventListener("message", function (ev) {
+          var data = ev && ev.data;
+          if (!data || typeof data.ngg_attach_to_post === "undefined") {
+            return;
+          }
+          // The dialog can be hosted by the TinyMCE window manager
+          // (#ngg_attach_to_post_dialog_ifr) or by Thickbox (#TB_iframeContent).
+          var frame =
+            document.getElementById("ngg_attach_to_post_dialog_ifr") ||
+            document.getElementById("TB_iframeContent");
+          if (!frame || ev.source !== frame.contentWindow) {
+            console.error(
+              "NextGEN: attach-to-post message rejected (" +
+                (frame ? "source mismatch" : "dialog iframe not found") +
+                ")."
+            );
+            return;
+          }
+
+          var inserted = true;
+          if (data.ngg_attach_to_post === "insert") {
+            var ed = tinymce.activeEditor;
+            var textarea = document.getElementById("content");
+            if (ed && !ed.isHidden()) {
+              var node = ed.selection.getNode();
+              if (data.ref && node && node.outerHTML.indexOf(data.ref) >= 0) {
+                $(node).attr("data-shortcode", data.shortcode.substring(1, data.shortcode.length - 1));
+              } else {
+                ed.execCommand("mceInsertContent", false, data.shortcode);
+              }
+              ed.selection.collapse(false);
+            } else if (textarea) {
+              var start = textarea.selectionStart || 0;
+              var end = textarea.selectionEnd || 0;
+              textarea.value =
+                textarea.value.substring(0, start) +
+                data.shortcode +
+                textarea.value.substring(end);
+            } else {
+              inserted = false;
+              console.error("NextGEN: attach-to-post insert dropped, no editor target.");
+            }
+          }
+
+          // Leave the dialog open when an insert could not be performed, so the
+          // selection is not silently lost.
+          if (inserted) {
+            // Close via the host that actually opened the dialog: Thickbox sets
+            // #TB_iframeContent, everything else is the TinyMCE window manager.
+            if (frame.id === "TB_iframeContent") {
+              if (typeof tb_remove === "function") {
+                tb_remove();
+              }
+            } else if (window.tinymce && tinymce.activeEditor && tinymce.activeEditor.windowManager) {
+              tinymce.activeEditor.windowManager.close();
+            }
+            $("html,body").css("overflow", "auto");
+          }
+        });
+      }
+
       // TinyMCE 4s events are a bit weird, but this lets us listen to the window-manager close event
       editor.windowManager.nggOldOpen = editor.windowManager.open;
       editor.windowManager.open = function (one, two) {
         var modal = editor.windowManager.nggOldOpen(one, two);
         modal.on("close", self.wm_close_event);
+        // TinyMCE 4's window manager does not give its iframe an id, so give our
+        // dialog's iframe the id the message bridge looks for.
+        if (one && one.id === "ngg_attach_to_post_dialog") {
+          var body = document.getElementById("ngg_attach_to_post_dialog-body");
+          var dialog_frame = body ? body.querySelector("iframe") : null;
+          if (dialog_frame && !dialog_frame.id) {
+            dialog_frame.id = "ngg_attach_to_post_dialog_ifr";
+          }
+        }
         return modal;
       };
 

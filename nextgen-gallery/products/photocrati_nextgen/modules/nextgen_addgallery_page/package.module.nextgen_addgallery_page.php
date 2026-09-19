@@ -195,6 +195,21 @@ class A_NextGen_AddGallery_Ajax extends Mixin
                         if ($created_gallery) {
                             $gallery_mapper->destroy($gallery_id);
                         }
+                    } catch (RuntimeException $ex) {
+                        // E_UploadException extends RuntimeException, not E_NggErrorException: its
+                        // message already names the rejected file(s), so it is shown as-is rather
+                        // than wrapped in "An unexpected error occurred". Matches
+                        // \Imagely\NGG\REST\DataMappers\ImageREST, which catches RuntimeException first.
+                        //
+                        // Routed through exception_message() because not every RuntimeException
+                        // carries a message: E_EntityNotFoundException is an empty class and
+                        // import_image_file() throws it bare. Assigning getMessage() directly left
+                        // $retval['error'] empty, which skipped the 500 header below and made a
+                        // failed upload toast as a success.
+                        $retval['error'] = \Imagely\NGG\Util\Sanitization::exception_message($ex, __('The image could not be imported.', 'nggallery'));
+                        if ($created_gallery) {
+                            $gallery_mapper->destroy($gallery_id);
+                        }
                     } catch (Exception $ex) {
                         /* translators: %s: error message */
                         $retval['error'] = sprintf(__('An unexpected error occurred: %s', 'nggallery'), $ex->getMessage());
@@ -380,6 +395,18 @@ class A_NextGen_AddGallery_Ajax extends Mixin
                             $gallery_mapper->destroy($gallery_id);
                         }
                         break;
+                    } catch (RuntimeException $ex) {
+                        // Same reason as the upload handler above: E_UploadException extends
+                        // RuntimeException, and its message already names the rejected file, so it
+                        // is shown as-is instead of behind "An unexpected error occured."
+                        // exception_message() for the same reason too - a bare
+                        // E_EntityNotFoundException would otherwise blank the error and suppress
+                        // the 500.
+                        $retval['error'] = \Imagely\NGG\Util\Sanitization::exception_message($ex, __('The image could not be imported.', 'nggallery'));
+                        if ($created_gallery) {
+                            $gallery_mapper->destroy($gallery_id);
+                        }
+                        break;
                     } catch (Exception $ex) {
                         $retval['error'] = __('An unexpected error occured.', 'nggallery') . ' ' . $ex->getMessage();
                         if ($created_gallery) {
@@ -504,7 +531,7 @@ class A_Upload_Images_Form extends Mixin
     }
     public function get_i18n_strings()
     {
-        return ['locale' => $this->object->get_uppy_locale(), 'no_image_uploaded' => __('No images were uploaded successfully.', 'nggallery'), 'one_image_uploaded' => __('1 image was uploaded successfully.', 'nggallery'), 'x_images_uploaded' => __('{count} images were uploaded successfully.', 'nggallery'), 'manage_gallery' => __('Manage gallery > {name}', 'nggallery'), 'image_failed' => __('Image {filename} failed to upload: {error}', 'nggallery'), 'drag_files_here' => $this->can_upload_zips() ? __('Drag image and ZIP files here or %{browse}', 'nggallery') : __('Drag image files here or %{browse}', 'nggallery')];
+        return ['locale' => $this->object->get_uppy_locale(), 'no_image_uploaded' => __('No images were uploaded successfully.', 'nggallery'), 'one_image_uploaded' => __('1 image was uploaded successfully.', 'nggallery'), 'x_images_uploaded' => __('{count} images were uploaded successfully.', 'nggallery'), 'manage_gallery' => __('Manage gallery > {name}', 'nggallery'), 'image_failed' => __('Image {filename} failed to upload: {error}', 'nggallery'), 'image_warning' => __('{filename}: {warning}', 'nggallery'), 'drag_files_here' => $this->can_upload_zips() ? __('Drag image and ZIP files here or %{browse}', 'nggallery') : __('Drag image files here or %{browse}', 'nggallery')];
     }
     public function render()
     {

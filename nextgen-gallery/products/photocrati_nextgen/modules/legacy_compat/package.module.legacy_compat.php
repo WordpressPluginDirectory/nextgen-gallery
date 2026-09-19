@@ -1965,12 +1965,16 @@ class C_Gallery_Storage extends C_Component
         $abspath = $this->object->get_image_abspath($image, $size, true);
         if (null === $abspath) {
             $thumbnail = $this->object->generate_image_size($image, $size);
-            if (null !== $thumbnail) {
+            // is_object(), not a strict null test: generate_image_size() refuses an unsafe
+            // generated path by returning false, and "false !== null" is true - which dereferenced
+            // a boolean here and ended the request in a fatal instead of rendering no image. The
+            // modern twin, \Imagely\NGG\DataStorage\Manager::render_image(), tests loosely.
+            if (is_object($thumbnail)) {
                 $abspath = $thumbnail->fileName;
                 $thumbnail->destruct();
             }
         }
-        if (null !== $abspath) {
+        if (null !== $abspath && '' !== $abspath) {
             // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
             $data = @getimagesize($abspath);
             $format = 'jpg';
@@ -2123,6 +2127,19 @@ class C_Gallery_Storage extends C_Component
             $clone_dir = $result['clone_directory'];
             $clone_format = $result['clone_format'];
             $format_list = $this->object->get_image_format_list();
+            // Refuse to write before anything is written. Kept identical to
+            // \Imagely\NGG\DataStorage\Manager::generate_image_clone(): this copy is the
+            // documented extension point for the image-optimiser plugins and is force-loaded on the
+            // front end for Pro < 4.0 (nggallery.php), so leaving it ungated would let a poisoned
+            // clone path reach the filesystem through exactly the sites that load it. Bounded by the
+            // source image's own directory - the boundary the clone_dir handling below already
+            // assumes - rather than by the gallery record, so the base is a value this code
+            // computed rather than one read from a writable column.
+            $storage_manager = \Imagely\NGG\DataStorage\Manager::get_instance();
+            if (!$storage_manager->is_path_contained($image_dir, $clone_path) || !$storage_manager->is_safe_generated_image_path($clone_path, $image_path)) {
+                \Imagely\NGG\DataStorage\Manager::get_instance()->log_path_refusal(sprintf('NextGEN Gallery: refused to write image clone to "%s" - outside the source image directory (%s) or not an allowed image type', $clone_path, $image_dir), \Imagely\NGG\DataStorage\Manager::REFUSAL_CLONE_WRITE);
+                return null;
+            }
             // Ensure target directory exists, but only create 1 subdirectory
             // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
             if (!@file_exists($clone_dir)) {
@@ -2775,6 +2792,7 @@ class C_Gallery_Storage extends C_Component
     public function _get_computed_image_abspath($image, $size = 'full', $check_existance = false)
     {
         $retval = null;
+        $containment_base = null;
         // If we have the id, get the actual image entity
         if (is_numeric($image)) {
             $image = $this->object->_image_mapper->find($image);
@@ -2782,6 +2800,7 @@ class C_Gallery_Storage extends C_Component
         // Ensure we have the image entity - user could have passed in an incorrect id
         if (is_object($image)) {
             $gallery_path = $this->object->get_gallery_abspath($image->galleryid);
+            $containment_base = $gallery_path;
             if ($gallery_path) {
                 $folder = $size;
                 $prefix = $size;
@@ -2854,7 +2873,36 @@ class C_Gallery_Storage extends C_Component
                         $retval = $image_path;
                         break;
                 }
+                // Both the 'filename' column and the per-size 'filename' entries under 'meta_data'
+                // are writable through editing endpoints and may contain "../", which path_join()
+                // preserves. Anything not resolving inside the gallery directory is refused. Kept
+                // in step with \Imagely\NGG\DataStorage\Manager::get_computed_image_abspath().
+                //
+                // Logged for the same reason as the modern twin: callers only see null, so a
+                // refused row renders as a blank slot with nothing for support to search for.
+                // Through Manager::log_path_refusal() - every occurrence under WP_DEBUG, at most one
+                // line per hour without it, because this runs once per image per request.
+                if ($retval && !\Imagely\NGG\DataStorage\Manager::get_instance()->is_path_within_gallery_dir($gallery_path, $retval)) {
+                    \Imagely\NGG\DataStorage\Manager::get_instance()->log_path_refusal(sprintf('NextGEN Gallery: refused stored path for image #%s (gallery #%s, size "%s") - %s does not resolve inside the gallery directory (%s)', isset($image->pid) ? $image->pid : '?', isset($image->galleryid) ? $image->galleryid : '?', $size, $retval, $gallery_path), \Imagely\NGG\DataStorage\Manager::REFUSAL_STORED_PATH);
+                    $retval = null;
+                }
             }
+        }
+        /*
+         * Kept in step with Imagely\NGG\DataStorage\Manager::get_computed_image_abspath():
+         * the paths above are path_join()'ed from database values, and a stored filename
+         * that traverses out of the gallery directory is not a path to one of this
+         * gallery's images. See the comment there for the full reasoning.
+         */
+        if ($retval && $containment_base) {
+            $contained = \Imagely\NGG\Util\Security::contain_path($retval, $containment_base);
+            // Gated for the same reason as the modern class: this resolves on every
+            // front-end render, once per image per named size.
+            if (null === $contained && defined('WP_DEBUG') && WP_DEBUG) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                error_log(sprintf('NextGEN Gallery: refused an image path outside its gallery directory (image %s, size %s).', is_object($image) && isset($image->pid) ? (string) $image->pid : 'unknown', (string) $size));
+            }
+            $retval = $contained;
         }
         // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
         if ($retval && $check_existance && !@file_exists($retval)) {
@@ -3247,9 +3295,14 @@ class C_Gallery_Storage extends C_Component
         $iterator = new DirectoryIterator($abspath);
         // Only delete image files! Other files may be stored incorrectly but it's not our place to delete them
         $removable_extensions = apply_filters('ngg_allowed_file_types', NGG_DEFAULT_ALLOWED_FILE_TYPES);
-        foreach ($removable_extensions as $extension) {
-            $removable_extensions[] = $extension . '_backup';
+        if (!is_array($removable_extensions)) {
+            $removable_extensions = array_filter(array_map('trim', explode(',', (string) $removable_extensions)));
         }
+        $backup_extensions = [];
+        foreach ($removable_extensions as $ext) {
+            $backup_extensions[] = $ext . '_backup';
+        }
+        $removable_extensions = array_merge($removable_extensions, $backup_extensions);
         foreach ($iterator as $file) {
             // phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
             if (in_array($file->getBasename(), ['.', '..'])) {
@@ -3616,14 +3669,15 @@ class C_Gallery_Storage extends C_Component
      */
     public function is_allowed_image_extension($filename)
     {
-        $extension = pathinfo($filename, PATHINFO_EXTENSION);
-        $extension = strtolower($extension);
-        $allowed_extensions = apply_filters('ngg_allowed_file_types', NGG_DEFAULT_ALLOWED_FILE_TYPES);
-        foreach ($allowed_extensions as $extension) {
-            $allowed_extensions[] = $extension . '_backup';
+        $extension = strtolower(pathinfo((string) $filename, PATHINFO_EXTENSION));
+        if ('' === $extension) {
+            return false;
         }
-        // phpcs:ignore WordPress.PHP.StrictInArray.MissingTrueStrict
-        return in_array($extension, $allowed_extensions);
+        $allowed_extensions = array_merge($allowed_extensions, $backup_extensions);
+        // Normalization lives in the namespaced manager so both copies of this check agree; see
+        // \Imagely\NGG\DataStorage\Manager::is_allowed_image_extension() for why the filter result
+        // is split rather than cast.
+        return \Imagely\NGG\DataStorage\Manager::get_instance()->is_allowed_image_extension($filename);
     }
     public function is_current_user_over_quota()
     {
@@ -3727,7 +3781,15 @@ class C_Gallery_Storage extends C_Component
         if (preg_match('/\\-(png|jpg|gif|jpeg|jpg_backup)$/i', $filename, $match)) {
             $filename = str_replace($match[0], '.' . $match[1], $filename);
         }
-        return $filename;
+        /*
+         * This class is a full duplicate of Imagely\NGG\DataStorage\Manager, not a proxy:
+         * it carries its own import_image_file() which calls this method directly. It is a
+         * live code path — C_Gallery_Storage is registered as a POPE utility and
+         * third-party image optimizers instantiate it — so hardening only the Manager copy
+         * would leave uploads that route through here storing names with an intact ".php"
+         * segment. Keep this in step with Manager::sanitize_filename_for_db().
+         */
+        return \Imagely\NGG\Util\Security::neutralize_executable_extensions($filename);
     }
     /**
      * Determines whether a WebP image is animated which GD does not support.
@@ -3775,11 +3837,10 @@ class C_Gallery_Storage extends C_Component
             }
             // Sanitize the filename for storing in the DB
             $filename = $this->sanitize_filename_for_db($filename);
-            // Ensure that the filename is valid
-            $extensions = apply_filters('ngg_allowed_file_types', NGG_DEFAULT_ALLOWED_FILE_TYPES);
-            $extensions[] = '_backup';
-            $ext_list = implode('|', $extensions);
-            if (!preg_match("/({$ext_list})\$/i", $filename)) {
+            // Ensure that the filename is valid. Uses the shared allow-list rather than its own
+            // pattern - see the equivalent check in
+            // \Imagely\NGG\DataStorage\Manager::import_image_file() for what the old pattern let past.
+            if (!$this->object->is_allowed_image_extension($filename)) {
                 throw new E_UploadException(esc_html(sprintf(
                     /* translators: %s: comma-separated list of accepted image formats, e.g. "JPEG, JPG, PNG, GIF, WEBP". */
                     __('Invalid image file. Acceptable formats: %s.', 'nggallery'),
@@ -3824,17 +3885,38 @@ class C_Gallery_Storage extends C_Component
                     $image = $image_mapper->find($image);
                 }
             }
-            if (!$image) {
+            // Kept in step with Imagely\NGG\DataStorage\Manager::import_image_file() - see the
+            // longer note there. Gated on $override, and ordered by pid so the adopted row is
+            // deterministic on tables where #941 deferred the unique-key migration and
+            // duplicates exist.
+            if (!$image && $override) {
+                $gallery_id_for_lookup = is_numeric($dst_gallery) ? (int) $dst_gallery : (int) $dst_gallery->gid;
+                $existing = $image_mapper->select()->where_and([['filename = %s', $filename], ['galleryid = %d', $gallery_id_for_lookup]])->order_by('pid', 'ASC')->limit(1, 0)->run_query();
+                if (!empty($existing[0])) {
+                    $image = $image_mapper->convert_to_model($existing[0]);
+                }
+            }
+            $is_new = !$image;
+            if ($is_new) {
                 $image = $image_mapper->create();
             }
-            $image->alttext = preg_replace('#\\.\\w{2,4}$#', '', $filename);
+            // Seed alttext/slug for new images only; replacing an existing image (e.g. a Lightroom republish) must not reset user-entered values (#976).
+            if ($is_new || empty($image->alttext)) {
+                $image->alttext = preg_replace('#\\.\\w{2,4}$#', '', $filename);
+            }
+            if ($is_new || empty($image->image_slug)) {
+                $image->image_slug = nggdb::get_unique_slug(sanitize_title_with_dashes($image->alttext), 'image');
+            }
             $image->galleryid = is_numeric($dst_gallery) ? $dst_gallery : $dst_gallery->gid;
             $image->filename = $filename;
-            $image->image_slug = nggdb::get_unique_slug(sanitize_title_with_dashes($image->alttext), 'image');
             $image_id = $image_mapper->save($image);
             if (!$image_id) {
                 $exception = '';
-                foreach ($image->get_errors() as $field => $errors) {
+                $errors_by_field = $image->get_errors();
+                // get_errors() returns a bool when the entity is valid, which is exactly the path
+                // the blank-message fallback below serves - iterating it emitted a PHP warning
+                // mid-response. The modern copy guards with is_array() for the same reason.
+                foreach (is_array($errors_by_field) ? $errors_by_field : [] as $field => $errors) {
                     foreach ($errors as $error) {
                         if (!empty($exception)) {
                             $exception .= '<br/>';
@@ -3842,6 +3924,12 @@ class C_Gallery_Storage extends C_Component
                         /* translators: 1: filename, 2: error message */
                         $exception .= sprintf(__('Error while uploading %1$s: %2$s', 'nggallery'), $filename, $error);
                     }
+                }
+                if (empty($exception)) {
+                    // A refused write with no field errors used to throw an empty message,
+                    // which reached the client as a blank failure.
+                    /* translators: %s: image filename */
+                    $exception = sprintf(__('Could not save image %s.', 'nggallery'), $filename);
                 }
                 throw new E_UploadException(esc_html($exception));
             }
@@ -3968,6 +4056,7 @@ class C_Gallery_Storage extends C_Component
      *
      * @param int $gallery_id
      * @return array|bool
+     * @throws E_UploadException When every entry in the zip was refused by the extension allow-list.
      */
     public function upload_zip($gallery_id)
     {
@@ -4015,27 +4104,63 @@ class C_Gallery_Storage extends C_Component
             $dest_path = implode(DIRECTORY_SEPARATOR, [rtrim($destination_path, '/\\'), wp_rand(), 'unpacked-' . M_I18n::mb_basename($zipfile)]);
             $extracted = $this->object->extract_zip($zipfile, $dest_path);
         }
-        if ($extracted) {
-            $retval = $this->object->import_gallery_from_fs($dest_path, $gallery_id);
+        try {
+            if ($extracted) {
+                $retval = $this->object->import_gallery_from_fs($dest_path, $gallery_id);
+            }
+        } finally {
+            // Always clean up extracted files, even if import_image_file() throws.
+            $this->object->delete_directory($dest_path);
         }
         $this->object->delete_directory($dest_path);
-        if (!extension_loaded('suhosin')) {
-            // Restore previous memory limit after import; not raising limit.
-            // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.memory_limit_Disallowed
-            @ini_set('memory_limit', $memory_limit . 'M');
+        // Kept in step with the modern twin: the extension gate is silent and $extracted is true
+        // either way, so refused entries have to be named here. Read off the storage manager and
+        // not through an out-parameter: extract_zip() is reached through the pope dispatcher, which
+        // forwards arguments with call_user_func_array() and so drops references.
+        $skipped = \Imagely\NGG\DataStorage\Manager::get_instance()->get_skipped_zip_entries();
+        if (!empty($skipped)) {
+            $skipped_label = implode(', ', $skipped);
+            if (!is_array($retval) || empty($retval['image_ids'])) {
+                throw new E_UploadException(esc_html(sprintf(
+                    /* translators: 1: comma-separated list of rejected file names, 2: comma-separated list of accepted image formats. */
+                    __('No images were imported. These files are not an accepted image format: %1$s. Acceptable formats: %2$s.', 'nggallery'),
+                    $skipped_label,
+                    ngg_get_allowed_formats_label()
+                )));
+            }
+            $retval['skipped_files'] = array_map('esc_html', $skipped);
+            // Escaped like the sibling throw path: the uploader surfaces append this message
+            // into markup, and the names come from the uploaded archive.
+            $retval['warning'] = esc_html(sprintf(
+                /* translators: 1: comma-separated list of rejected file names, 2: comma-separated list of accepted image formats. */
+                __('These files were skipped because they are not an accepted image format: %1$s. Acceptable formats: %2$s.', 'nggallery'),
+                $skipped_label,
+                ngg_get_allowed_formats_label()
+            ));
         }
         return $retval;
     }
     /**
      * Extracts a zip file.
      *
-     * @param string $zipfile
-     * @param string $dest_path
+     * Kept in step with \Imagely\NGG\DataStorage\Manager::extract_zip(): refused entries are
+     * collected in $skipped so upload_zip() can name them, since the gate itself is silent and
+     * extraction still reports success.
+     *
+     * @param string        $zipfile
+     * @param string        $dest_path
+     * @param string[]|null $skipped Out: basenames of the entries the allow-list refused.
      * @return bool FALSE on failure
      */
-    public function extract_zip($zipfile, $dest_path)
+    public function extract_zip($zipfile, $dest_path, &$skipped = null)
     {
         wp_mkdir_p($dest_path);
+        // Refused entries are recorded rather than dropped, for the reason given on
+        // Imagely\NGG\DataStorage\Manager::extract_zip(). Recorded on the namespaced manager
+        // so this copy and that one cannot disagree about what was skipped.
+        $manager = \Imagely\NGG\DataStorage\Manager::get_instance();
+        $manager->reset_skipped_zip_entries();
+        $skipped = [];
         if (class_exists('ZipArchive', false) && apply_filters('unzip_file_use_ziparchive', true)) {
             $zipObj = new ZipArchive();
             if ($zipObj->open($zipfile) === false) {
@@ -4043,7 +4168,14 @@ class C_Gallery_Storage extends C_Component
             }
             for ($i = 0; $i < $zipObj->numFiles; $i++) {
                 $filename = $zipObj->getNameIndex($i);
+                // Directory entries carry no extension; without this skip every ZIP made
+                // by compressing a folder reports its own directory as a rejected file
+                // type. The PclZip branch below has always skipped them.
+                if ($this->object->is_zip_directory_entry($filename)) {
+                    continue;
+                }
                 if (!$this->object->is_allowed_image_extension($filename)) {
+                    $manager->collect_skipped_zip_entry($filename);
                     continue;
                 }
                 $zipObj->extractTo($dest_path, [$zipObj->getNameIndex($i)]);
@@ -4057,16 +4189,42 @@ class C_Gallery_Storage extends C_Component
                 if ($zipItem['folder']) {
                     continue;
                 }
+                $basename = basename($zipItem['stored_filename']);
+                // Reject hidden (dot) files and files without an allowed image extension.
+                if (strpos($basename, '.') === 0) {
+                    continue;
+                }
                 if (!$this->object->is_allowed_image_extension($zipItem['stored_filename'])) {
+                    $manager->collect_skipped_zip_entry($zipItem['stored_filename']);
                     continue;
                 }
                 $indexesToExtract[] = $zipItem['index'];
+            }
+            $skipped = $manager->get_skipped_zip_entries();
+            // An empty index list is read as index 0 on PHP 7.4 and extracts that entry
+            // whatever its extension. $skipped is assigned above first, so the caller still
+            // learns why nothing came out of the archive.
+            if (!$indexesToExtract) {
+                $manager->log_extraction_refusals($zipfile);
+                return false;
             }
             if (!$zipObj->extractByIndex(implode(',', $indexesToExtract), $dest_path)) {
                 return false;
             }
         }
+        $skipped = $manager->get_skipped_zip_entries();
+        $manager->log_extraction_refusals($zipfile);
         return true;
+    }
+    /**
+     * Whether an archive entry name denotes a directory rather than a file.
+     *
+     * @param string $filename Entry name as stored in the archive.
+     * @return bool
+     */
+    public function is_zip_directory_entry($filename)
+    {
+        return is_string($filename) && '' !== $filename && in_array(substr($filename, -1), ['/', '\\'], true);
     }
 }
 /**
@@ -5256,6 +5414,47 @@ class Mixin_GalleryStorage_Base_Dynamic extends Mixin
             }
             // Generate the thumbnail using WordPress
             $existing_image_abpath = $this->object->get_image_abspath($image, $size);
+            /*
+             * Kept in step with Imagely\NGG\DataStorage\Manager::generate_image_size():
+             * this is the write half of the sizing pipeline and it creates directories
+             * before writing, so the destination is re-checked here rather than trusted
+             * from get_image_abspath(). See the comment there for the full reasoning.
+             *
+             * Both gates run, because neither subsumes the other. #933's
+             * is_safe_generated_image_path() tests the target's *final* extension against
+             * the unsafe list, the upload allow-list, the source's own extension and the
+             * known-image list - which is what keeps existing .tif/.jpe/.jfif/.bmp
+             * galleries generating. #932's has_php_executable_extension() tests every
+             * dot-delimited segment, which is the only one of the two that catches a
+             * legacy "photo.php_.jpg": its final extension is "jpg", so the extension
+             * gate admits it.
+             */
+            $refusal_reason = null;
+            if (!$existing_image_abpath) {
+                $refusal_reason = 'the destination path could not be computed';
+            } elseif (!\Imagely\NGG\DataStorage\Manager::get_instance()->is_safe_generated_image_path($existing_image_abpath, $filename)) {
+                $refusal_reason = sprintf('the destination "%s" is outside the gallery directory or is not a safe image target', $existing_image_abpath);
+            } elseif (\Imagely\NGG\Util\Security::has_php_executable_extension($existing_image_abpath)) {
+                $refusal_reason = sprintf('the stored file name "%s" carries a PHP script extension; rename it in the gallery folder to restore its thumbnails', wp_basename($existing_image_abpath));
+            }
+            if (null !== $refusal_reason) {
+                /*
+                 * Through Manager::log_path_refusal(), matching the modern class:
+                 * /nextgen-image/ is one request per thumbnail, so a single refused row -
+                 * or a repeated attack request - would otherwise append a line for every
+                 * visitor request. This copy is force-loaded on the front end for Pro < 4.0
+                 * and for the image-optimiser plugins (nggallery.php), so an ungated log
+                 * here grows without bound on exactly those sites; the helper logs every
+                 * occurrence under WP_DEBUG and at most one line per hour without it.
+                 *
+                 * The reason is resolved above rather than folded into one condition: the
+                 * causes want different actions from a site owner - a missing destination is
+                 * a broken row, an escaping one is poisoned, and a script extension is fixed
+                 * by renaming the file.
+                 */
+                \Imagely\NGG\DataStorage\Manager::get_instance()->log_path_refusal(sprintf('NextGEN Gallery: refused to generate size "%1$s" for image #%2$s - %3$s', (string) $size, isset($image->pid) ? (string) $image->pid : '?', $refusal_reason), \Imagely\NGG\DataStorage\Manager::REFUSAL_GENERATE_SIZE);
+                return false;
+            }
             $existing_image_dir = dirname($existing_image_abpath);
             // Ensure directory exists with proper error handling
             if (!wp_mkdir_p($existing_image_dir)) {
@@ -5281,6 +5480,15 @@ class Mixin_GalleryStorage_Base_Dynamic extends Mixin
             // We successfully generated the thumbnail
             if ($thumbnail != null) {
                 $clone_path = $thumbnail->fileName;
+                // The clone may carry a different extension than the path requested above (the
+                // "type" size parameter), so re-check the file actually written. The written file
+                // is deliberately not unlinked - see the note on the equivalent check in
+                // \Imagely\NGG\DataStorage\Manager::generate_image_size().
+                if (!\Imagely\NGG\DataStorage\Manager::get_instance()->is_path_within_gallery_dir($this->object->get_gallery_abspath($image->galleryid), $clone_path) || !\Imagely\NGG\DataStorage\Manager::get_instance()->is_safe_generated_image_path($clone_path, $filename)) {
+                    \Imagely\NGG\DataStorage\Manager::get_instance()->log_path_refusal(sprintf('NextGEN Gallery: discarded generated size "%s" for image #%s - the written file (%s) is outside the gallery directory or not an allowed image type; it was left in place rather than deleted', $size, isset($image->pid) ? $image->pid : '?', $clone_path), \Imagely\NGG\DataStorage\Manager::REFUSAL_GENERATED_CLONE);
+                    $thumbnail->destruct();
+                    return false;
+                }
                 if (function_exists('getimagesize')) {
                     $dimensions = getimagesize($clone_path);
                 } else {

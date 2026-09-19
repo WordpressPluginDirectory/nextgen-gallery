@@ -440,6 +440,17 @@ class GalleryREST {
 			$query->where( $condition );
 		}
 
+		// OR group (match the search term against the title or the ID). The driver parenthesises
+		// each where_clauses entry before AND-joining them, so precedence is preserved.
+		if ( ! empty( $filters['or_conditions'] ) ) {
+			$or_clauses = [];
+			foreach ( $filters['or_conditions'] as $or_condition ) {
+				$clause       = array_shift( $or_condition );
+				$or_clauses[] = $query->_parse_where_clause( $clause, $or_condition );
+			}
+			$query->add_where_clause( $or_clauses, 'OR' );
+		}
+
 		// Calculate total items for pagination using the same filters.
 		$table_name = $wpdb->nggallery;
 		$sql        = "SELECT COUNT(*) FROM {$table_name}";
@@ -455,6 +466,10 @@ class GalleryREST {
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared
 		$total_items = (int) $wpdb->get_var( $sql );
+		// A failed COUNT casts to 0, which is indistinguishable from an empty library and would
+		// otherwise be cached as the real total. The page rows come from a separate query, so the
+		// response is still served; it just must not persist a total nobody can trust.
+		$count_failed = '' !== (string) $wpdb->last_error;
 
 		// Fetch current page of items.
 		$query->order_by( $orderby, $order )
@@ -483,7 +498,9 @@ class GalleryREST {
 			'total_items' => $total_items,
 			'total_pages' => $total_pages,
 		];
-		Transient::update( $cache_key, $cache_data );
+		if ( ! $count_failed ) {
+			Transient::update( $cache_key, $cache_data );
+		}
 		$result = new WP_REST_Response( $response, 200 );
 
 		// Add pagination headers.
@@ -510,7 +527,10 @@ class GalleryREST {
 	 * }
 	 */
 	private static function build_filter_conditions( WP_REST_Request $request ) {
+		global $wpdb;
+
 		$conditions    = [];
+		$or_conditions = [];
 		$where_clauses = [];
 		$params        = [];
 
@@ -531,13 +551,26 @@ class GalleryREST {
 			$params[]        = $is_private;
 		}
 
-		if ( $request->has_param( 'search' ) ) {
-			$search_term          = $request->get_param( 'search' );
-			$search_term_wildcard = '%' . $search_term . '%';
+		// Skipped when empty: "title LIKE '%%'" would drop every row with a NULL title. esc_like()
+		// keeps a typed % or _ literal.
+		$search_term = trim( (string) $request->get_param( 'search' ) );
+		if ( '' !== $search_term ) {
+			$search_term_wildcard = '%' . $wpdb->esc_like( $search_term ) . '%';
 
-			$conditions[]    = [ 'title LIKE %s', $search_term_wildcard ];
-			$where_clauses[] = 'title LIKE %s';
-			$params[]        = $search_term_wildcard;
+			if ( ctype_digit( $search_term ) ) {
+				// A digit-only term matches the ID as well as the title. Galleries saved without
+				// a title are listed by their ID, so a title match alone can never reach them.
+				$or_conditions[] = [ 'title LIKE %s', $search_term_wildcard ];
+				$or_conditions[] = [ 'gid = %d', (int) $search_term ];
+
+				$where_clauses[] = '( title LIKE %s OR gid = %d )';
+				$params[]        = $search_term_wildcard;
+				$params[]        = (int) $search_term;
+			} else {
+				$conditions[]    = [ 'title LIKE %s', $search_term_wildcard ];
+				$where_clauses[] = 'title LIKE %s';
+				$params[]        = $search_term_wildcard;
+			}
 		}
 
 		// Exclude specific gallery IDs (e.g. galleries already in an album) server-side so
@@ -560,6 +593,7 @@ class GalleryREST {
 
 		return [
 			'conditions'    => $conditions,
+			'or_conditions' => $or_conditions,
 			'where_clauses' => $where_clauses,
 			'params'        => $params,
 		];

@@ -1326,8 +1326,9 @@ class SharedController extends ParentController {
 		foreach ( $params['galleries'] as &$gallery ) {
 
 			// Get the preview image url.
-			$gallery->previewurl = '';
-			$preview_image_id    = $gallery->previewpic;
+			$gallery->previewurl                       = '';
+			$gallery->previewpic_fullsized_display_url = '';
+			$preview_image_id                          = $gallery->previewpic;
 
 			// If no preview is set for an album, try to get the first image from its children.
 			if ( ( ! $preview_image_id || $preview_image_id <= 0 ) && $gallery->is_album && ! empty( $gallery->sortorder ) ) {
@@ -1337,10 +1338,15 @@ class SharedController extends ParentController {
 			if ( $preview_image_id && $preview_image_id > 0 ) {
 				$image = $image_mapper->find( intval( $preview_image_id ) );
 				if ( $image ) {
-					$gallery->previewpic_image         = $image;
-					$gallery->previewpic_fullsized_url = $storage->get_image_url( $image );
+					$gallery->previewpic_image = $image;
 
-					$gallery->previewurl  = $storage->get_image_url( $image, $image_gen->get_size_name( $image_gen_params ) );
+					// previewpic_fullsized_url is an <a href> in the compact album, so it stays
+					// canonical; the lightbox and <img src> attributes get the cache-buster so an
+					// edited cover refreshes for returning visitors (#829).
+					$gallery->previewpic_fullsized_url         = $storage->get_image_url( $image );
+					$gallery->previewpic_fullsized_display_url = $storage->get_cache_busted_image_url( $image );
+
+					$gallery->previewurl  = $storage->get_cache_busted_image_url( $image, $image_gen->get_size_name( $image_gen_params ) );
 					$gallery->previewname = $gallery->name;
 				} else {
 					$gallery->no_previewpic = true;

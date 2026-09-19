@@ -37,9 +37,12 @@ class NormalizeDisplayTypeSettings {
 
 	const OPTION               = 'imagely_display_type_settings_normalized';
 	const RUN_OPTION           = 'imagely_dts_normalize_run';
+	const FAIL_OPTION          = 'imagely_dts_normalize_failures';
 	const CURSOR_PREFIX        = 'imagely_dts_normalize_cursor_';
 	const BATCH                = 200;
 	const MAX_ROWS_PER_REQUEST = 5000;
+	const MAX_FAILURES         = 5;
+	const FAIL_TTL             = DAY_IN_SECONDS;
 
 	const ID_FIELDS = [ 'gid', 'id' ];
 
@@ -54,6 +57,12 @@ class NormalizeDisplayTypeSettings {
 	 * @return bool True when nothing is left to normalize; false when deferred, incomplete, or failed.
 	 */
 	public static function migrate( $force = false ) {
+		// admin_init also fires on admin-ajax.php, before core authenticates the request, so an
+		// unauthenticated visitor would otherwise reach the schema work below. Cron has no user.
+		if ( \wp_doing_ajax() || \wp_doing_cron() || ! \current_user_can( 'manage_options' ) ) {
+			return false;
+		}
+
 		$current = self::registered_type_names();
 
 		// No controllers registered yet (dispatched too early, or Pro still loading). Retry later.
@@ -80,6 +89,10 @@ class NormalizeDisplayTypeSettings {
 		// the default but differing from the global is preserved instead of silently following the global.
 		$globals = self::get_global_settings( $todo );
 
+		if ( $force ) {
+			\delete_option( self::FAIL_OPTION );
+		}
+
 		// Per-table cursors — including the durable DONE marker — are only valid for the exact type
 		// set they were scanned against. If that set changed since a previous partial run (e.g. Pro
 		// activated mid-run, growing $todo), discard the stale cursors so an already-"done" table is
@@ -87,7 +100,17 @@ class NormalizeDisplayTypeSettings {
 		$run_signature = md5( implode( ',', $todo ) );
 		if ( \get_option( self::RUN_OPTION ) !== $run_signature ) {
 			self::clear_cursors();
+			// A changed type set is a fresh attempt, so reset the failure budget.
+			\delete_option( self::FAIL_OPTION );
 			\update_option( self::RUN_OPTION, $run_signature );
+		}
+
+		// Bound the retries so a persistent failure cannot query, and log, on every request. The
+		// budget carries the time of its last failure and decays, so a burst of transient errors
+		// delays the migration rather than stopping it for good.
+		$count = self::failure_count();
+		if ( $count >= self::MAX_FAILURES ) {
+			return false;
 		}
 
 		global $wpdb;
@@ -95,10 +118,20 @@ class NormalizeDisplayTypeSettings {
 		$gallery_stat = self::normalize_table( $wpdb->prefix . 'ngg_gallery', 'gid', $defaults, $globals, $budget );
 		$album_stat   = self::normalize_table( $wpdb->prefix . 'ngg_album', 'id', $defaults, $globals, $budget );
 
-		// A DB error leaves the marker unchanged so the run retries; per-table cursors preserve progress.
+		// A DB error leaves the marker unchanged so the run retries; per-table cursors preserve
+		// progress, and the failure count bounds the retries.
 		if ( self::FAILED === $gallery_stat || self::FAILED === $album_stat ) {
+			\update_option(
+				self::FAIL_OPTION,
+				[
+					'count' => $count + 1,
+					'time'  => \time(),
+				]
+			);
 			return false;
 		}
+
+		\delete_option( self::FAIL_OPTION );
 
 		// Record the newly-normalized types (unioned with prior) only once both tables finished. A
 		// partial run (budget exhausted) resumes on the next request.
@@ -224,6 +257,45 @@ class NormalizeDisplayTypeSettings {
 			return self::PARTIAL;
 		}
 
+		// The column is not in the table's CREATE TABLE; the data mapper adds it lazily on first
+		// construction. Until that happens, querying it raises a database error, so resolve it from
+		// the live schema. SHOW TABLES runs first because SHOW COLUMNS errors on a missing table.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$table_exists = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
+
+		// A failed schema query returns the same empty result as genuine absence, so it has to be
+		// ruled out before the result is read that way. Retrying is bounded by the failure count.
+		if ( '' !== $wpdb->last_error ) {
+			return self::FAILED;
+		}
+
+		if ( ! $table_exists ) {
+			\update_option( $cursor_option, self::DONE );
+			return self::DONE;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$columns = $wpdb->get_col( 'SHOW COLUMNS FROM `' . \esc_sql( $table ) . '`' );
+
+		if ( '' !== $wpdb->last_error ) {
+			return self::FAILED;
+		}
+
+		if ( ! in_array( 'display_type_settings', $columns, true ) ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$added = $wpdb->query( 'ALTER TABLE `' . \esc_sql( $table ) . '` ADD COLUMN `display_type_settings` MEDIUMTEXT' );
+
+			// Same reasoning as the probes above: a failed ALTER must not be recorded as success.
+			// It also covers losing a race to add the column, which the next run resolves normally.
+			if ( false === $added || '' !== $wpdb->last_error ) {
+				return self::FAILED;
+			}
+
+			// A missing column means no stored settings, and a new one is empty, so nothing to do.
+			\update_option( $cursor_option, self::DONE );
+			return self::DONE;
+		}
+
 		$last_id = (int) $cursor;
 
 		do {
@@ -244,8 +316,9 @@ class NormalizeDisplayTypeSettings {
 				)
 			);
 
-			// null is a query error; an empty array is a genuine end-of-table.
-			if ( null === $rows ) {
+			// get_results() returns an empty array both for a failed query and for a genuine
+			// end-of-table, so last_error is the only reliable signal. The next query clears it.
+			if ( '' !== $wpdb->last_error ) {
 				return self::FAILED;
 			}
 
@@ -286,6 +359,24 @@ class NormalizeDisplayTypeSettings {
 		}
 
 		return self::PARTIAL;
+	}
+
+	/**
+	 * The current failure count, discarding a budget whose last failure has aged out.
+	 *
+	 * @return int
+	 */
+	private static function failure_count() {
+		$failures = \get_option( self::FAIL_OPTION, [] );
+		$count    = is_array( $failures ) && isset( $failures['count'] ) ? (int) $failures['count'] : 0;
+		$since    = is_array( $failures ) && isset( $failures['time'] ) ? (int) $failures['time'] : 0;
+
+		if ( $count > 0 && ( ! $since || ( \time() - $since ) > self::FAIL_TTL ) ) {
+			\delete_option( self::FAIL_OPTION );
+			return 0;
+		}
+
+		return $count;
 	}
 
 	/**

@@ -437,6 +437,11 @@ abstract class DriverBase {
 		global $wpdb;
 		$binds = func_get_args();
 		$binds = isset( $binds[1] ) ? $binds[1] : []; // first argument is the condition.
+
+		// Multi-value binds (the IN / BETWEEN forms) are pre-quoted below, so the un-escaping
+		// step further down must skip them.
+		$has_list_bind = false;
+
 		foreach ( $binds as &$bind ) {
 
 			// A bind could be an array, used for the 'IN' operator
@@ -447,6 +452,7 @@ abstract class DriverBase {
 			}
 
 			if ( is_array( $bind ) && ! empty( $bind ) ) {
+				$has_list_bind = true;
 				foreach ( $bind as &$val ) {
 					if ( ! is_numeric( $val ) ) {
 						$val     = '"' . addslashes( $val ) . '"';
@@ -468,17 +474,21 @@ abstract class DriverBase {
 			$condition = $wpdb->prepare( $condition, $binds );
 		}
 
-		// Parse the where clause.
+		// Parse the where clause. The column and operator are removed by offset rather than with
+		// str_replace(): the value is already interpolated into $condition by this point, so an
+		// unbounded replace also strips the column name and the operator out of the value itself.
 		if ( preg_match( '/^[^\s]+/', $condition, $match ) ) {
-			$column    = trim( array_shift( $match ) );
-			$condition = str_replace( $column, '', $condition );
+			$column    = trim( $match[0] );
+			$condition = substr( $condition, strlen( $match[0] ) );
 		}
 
-		if ( preg_match( '/(NOT )?IN|(NOT )?LIKE|(NOT )?BETWEEN|[=!<>]+/i', $condition, $match ) ) {
-			$operator  = trim( array_shift( $match ) );
-			$condition = str_replace( $operator, '', $condition );
-			$operator  = strtolower( $operator );
-			$value     = trim( $condition );
+		if ( preg_match( '/(NOT )?IN|(NOT )?LIKE|(NOT )?BETWEEN|[=!<>]+/i', $condition, $match, PREG_OFFSET_CAPTURE ) ) {
+			$matched_operator = $match[0][0];
+			$operator_offset  = $match[0][1];
+			$operator         = strtolower( trim( $matched_operator ) );
+			$condition        = substr( $condition, 0, $operator_offset )
+				. substr( $condition, $operator_offset + strlen( $matched_operator ) );
+			$value            = trim( $condition );
 		}
 
 		// Values will automatically be quoted, so remove them
@@ -499,6 +509,12 @@ abstract class DriverBase {
 			$values = [ $value ];
 		}
 
+		// A single scalar bind still carries the escaping prepare() applied above. Drivers that
+		// escape again when they build SQL have to undo that first pass, so flag it for them
+		// rather than un-escaping here: drivers that hand the value to WP_Query instead need it
+		// left exactly as prepare() produced it.
+		$prepared = ! empty( $binds ) && ! $has_list_bind;
+
 		foreach ( $values as $index => $value ) {
 			$value            = preg_replace( "/^(\()?'/", '', $value );
 			$value            = preg_replace( "/'(\))?$/", '', $value );
@@ -511,10 +527,11 @@ abstract class DriverBase {
 
 		// Return the WP Query meta query parameters.
 		$retval = [
-			'column'  => $column,
-			'value'   => $value,
-			'compare' => strtoupper( $operator ),
-			'type'    => $numeric ? 'numeric' : 'string',
+			'column'   => $column,
+			'value'    => $value,
+			'compare'  => strtoupper( $operator ),
+			'type'     => $numeric ? 'numeric' : 'string',
+			'prepared' => $prepared,
 		];
 
 		return $retval;

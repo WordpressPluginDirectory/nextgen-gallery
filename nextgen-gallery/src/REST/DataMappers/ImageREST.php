@@ -1300,7 +1300,13 @@ class ImageREST {
 				}
 				return new WP_REST_Response(
 					[
-						'error' => $ex->getMessage(),
+						// The 500 is explicit here, so the risk is only a blank message in the
+						// body rather than a suppressed failure - but a bare
+						// E_EntityNotFoundException would still show the user nothing.
+						'error' => \Imagely\NGG\Util\Sanitization::exception_message(
+							$ex,
+							__( 'The image could not be imported.', 'nggallery' )
+						),
 					],
 					500
 				);
@@ -1410,7 +1416,12 @@ class ImageREST {
 				$retval['error'] = __( 'No file uploaded', 'nggallery' );
 			}
 		} catch ( \RuntimeException $ex ) {
-			$retval['error'] = $ex->getMessage();
+			// Non-empty by construction: $retval['error'] decides the 500 below, and a bare
+			// E_EntityNotFoundException from import_image_file() carries no message.
+			$retval['error'] = \Imagely\NGG\Util\Sanitization::exception_message(
+				$ex,
+				__( 'The image could not be imported.', 'nggallery' )
+			);
 			if ( $created_gallery ) {
 				$gallery_mapper->destroy( $gallery_id );
 			}
@@ -1697,8 +1708,8 @@ class ImageREST {
 
 		// Get properly formatted image URLs using the storage manager
 		$storage   = \Imagely\NGG\DataStorage\Manager::get_instance();
-		$thumb_url = $storage->get_image_url( $image, 'thumb' );
-		$image_url = $storage->get_image_url( $image, 'full' );
+		$thumb_url = $storage->get_cache_busted_image_url( $image, 'thumb' );
+		$image_url = $storage->get_cache_busted_image_url( $image, 'full' );
 
 		return [
 			'pid'            => $image->pid,

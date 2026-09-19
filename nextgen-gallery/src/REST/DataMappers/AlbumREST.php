@@ -110,6 +110,19 @@ class AlbumREST {
 							return array_values( array_unique( array_filter( array_map( 'absint', $value ) ) ) );
 						},
 					],
+					'include_ids'      => [
+						'type'              => 'array',
+						'description'       => 'Restrict results to these album IDs. Lets callers fetch a known, bounded set (e.g. the albums nested in the album being edited) in one request instead of loading every album with per_page=-1.',
+						'items'             => [
+							'type' => 'integer',
+						],
+						'sanitize_callback' => function ( $value ) {
+							if ( ! is_array( $value ) ) {
+								return [];
+							}
+							return array_values( array_unique( array_filter( array_map( 'absint', $value ) ) ) );
+						},
+					],
 					'exclude_album_id' => [
 						'type'              => 'integer',
 						'description'       => 'Exclude this album and the albums nested inside it. Bounded alternative to exclude_ids for albums with many members (the server derives the IDs from the album\'s sortorder).',
@@ -526,6 +539,13 @@ class AlbumREST {
 		$page     = $request->get_param( 'page' );
 		$offset   = ( $page - 1 ) * $per_page;
 
+		// Restrict to an explicit ID set when include_ids is supplied. Present-but-empty means the caller
+		// wants a known set that happens to be empty (e.g. an album with no nested albums), so it must
+		// resolve to zero rows rather than falling through to "all albums".
+		$has_include_ids = $request->has_param( 'include_ids' );
+		$include_ids     = $request->get_param( 'include_ids' );
+		$include_ids     = is_array( $include_ids ) ? array_values( array_unique( array_filter( array_map( 'absint', $include_ids ) ) ) ) : [];
+
 		$cache_params  = [
 			$orderby,
 			$order,
@@ -533,6 +553,7 @@ class AlbumREST {
 			$page,
 			$request->get_param( 'search' ),
 			$request->get_param( 'exclude_ids' ),
+			$has_include_ids ? $include_ids : 'none',
 		];
 		$cache_key     = Transient::create_key( 'rest_albums', $cache_params );
 		$cached_result = Transient::fetch( $cache_key, false );
@@ -545,12 +566,43 @@ class AlbumREST {
 			$result->header( 'X-WP-TotalPages', $cached_result['total_pages'] ?? 0 );
 			return $result;
 		}
+
+		// include_ids was supplied but resolved to nothing: the caller asked for a specific, empty set,
+		// so return no albums instead of every album.
+		if ( $has_include_ids && empty( $include_ids ) ) {
+			$result = new WP_REST_Response( [], 200 );
+			$result->header( 'X-WP-Total', 0 );
+			$result->header( 'X-WP-TotalPages', 0 );
+			return $result;
+		}
+
 		// Build the base query and apply filters.
 		$query = $mapper->select();
 
-		if ( $request->has_param( 'search' ) ) {
-			$search_term = $request->get_param( 'search' );
-			$query->where( [ 'name LIKE %s', '%' . $search_term . '%' ] );
+		// Skipped when empty: "name LIKE '%%'" would drop every row with a NULL name. esc_like()
+		// keeps a typed % or _ literal. The COUNT query below must build the same predicate.
+		$search_term = trim( (string) $request->get_param( 'search' ) );
+		if ( '' !== $search_term ) {
+			$search_wildcard = '%' . $wpdb->esc_like( $search_term ) . '%';
+			if ( ctype_digit( $search_term ) ) {
+				// A digit-only term matches the ID as well as the name, so albums saved without a
+				// name (listed by their ID in the picker) stay reachable. The driver parenthesises
+				// each where_clauses entry before AND-joining, so precedence is preserved.
+				$query->add_where_clause(
+					[
+						$query->_parse_where_clause( 'name LIKE %s', [ $search_wildcard ] ),
+						$query->_parse_where_clause( 'id = %d', [ (int) $search_term ] ),
+					],
+					'OR'
+				);
+			} else {
+				$query->where( [ 'name LIKE %s', $search_wildcard ] );
+			}
+		}
+
+		// Restrict to an explicit set of album IDs when requested (bounded fetch, avoids per_page=-1).
+		if ( ! empty( $include_ids ) ) {
+			$query->where( [ 'id IN %s', $include_ids ] );
 		}
 
 		// Exclude specific album IDs (e.g. the album being edited) server-side so pagination
@@ -565,10 +617,23 @@ class AlbumREST {
 		$where_clauses = [];
 		$params        = [];
 
-		if ( $request->has_param( 'search' ) ) {
-			$search_term     = '%' . $request->get_param( 'search' ) . '%';
-			$where_clauses[] = 'name LIKE %s';
-			$params[]        = $search_term;
+		if ( '' !== $search_term ) {
+			if ( ctype_digit( $search_term ) ) {
+				$where_clauses[] = '( name LIKE %s OR id = %d )';
+				$params[]        = '%' . $wpdb->esc_like( $search_term ) . '%';
+				$params[]        = (int) $search_term;
+			} else {
+				$where_clauses[] = 'name LIKE %s';
+				$params[]        = '%' . $wpdb->esc_like( $search_term ) . '%';
+			}
+		}
+
+		if ( ! empty( $include_ids ) ) {
+			$placeholders    = implode( ',', array_fill( 0, count( $include_ids ), '%d' ) );
+			$where_clauses[] = "id IN ( {$placeholders} )";
+			foreach ( $include_ids as $include_id ) {
+				$params[] = $include_id;
+			}
 		}
 
 		if ( ! empty( $exclude_ids ) ) {
@@ -593,6 +658,10 @@ class AlbumREST {
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared
 		$total_items = (int) $wpdb->get_var( $sql );
+		// A failed COUNT casts to 0, which is indistinguishable from an empty library and would
+		// otherwise be cached as the real total. The page rows come from a separate query, so the
+		// response is still served; it just must not persist a total nobody can trust.
+		$count_failed = '' !== (string) $wpdb->last_error;
 
 		// Fetch current page of items.
 		$query->order_by( $orderby, $order )
@@ -611,7 +680,9 @@ class AlbumREST {
 			'total_items' => $total_items,
 			'total_pages' => $total_pages,
 		];
-		Transient::update( $cache_key, $cache_data );
+		if ( ! $count_failed ) {
+			Transient::update( $cache_key, $cache_data );
+		}
 		$result = new WP_REST_Response( $response, 200 );
 
 		// Add pagination headers.

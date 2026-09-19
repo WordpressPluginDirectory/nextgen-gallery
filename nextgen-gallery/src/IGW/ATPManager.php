@@ -98,7 +98,7 @@ class ATPManager {
 		}
 		$view     = new View( 'AttachToPost/tinymce_placeholder', [], 'photocrati-attach_to_post#tinymce_placeholder' );
 		$template = $view->find_template_abspath( 'AttachToPost/tinymce_placeholder', 'photocrati-attach_to_post#tinymce_placeholder' );
-		readfile( $template ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_readfile
+		require $template;
 	}
 
 	/**

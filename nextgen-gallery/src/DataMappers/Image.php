@@ -222,6 +222,14 @@ class Image extends TableDriver {
 	public function save_entity( $entity ) {
 		$entity->updated_at = time();
 
+		// Seed sortorder on new images so appended uploads land at the end of the
+		// gallery instead of joining a tied group at sortorder 0. Only fires for a
+		// fresh insert (no pid) that has a gallery and no explicit order set, so
+		// drag-drop moves and imports that assign their own order are untouched.
+		if ( empty( $entity->pid ) && empty( $entity->sortorder ) && ! empty( $entity->galleryid ) ) {
+			$entity->sortorder = $this->get_next_sortorder( (int) $entity->galleryid );
+		}
+
 		$retval = parent::save_entity( $entity );
 
 		if ( $retval ) {
@@ -233,6 +241,40 @@ class Image extends TableDriver {
 			Transient::flush( 'displayed_gallery_rendering' );
 		}
 		return $retval;
+	}
+
+	/**
+	 * Returns the next sortorder value for a gallery, appending after its last row.
+	 *
+	 * The gallery's MAX(sortorder) is read once per request then incremented in
+	 * memory, so a bulk upload issues one query per gallery rather than one per
+	 * image. A value burned by a failed insert leaves a harmless gap, since only
+	 * order and uniqueness matter, not density. Keyed per gallery so inserts into
+	 * different galleries in the same request keep independent sequences.
+	 *
+	 * @param int $gallery_id The gallery to compute the next sortorder for.
+	 * @return int The next sortorder value (1 for an empty gallery).
+	 */
+	protected function get_next_sortorder( $gallery_id ) {
+		static $next = [];
+
+		if ( ! isset( $next[ $gallery_id ] ) ) {
+			$wpdb  = $this->_wpdb();
+			$table = $this->get_table_name();
+
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$max = $wpdb->get_var(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT MAX(`sortorder`) FROM `{$table}` WHERE `galleryid` = %d",
+					$gallery_id
+				)
+			);
+
+			$next[ $gallery_id ] = (int) $max + 1;
+		}
+
+		return $next[ $gallery_id ]++;
 	}
 
 	/**
